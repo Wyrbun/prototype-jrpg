@@ -107,12 +107,12 @@ resets max AP to 100, so the better you play, the more you have to lose.
 |---|---|---|
 | Between turns | WASD / arrows | Move the party member you're steering |
 | Between turns | Tab | Switch to the next party member |
-| Your turn | W / S, J | Choose and select in the menu |
-| Combo bar | J / K | Add a move / remove the last one (or go back) |
+| Your turn | W / S, J or Enter | Choose and select in the menu |
+| Combo bar | J / K (or Enter / Backspace) | Add a move / remove the last one (or go back) |
 | Abilities | W / S, J / K | Choose a skill, use it / go back |
 | Choosing a target | W / S (Jump: WASD), J / K | Pick who or where, confirm / go back |
 | Combo bar | Space | Begin the combo |
-| Combo playing | J | Timed hit: press inside the box for a Perfect |
+| Combo playing | J or Enter | Timed hit: press inside the box for a Perfect |
 | Enemy strike | E | Parry (when the ring turns gold) |
 | Enemy strike | Q | Defend (costs AP) |
 | Any time | Z / C, or right-drag | Rotate the camera (movement follows it) |

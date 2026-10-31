@@ -278,7 +278,7 @@ func _ready() -> void:
 	party_status.party = party
 	enemy_status.party = enemies
 	enemy_status.tags_on_left = true  # keeps the right edge tidy
-	battle_menu.commands = PackedStringArray(["Attack", "Wait", "Abilities", "Items"])
+	battle_menu.commands = PackedStringArray(["Attack", "Abilities", "Wait", "Items"])
 	var enabled: Array[bool] = [true, true, true, false]
 	battle_menu.command_enabled = enabled
 	battle_menu.command_notes = PackedStringArray(["", "", "", "coming later"])
@@ -1101,7 +1101,7 @@ func _check_enemies() -> void:
 func _open_commands() -> void:
 	_menu_mode = BattleMenu.Mode.COMMANDS
 	var can_attack := _attack_target() != null
-	battle_menu.command_index = 0 if can_attack else 1  # start on Wait if out of reach
+	battle_menu.command_index = 0 if can_attack else 2  # start on Wait if out of reach
 	battle_menu.command_enabled[0] = can_attack
 	battle_menu.command_notes[0] = "" if can_attack else "no enemy in reach"
 
@@ -1137,9 +1137,9 @@ func _menu_input(event: InputEvent) -> void:
 				elif index == 0:
 					_open_combo_bar()
 				elif index == 1:
-					_wait_command()
-				elif index == 2:
 					_open_skills()
+				elif index == 2:
+					_wait_command()
 		BattleMenu.Mode.SKILLS:
 			if up or down:
 				var n := _skills.size()
@@ -2026,11 +2026,11 @@ func _controls_hint() -> String:
 		return ""  # the camera is still panning to the fighter
 	match _menu_mode:
 		BattleMenu.Mode.COMMANDS:
-			return "W / S: choose     J: select"
+			return "W / S: choose     J / Enter: select"
 		BattleMenu.Mode.COMBO:
-			return "W / S: choose move     J: add to bar     K: remove last     Space: begin combo"
+			return "W / S: choose move     J / Enter: add     K / Backspace: remove last     Space: begin"
 		BattleMenu.Mode.SKILLS:
-			return "W / S: choose skill     J: use (ends the turn)     K: back"
+			return "W / S: choose skill     J / Enter: use (ends the turn)     K / Backspace: back"
 		BattleMenu.Mode.TARGET:
 			return ""
 	var standing := _standing(party)

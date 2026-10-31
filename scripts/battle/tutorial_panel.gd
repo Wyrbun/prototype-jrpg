@@ -1,7 +1,7 @@
 class_name TutorialPanel
 extends Control
 ## The tutorial's note box, top right: lesson title, explanation, and either
-## the current goal or "J: continue".
+## the current goal or "J / Enter / Space: continue".
 
 const GOLD := Color(0.95, 0.78, 0.35)
 const WIDTH := 430.0
@@ -38,7 +38,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var inner := WIDTH - PAD * 2.0
 	var body_size := font.get_multiline_string_size(body, HORIZONTAL_ALIGNMENT_LEFT, inner, 16)
-	var footer := "GOAL: " + goal if goal != "" else "J / Space: continue"
+	var footer := "GOAL: " + goal if goal != "" else "J / Enter / Space: continue"
 	var footer_size := font.get_multiline_string_size(footer, HORIZONTAL_ALIGNMENT_LEFT, inner - 24.0, 17)
 	var height := PAD + 22.0 + 12.0 + body_size.y + 16.0 + footer_size.y + PAD
 	var box := Rect2(size.x - WIDTH - 20.0, 96.0, WIDTH, height)

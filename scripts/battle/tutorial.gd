@@ -3,7 +3,7 @@ extends Node
 ## Runs the tutorial: one guided fight against the Training Golem.
 ##
 ## The tutorial is a list of steps. A step is either a note (the fight pauses
-## until J / Space) or a goal (the fight runs until the goal is met). Each
+## until J / Enter / Space) or a goal (the fight runs until the goal is met). Each
 ## step can set the fight up first: hold fighters on the timeline, make the
 ## Golem prepare a specific skill, add a party member.
 ##
@@ -63,7 +63,7 @@ func _process(delta: float) -> void:
 			_next()
 
 
-## While a note is up, J / Space moves on and every other key is ignored.
+## While a note is up, J / Enter / Space moves on and every other key is ignored.
 func wants_input(event: InputEvent) -> bool:
 	if index < 0 or index >= steps.size() or steps[index]["goal"] != "":
 		return false
@@ -162,7 +162,7 @@ func _top_up_ap(amount: float) -> void:
 func _build_steps() -> void:
 	# 1. Welcome and moving
 	_note(1, "Welcome",
-		"This tutorial teaches every mechanic in one guided fight against a Training Golem. You can't lose: HP never drops below 1 here.\n\nRead each note, then press J (or Space) to continue. Esc returns to the menu at any time.",
+		"This tutorial teaches every mechanic in one guided fight against a Training Golem. You can't lose: HP never drops below 1 here.\n\nRead each note, then press J, Enter or Space to continue. Esc returns to the menu at any time.",
 		func():
 			knight.hold = true
 			_golem_rest())
@@ -189,14 +189,14 @@ func _build_steps() -> void:
 
 	# 3. Your turn
 	_note(3, "Your turn",
-		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo\n- Abilities: use one skill\n- Wait: skip the turn, and the next one comes sooner\n\nUse W / S to choose and J to select.")
+		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo\n- Abilities: use one skill\n- Wait: skip the turn, and the next one comes sooner\n\nUse W / S to choose, J (or Enter) to select, and K (or Backspace) to go back.")
 	_goal(3, "Combos",
-		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. J adds the selected move, K removes the last one, Space begins.",
+		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. J (or Enter) adds the selected move, K (or Backspace) removes the last one, and Space begins.",
 		"Build a combo and press Space",
 		func(): return _stat("combos") >= 1,
 		func(): _top_up_ap(60.0))
 	_note(3, "Timed hits",
-		"While the combo plays, a white playhead sweeps across the bar after a short READY lead-in. Every hit has a small box: press J as the playhead enters it for a Perfect (+50% damage).\n\nPress at the wrong moment and the chain ends. Don't press at all and the hit is just normal.")
+		"While the combo plays, a white playhead sweeps across the bar after a short READY lead-in. Every hit has a small box: press J (or Enter) as the playhead enters it for a Perfect (+50% damage).\n\nPress at the wrong moment and the chain ends. Don't press at all and the hit is just normal.")
 	_goal(3, "Timed hits",
 		"Try it on this combo or on the Knight's next turn.",
 		"Land a Perfect hit",

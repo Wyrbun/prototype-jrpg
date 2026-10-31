@@ -233,9 +233,9 @@ down, which can:
 
 ## Party attacks (milestone 6, built; reworked)
 
-- **The command menu opens on each party turn**: Attack / Wait / Abilities /
+- **The command menu opens on each party turn**: Attack / Abilities / Wait /
   Items (placeholder), with Defend: Q / Parry: E as reminders. W/S choose,
-  J select, K back.
+  J (or Enter) select, K back.
 - **Attack opens the combo bar** (inspired by Legend of Legaia) with the
   class's own attacks. J adds the selected move, K removes the last one,
   **Space begins**. The bar is as long as the **class's AP** (Knight 60,

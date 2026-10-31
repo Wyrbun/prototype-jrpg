@@ -102,7 +102,7 @@ func _draw() -> void:
 		var panel := Rect2((size.x - 520) / 2.0, size.y - 250, 520, 62)
 		draw_style_box(_panel_style, panel)
 		_text(font, panel.position + Vector2(16, 27), target_prompt, 19, GOLD)
-		_text(font, panel.position + Vector2(16, 50), "J: confirm     K: back", 15, Color(0.75, 0.75, 0.8))
+		_text(font, panel.position + Vector2(16, 50), "J / Enter: confirm     K / Backspace: back", 15, Color(0.75, 0.75, 0.8))
 
 
 # --- Command menu ----------------------------------------------------------

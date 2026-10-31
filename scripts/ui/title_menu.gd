@@ -16,6 +16,7 @@ const CONTROLS := [
 	["Between turns", "Tab", "Switch to the next party member"],
 	["Camera", "Z / C, right-drag", "Rotate (wheel: zoom, V: reset)"],
 	["Your turn", "W / S, J / K", "Choose, select, go back"],
+	["Any time", "Enter / Backspace", "Same as J / K"],
 	["Combo bar", "J / K, Space", "Add a move / remove the last one, begin"],
 	["Combo playing", "J", "Timed hit: press inside the box for a Perfect"],
 	["Choosing a target", "W / S (Jump: WASD)", "Pick who or where"],
@@ -188,7 +189,7 @@ func _draw() -> void:
 			_text(font, Vector2(panel.position.x + 24, y), row[0], 17, Color(0.65, 0.67, 0.75))
 			_text(font, Vector2(panel.position.x + 230, y), row[1], 17, GOLD)
 			_text(font, Vector2(panel.position.x + 450, y), row[2], 17, Color.WHITE)
-		_centered(font, "K / Esc: back", panel.end.y + 36.0, 16, Color(0.6, 0.6, 0.65))
+		_centered(font, "K / Backspace / Esc: back", panel.end.y + 36.0, 16, Color(0.6, 0.6, 0.65))
 		return
 
 	var list := _list_rect()
@@ -218,7 +219,7 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([Vector2(arrow_x, y), Vector2(arrow_x + 14, y), Vector2(arrow_x + 7, y + 10)]), GOLD)
 	var hint := "W / S: choose     J / Enter: select"
 	if page != Page.MAIN:
-		hint += "     K / Esc: back"
+		hint += "     K / Backspace / Esc: back"
 	_centered(font, hint, list.end.y + 36.0, 16, Color(0.6, 0.6, 0.65))
 
 

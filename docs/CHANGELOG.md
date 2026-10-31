@@ -3,6 +3,13 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Menu order and Enter key
+
+- The command menu is now Attack / Abilities / Wait / Items.
+- **Enter** (and keypad Enter) works everywhere J does: menus, the combo bar
+  and timed hits. **Backspace** works everywhere K does (back, remove the
+  last move).
+
 ## Fix: Round Select fits the window
 
 - Round Select shows as many rounds as fit and scrolls (W / S or the mouse
