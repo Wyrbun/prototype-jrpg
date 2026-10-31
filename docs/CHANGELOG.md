@@ -3,6 +3,12 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Fix: Round Select fits the window
+
+- Round Select shows as many rounds as fit and scrolls (W / S or the mouse
+  wheel), with arrows when more are above or below. The Controls page
+  shrinks its rows on short windows.
+
 ## Reaction reminders per class
 
 - The command menu only shows the reaction keys the current class can use:
