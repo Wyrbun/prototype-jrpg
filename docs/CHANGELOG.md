@@ -8,6 +8,8 @@ Newest first. Detailed current rules live in `battle-design.md`.
 - Round Select shows as many rounds as fit and scrolls (W / S or the mouse
   wheel), with arrows when more are above or below. The Controls page
   shrinks its rows on short windows.
+- Going back from a scrolled Round Select no longer leaves the main menu
+  scrolled (it was hiding Boss Rush and Tutorial).
 
 ## Reaction reminders per class
 

@@ -99,6 +99,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif back and page != Page.MAIN:
 		index = 1 + page  # back onto the item that opened this page
 		page = Page.MAIN
+		_scroll = 0  # the main menu always shows from the top
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -125,6 +126,7 @@ func _select() -> void:
 		Page.CONTROLS:
 			page = Page.MAIN
 			index = 3
+			_scroll = 0
 
 
 func _row_height() -> float:
@@ -193,6 +195,7 @@ func _draw() -> void:
 	draw_style_box(_style, list)
 	var items := _items()
 	var shown := _visible_rows()
+	_scroll = clampi(_scroll, 0, maxi(items.size() - shown, 0))  # never scrolled past what exists
 	var baseline := _row_height() * 0.65
 	for slot in shown:
 		var i := _scroll + slot
