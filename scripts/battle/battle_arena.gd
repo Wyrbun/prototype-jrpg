@@ -135,6 +135,16 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 @export var camera_follow_speed: float = 4.0
 ## How far the camera sits from the action, in meters.
 @export var camera_distance: float = 12.0
+## Camera controls: Z / C or right-drag to rotate, mouse wheel to zoom, V to reset.
+@export var camera_turn_degrees_per_second: float = 100.0
+@export var camera_mouse_sensitivity: float = 0.3
+@export var camera_min_distance: float = 7.0
+@export var camera_max_distance: float = 24.0
+@export var camera_min_pitch: float = 20.0
+@export var camera_max_pitch: float = 75.0
+## When a turn comes up, the camera pans to that fighter before the turn
+## begins (and back afterwards). Longer distances take longer, up to this.
+@export var turn_pan_max_seconds: float = 0.8
 
 
 ## One enemy skill on its way to landing.
@@ -225,6 +235,23 @@ var _exec_lead_in := 0.0
 ## True on frames where you moved (so the world moved with you).
 var _world_moved := false
 var _camera_offset: Vector3
+## Camera angle around the fighter (yaw), tilt (pitch, degrees down) and zoom.
+var _cam_yaw := 0.0
+var _cam_pitch := 35.0
+var _cam_distance := 12.0
+var _cam_start_pitch := 35.0
+## The point the camera follows, smoothed so rotating stays steady.
+var _cam_focus := Vector3.ZERO
+## The party member you were steering before an ally's turn took over;
+## control goes back to them when that turn ends.
+var _steer_before_turn: Combatant = null
+## A smooth camera pan in progress: where it started, its length, and time so far.
+var _pan_start := Vector3.ZERO
+var _pan_duration := 0.0
+var _pan_time := 0.0
+## Seconds left before the active fighter's turn actually begins (the camera
+## is panning over to them).
+var _turn_intro_left := 0.0
 var _flash_message := ""
 var _flash_time_left := 0.0
 
@@ -261,8 +288,12 @@ func _ready() -> void:
 	current_max_ap = max_ap
 	# The camera keeps its angle from the scene and backs away along its
 	# own view direction (+Z is "behind" a camera in Godot).
-	_camera_offset = camera.global_basis.z * camera_distance
-	camera.global_position = _camera_focus() + _camera_offset
+	_cam_pitch = -camera.global_rotation_degrees.x
+	_cam_start_pitch = _cam_pitch
+	_cam_yaw = camera.global_rotation_degrees.y
+	_cam_distance = camera_distance
+	_cam_focus = _camera_focus()
+	_place_camera()
 	print("%s! Party: %s  vs  Enemies: %s" % [encounter.title, _names(party), _names(enemies)])
 	if tutorial_mode:
 		for c in combatants:
@@ -356,6 +387,10 @@ func _process(delta: float) -> void:
 			_free_roam(delta, world_delta)
 			_tick_stances(world_delta)
 			_advance_timeline(world_delta)
+		elif _turn_intro_left > 0.0:
+			_turn_intro_left -= delta
+			if _turn_intro_left <= 0.0:
+				_begin_active_turn()
 		elif _party_turn() and _menu_mode == BattleMenu.Mode.EXECUTING:
 			_update_combo(delta)
 		elif _party_turn() and _menu_mode == BattleMenu.Mode.TARGET:
@@ -369,6 +404,9 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _camera_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("menu"):
 		get_viewport().set_input_as_handled()
 		get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")
@@ -459,26 +497,46 @@ func _start_turn(fighter: Combatant) -> void:
 		_flash("Wore off: " + ", ".join(ended))
 
 	if fighter.team == Combatant.Team.PARTY:
+		if _steer_before_turn == null:
+			_steer_before_turn = controlled  # remembered, to hand control back afterwards
+		_set_controlled(fighter)  # locked onto the fighter whose turn it is
+	else:
+		fighter.set_highlighted(true)
+	# The camera pans over to whoever's turn it is; the turn begins when it arrives.
+	_turn_intro_left = _begin_pan()
+	if _turn_intro_left <= 0.0:
+		_begin_active_turn()
+
+
+## The camera has arrived: the turn really starts now.
+func _begin_active_turn() -> void:
+	_turn_intro_left = 0.0
+	var fighter := active
+	if fighter == null:
+		return
+	if fighter.team == Combatant.Team.PARTY:
 		var recovered := fighter.recover_hp()
 		if recovered > 0:
 			_flash("%s recovers %d HP" % [fighter.display_name, recovered])
-		_set_controlled(fighter)  # locked onto the fighter whose turn it is
 		# Every turn starts with enough AP for a few attacks.
 		ap = minf(maxf(ap, turn_start_ap), current_max_ap)
 		_open_commands()
 	else:
-		fighter.set_highlighted(true)
-		if fighter.loaded_skill == Skills.NONE:
-			_begin_cast(fighter)
-		_enemy_unleash(fighter, false)
-		if _strike != null:
-			await strike_finished
-		if _game_over:
-			return
-		# "await" pauses this function until the timer finishes,
-		# without freezing the rest of the game.
-		await get_tree().create_timer(enemy_turn_seconds).timeout
-		_end_turn()
+		_run_enemy_turn(fighter)
+
+
+func _run_enemy_turn(fighter: Combatant) -> void:
+	if fighter.loaded_skill == Skills.NONE:
+		_begin_cast(fighter)
+	_enemy_unleash(fighter, false)
+	if _strike != null:
+		await strike_finished
+	if _game_over:
+		return
+	# "await" pauses this function until the timer finishes,
+	# without freezing the rest of the game.
+	await get_tree().create_timer(enemy_turn_seconds).timeout
+	_end_turn()
 
 
 func _end_turn() -> void:
@@ -487,7 +545,14 @@ func _end_turn() -> void:
 	if active != controlled:
 		active.set_highlighted(false)
 	_send_to_start(active)
+	var was_party := active.team == Combatant.Team.PARTY
 	active = null
+	# After an ally's turn, go back to whoever you were steering before it.
+	if was_party and _steer_before_turn != null:
+		if not _steer_before_turn.is_down and _steer_before_turn != controlled:
+			_set_controlled(_steer_before_turn)
+		_steer_before_turn = null
+	_begin_pan()  # glide back to whoever you're steering
 	timeline_bar.active = null
 	_menu_mode = BattleMenu.Mode.HIDDEN
 	_combo_target = null
@@ -521,7 +586,7 @@ func _free_roam(delta: float, world_delta: float) -> void:
 	# Godot, so "move_forward" maps to the negative Y of this vector.
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if controlled != null and not controlled.is_down and input != Vector2.ZERO:
-		controlled.step(Vector3(input.x, 0.0, input.y), delta)
+		controlled.step(_camera_relative(input), delta)
 		_keep_in_arena(controlled)
 	for enemy in enemies:
 		_enemy_step(enemy, world_delta)
@@ -539,6 +604,7 @@ func _cycle_control() -> void:
 		return
 	var index := standing.find(controlled)
 	_set_controlled(standing[(index + 1) % standing.size()])
+	_begin_pan()
 
 
 func _set_controlled(fighter: Combatant) -> void:
@@ -1630,7 +1696,7 @@ func _update_target_marker(delta: float) -> void:
 		return
 	if _pending_skill["target"] == Moves.Target.POINT:
 		var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-		_target_marker.global_position += Vector3(input.x, 0.0, input.y) * 7.0 * delta
+		_target_marker.global_position += _camera_relative(input) * 7.0 * delta
 		_keep_marker_in_range()
 	elif not _target_choices.is_empty():
 		var chosen := _target_choices[_target_index]
@@ -1804,17 +1870,77 @@ func _make_ring(radius: float, width: float, color: Color) -> MeshInstance3D:
 # --- Camera and UI --------------------------------------------------------
 
 func _update_camera(delta: float) -> void:
-	# This "1 - exp(...)" form makes the smoothing feel the same at any frame rate.
-	var weight := 1.0 - exp(-camera_follow_speed * delta)
-	camera.global_position = camera.global_position.lerp(_camera_focus() + _camera_offset, weight)
+	var turn := Input.get_axis("camera_left", "camera_right")
+	_cam_yaw -= turn * camera_turn_degrees_per_second * delta
+	if _pan_time < _pan_duration:
+		# A pan: ease in and out from where the camera was to its new subject.
+		_pan_time += delta
+		var t := clampf(_pan_time / _pan_duration, 0.0, 1.0)
+		_cam_focus = _pan_start.lerp(_camera_focus(), t * t * (3.0 - 2.0 * t))
+	else:
+		# This "1 - exp(...)" form makes the smoothing feel the same at any frame rate.
+		var weight := 1.0 - exp(-camera_follow_speed * delta)
+		_cam_focus = _cam_focus.lerp(_camera_focus(), weight)
+	_place_camera()
 
 
-## The point the camera looks at: a bit of the way from the fighter you
-## control (or the party, between turns) toward the nearest enemy, so both
-## stay on screen.
+## Starts a smooth pan from the current view to the camera's new subject.
+## Returns how long it takes (0 when it's already there).
+func _begin_pan() -> float:
+	_pan_start = _cam_focus
+	var distance := _pan_start.distance_to(_camera_focus())
+	_pan_time = 0.0
+	_pan_duration = 0.0 if distance < 0.6 else clampf(0.3 + distance * 0.04, 0.3, turn_pan_max_seconds)
+	return _pan_duration
+
+
+func _place_camera() -> void:
+	camera.global_rotation_degrees = Vector3(-_cam_pitch, _cam_yaw, 0.0)
+	_camera_offset = camera.global_basis.z * _cam_distance
+	camera.global_position = _cam_focus + _camera_offset
+
+
+## Mouse: hold the right button and drag to rotate and tilt, wheel to zoom.
+## V puts the camera back to its starting angle.
+func _camera_input(event: InputEvent) -> bool:
+	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
+		_cam_yaw -= event.relative.x * camera_mouse_sensitivity
+		_cam_pitch = clampf(_cam_pitch + event.relative.y * camera_mouse_sensitivity, camera_min_pitch, camera_max_pitch)
+		return true
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cam_distance = maxf(_cam_distance * 0.9, camera_min_distance)
+			return true
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cam_distance = minf(_cam_distance * 1.1, camera_max_distance)
+			return true
+	if event.is_action_pressed("camera_reset"):
+		_cam_yaw = 0.0
+		_cam_pitch = _cam_start_pitch
+		_cam_distance = camera_distance
+		return true
+	return false
+
+
+## Turns WASD into a direction on the floor relative to the camera, so W
+## always moves away from the screen, whichever way the camera faces.
+func _camera_relative(input: Vector2) -> Vector3:
+	var right := camera.global_basis.x
+	var forward := -camera.global_basis.z
+	right.y = 0.0
+	forward.y = 0.0
+	return right.normalized() * input.x - forward.normalized() * input.y
+
+
+## The point the camera looks at: the fighter whose turn it is (or, between
+## turns, the one you steer), a bit of the way toward the nearest opponent so
+## both stay on screen.
 func _camera_focus() -> Vector3:
-	var anchor := controlled.global_position if controlled != null else _party_center()
-	var threat := _nearest_to_point(anchor, enemies)
+	# During anyone's turn the camera is on them; otherwise on who you steer.
+	var subject := active if active != null else controlled
+	var anchor := subject.global_position if subject != null else _party_center()
+	var others := enemies if subject == null or subject.team == Combatant.Team.PARTY else _standing(party)
+	var threat := _nearest_to_point(anchor, others)
 	return anchor.lerp(threat.global_position, 0.35) if threat != null else anchor
 
 
@@ -1894,6 +2020,8 @@ func _strike_prompt() -> String:
 
 
 func _controls_hint() -> String:
+	if _turn_intro_left > 0.0:
+		return ""  # the camera is still panning to the fighter
 	match _menu_mode:
 		BattleMenu.Mode.COMMANDS:
 			return "W / S: choose     J: select"
@@ -1908,7 +2036,7 @@ func _controls_hint() -> String:
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
 	var tab_part := "     Tab: switch to %s" % next_name if next_name != "" else ""
-	return "WASD: move %s (free)%s     Esc: menu" % [controlled.display_name if controlled else "", tab_part]
+	return "WASD: move %s (free)%s     Z / C or right-drag: camera     Esc: menu" % [controlled.display_name if controlled else "", tab_part]
 
 
 ## Shows a short message under the turn label for a moment.

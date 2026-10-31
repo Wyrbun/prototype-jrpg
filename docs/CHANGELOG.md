@@ -3,6 +3,14 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Camera controls and control handback
+
+- **Camera:** Z / C or right-drag rotates around the action (drag up and
+  down to tilt), the mouse wheel zooms, V resets. WASD now moves relative
+  to the camera, so W always heads away from the screen.
+- **Control handback:** when an ally's turn ends, control returns to the
+  party member you were steering before it, instead of staying on the ally.
+
 ## Title screen and tutorial
 
 - The game opens on a **title screen**: Boss Rush, Tutorial, Round Select,

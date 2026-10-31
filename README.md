@@ -115,6 +115,8 @@ resets max AP to 100, so the better you play, the more you have to lose.
 | Combo playing | J | Timed hit: press inside the box for a Perfect |
 | Enemy strike | E | Parry (when the ring turns gold) |
 | Enemy strike | Q | Defend (costs AP) |
+| Any time | Z / C, or right-drag | Rotate the camera (movement follows it) |
+| Any time | Mouse wheel / V | Zoom / reset the camera |
 | Any time | Esc | Back to the title screen |
 | Any time (not in the tutorial) | N / P | Next / previous round |
 | Battle over | R | Restart the round |

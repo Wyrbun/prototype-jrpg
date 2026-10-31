@@ -14,6 +14,7 @@ const MAIN_NOTES := ["All 11 rounds, from the start", "Learn every mechanic in a
 const CONTROLS := [
 	["Between turns", "WASD / arrows", "Move the party member you're steering"],
 	["Between turns", "Tab", "Switch to the next party member"],
+	["Camera", "Z / C, right-drag", "Rotate (wheel: zoom, V: reset)"],
 	["Your turn", "W / S, J / K", "Choose, select, go back"],
 	["Combo bar", "J / K, Space", "Add a move / remove the last one, begin"],
 	["Combo playing", "J", "Timed hit: press inside the box for a Perfect"],

@@ -57,6 +57,12 @@ threat ranges, and chained attacks.
 - **Wait** ends the turn without spending AP; the fighter's bar restarts at
   `wait_head_start` (33) instead of 0, so the next turn comes sooner.
 - If several party members are ready at once, their turns come up back to back.
+- When a party turn ends, control goes back to whoever you were steering
+  before it (after back-to-back turns, to whoever you steered before the
+  first of them).
+- **Camera:** follows the steered fighter, leaning toward the nearest enemy.
+  Z / C or right-drag rotates it, dragging up and down tilts it (20-75°),
+  the wheel zooms (7-24 m), V resets. Movement is camera-relative.
 - **Battle speed** (`battle_speed`, 0.7 = 30% slower) slows the timeline,
   enemy and ally movement, and AP recharge together. The fighter you steer,
   strike rings and combo timing aren't slowed.
