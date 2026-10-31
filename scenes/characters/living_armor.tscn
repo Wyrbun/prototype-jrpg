@@ -11,7 +11,7 @@ weight = 1
 shape = 0
 radius = 3.0
 angle = 90.0
-damage = 30
+damage = 39
 windup = 1.1
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
@@ -22,7 +22,7 @@ albedo_color = Color(0.25, 0.25, 0.32, 1)
 
 [node name="LivingArmor" instance=ExtResource("1_base")]
 display_name = "Living Armor"
-max_hp = 300
+max_hp = 750
 speed = 10.0
 move_speed = 3.0
 turn_speed_degrees = 120.0

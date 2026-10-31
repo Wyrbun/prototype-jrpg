@@ -11,7 +11,7 @@ weight = 3
 shape = 0
 radius = 3.0
 angle = 90.0
-damage = 22
+damage = 29
 windup = 1.0
 
 [sub_resource type="Resource" id="Skill_2"]
@@ -22,7 +22,7 @@ weight = 2
 shape = 2
 radius = 5.0
 width = 1.4
-damage = 30
+damage = 39
 windup = 1.3
 cannot_be_parried = true
 
@@ -34,7 +34,7 @@ weight = 1
 shape = 3
 radius = 4.5
 inner_radius = 1.8
-damage = 30
+damage = 39
 windup = 1.5
 cannot_be_parried = true
 
@@ -46,7 +46,7 @@ albedo_color = Color(0.55, 0.5, 0.4, 1)
 
 [node name="OgreWarrior" instance=ExtResource("1_base")]
 display_name = "Ogre Warrior"
-max_hp = 180
+max_hp = 450
 speed = 8.0
 move_speed = 2.8
 turn_speed_degrees = 100.0

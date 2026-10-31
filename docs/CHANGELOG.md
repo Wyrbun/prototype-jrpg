@@ -3,6 +3,12 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Enemy balance pass
+
+- Every roster enemy has **2.5x HP** and deals **1.3x damage** (rounded),
+  including the Counter stance punish (25 -> 33). The Training Golem is
+  unchanged. Example: Stone Golem 320 -> 800 HP, Crush 40 -> 52.
+
 ## Camera controls and control handback
 
 - **Camera:** Z / C or right-drag rotates around the action (drag up and
@@ -10,6 +16,9 @@ Newest first. Detailed current rules live in `battle-design.md`.
   to the camera, so W always heads away from the screen.
 - **Control handback:** when an ally's turn ends, control returns to the
   party member you were steering before it, instead of staying on the ally.
+- **Turn pans:** when anyone's turn comes up (ally or enemy), the camera
+  glides over to them first and the turn begins once it arrives; afterwards
+  it glides back to whoever you're steering. Tab switches glide too.
 
 ## Title screen and tutorial
 

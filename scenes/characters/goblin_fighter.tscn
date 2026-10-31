@@ -11,7 +11,7 @@ weight = 4
 shape = 2
 radius = 2.4
 width = 1.0
-damage = 16
+damage = 21
 windup = 0.9
 
 [sub_resource type="Resource" id="Skill_2"]
@@ -22,7 +22,7 @@ weight = 2
 shape = 0
 radius = 3.0
 angle = 110.0
-damage = 28
+damage = 36
 windup = 1.3
 cannot_be_blocked = true
 
@@ -42,7 +42,7 @@ albedo_color = Color(0.45, 0.6, 0.25, 1)
 
 [node name="GoblinFighter" instance=ExtResource("1_base")]
 display_name = "Goblin Fighter"
-max_hp = 90
+max_hp = 225
 speed = 11.0
 move_speed = 3.5
 turn_speed_degrees = 200.0

@@ -17,18 +17,19 @@ be built.
 ## What's in the game now
 
 Each enemy is a scene in `scenes/characters/` with the skills that existing
-building blocks allow. Numbers are first guesses.
+building blocks allow. Numbers are first guesses (enemy HP was raised 2.5x and
+enemy damage 1.3x after playtesting).
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
-| Goblin Fighter | 90 | Attack (short line), Smash (wide cone, can't be blocked), Defend | 2-hit Attack; Defend as partial reduction |
-| Kobold Archer | 70 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
-| Bandit Arcanist | 75 | Ranged Attack (half-circle), Wind Slash (line) | Fireball; Wind Slash stopping at the first hit |
-| Ogre Warrior | 180 | Attack (short cone), Shield Bash (line, can't be parried), Sword Spin (donut, can't be parried) | 2-hit Attack; Shout; Shield Bash snapping/stopping; Spin following Shout |
-| Orc Shaman | 100 | Attack (long line) | Healing Ritual; Curse |
-| Stone Golem | 320 | Heavy Attack, Crush, Rock Stomp | Rock Spikes |
-| Living Armor | 300 | Combo (as one hit, cone) | 3 hits with launch; Dark Bolt; Shadowflare |
-| Dragon Hatchling | 360 | Breath (massive cone) | damage split by group; Fire Wave; Burning Spike |
+| Goblin Fighter | 225 | Attack (short line), Smash (wide cone, can't be blocked), Defend | 2-hit Attack; Defend as partial reduction |
+| Kobold Archer | 175 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
+| Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line) | Fireball; Wind Slash stopping at the first hit |
+| Ogre Warrior | 450 | Attack (short cone), Shield Bash (line, can't be parried), Sword Spin (donut, can't be parried) | 2-hit Attack; Shout; Shield Bash snapping/stopping; Spin following Shout |
+| Orc Shaman | 250 | Attack (long line) | Healing Ritual; Curse |
+| Stone Golem | 800 | Heavy Attack, Crush, Rock Stomp | Rock Spikes |
+| Living Armor | 750 | Combo (as one hit, cone) | 3 hits with launch; Dark Bolt; Shadowflare |
+| Dragon Hatchling | 900 | Breath (massive cone) | damage split by group; Fire Wave; Burning Spike |
 
 ## Normal enemies
 

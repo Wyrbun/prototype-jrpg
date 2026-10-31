@@ -63,6 +63,11 @@ threat ranges, and chained attacks.
 - **Camera:** follows the steered fighter, leaning toward the nearest enemy.
   Z / C or right-drag rotates it, dragging up and down tilts it (20-75°),
   the wheel zooms (7-24 m), V resets. Movement is camera-relative.
+- **Turn pans:** when a turn comes up, the camera eases over to that fighter
+  (ally or enemy) and the turn starts when it arrives: the menu opens, or
+  the enemy acts. The pan takes 0.3 s plus a little per meter, up to
+  `turn_pan_max_seconds` (0.8 s); no pan if the camera is already there.
+  After the turn it eases back to whoever you steer. Tab switches ease too.
 - **Battle speed** (`battle_speed`, 0.7 = 30% slower) slows the timeline,
   enemy and ally movement, and AP recharge together. The fighter you steer,
   strike rings and combo timing aren't slowed.
@@ -140,13 +145,13 @@ Every enemy has a **Skills** list (Inspector, Combat group). Each entry is an
 
 An enemy with an empty list uses the basic triangle set from `skills.gd`.
 
-**Stone Golem** (320 HP), following the roster:
+**Stone Golem** (800 HP), following the roster:
 
 | Skill | Kind | Area | Damage | Wind-up | Weight |
 |---|---|---|---|---|---|
-| Heavy Attack | Smash | cone 70°, 4.2 m | 35 | 1.4 s | 3 |
-| Crush | Smash | line 8 m x 1.4 m | 40 | 1.6 s | 2 |
-| Rock Stomp | Attack | circle 2.6 m | 20 | 1.0 s | 3 |
+| Heavy Attack | Smash | cone 70°, 4.2 m | 46 | 1.4 s | 3 |
+| Crush | Smash | line 8 m x 1.4 m | 52 | 1.6 s | 2 |
+| Rock Stomp | Attack | circle 2.6 m | 26 | 1.0 s | 3 |
 | Rock Spikes | Special | targeted hazard | | | later |
 
 The Golem no longer uses Defense/Counter stances (not in its roster entry).
@@ -248,7 +253,7 @@ down, which can:
   ends and max AP resets. No press = a normal hit (costs 5 of the extra
   max AP).
 - **Skill triangle, per hit and per enemy hit:** a **Counter** stance
-  punishes the attacker (25 damage) and stops the combo; **Defense** blocks
+  punishes the attacker (33 damage) and stops the combo; **Defense** blocks
   basic attacks, piercing moves ignore it, breaking moves break it; an
   **Attack-type hit on an enemy preparing Smash** interrupts it.
 - At the start of each party turn **AP is topped up to 30**.

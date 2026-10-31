@@ -114,7 +114,7 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## Perfect timing (J in a block's timing box): extra damage on that hit.
 @export var perfect_damage_bonus: float = 0.5
 ## Damage you take when you attack into a Counter stance.
-@export var counter_stance_damage: int = 25
+@export var counter_stance_damage: int = 33
 ## How far an interrupted or guard-broken enemy is knocked back on the timeline.
 @export var interrupt_push: float = 30.0
 ## Seconds a Defense/Counter stance stays up after the enemy's turn
