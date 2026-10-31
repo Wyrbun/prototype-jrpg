@@ -1,0 +1,103 @@
+[gd_resource type="Resource" script_class="BossRush" format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/boss_rush.gd" id="1_rush"]
+[ext_resource type="Script" path="res://scripts/battle/encounter.gd" id="2_encounter"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_square.tscn" id="a_square"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_rock_circle.tscn" id="a_rock_circle"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_long.tscn" id="a_long"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_pit.tscn" id="a_pit"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_rock_field.tscn" id="a_rock_field"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_grand.tscn" id="a_grand"]
+[ext_resource type="PackedScene" path="res://scenes/characters/knight.tscn" id="c_knight"]
+[ext_resource type="PackedScene" path="res://scenes/characters/archer.tscn" id="c_archer"]
+[ext_resource type="PackedScene" path="res://scenes/characters/mage.tscn" id="c_mage"]
+[ext_resource type="PackedScene" path="res://scenes/characters/cleric.tscn" id="c_cleric"]
+[ext_resource type="PackedScene" path="res://scenes/characters/goblin_fighter.tscn" id="c_goblin_fighter"]
+[ext_resource type="PackedScene" path="res://scenes/characters/kobold_archer.tscn" id="c_kobold_archer"]
+[ext_resource type="PackedScene" path="res://scenes/characters/bandit_arcanist.tscn" id="c_bandit_arcanist"]
+[ext_resource type="PackedScene" path="res://scenes/characters/ogre_warrior.tscn" id="c_ogre_warrior"]
+[ext_resource type="PackedScene" path="res://scenes/characters/orc_shaman.tscn" id="c_orc_shaman"]
+[ext_resource type="PackedScene" path="res://scenes/characters/stone_golem.tscn" id="c_stone_golem"]
+[ext_resource type="PackedScene" path="res://scenes/characters/living_armor.tscn" id="c_living_armor"]
+[ext_resource type="PackedScene" path="res://scenes/characters/dragon_hatchling.tscn" id="c_dragon_hatchling"]
+
+[sub_resource type="Resource" id="Round_1"]
+script = ExtResource("2_encounter")
+title = "Round 1"
+arena = ExtResource("a_square")
+party = Array[PackedScene]([ExtResource("c_knight")])
+enemies = Array[PackedScene]([ExtResource("c_goblin_fighter")])
+
+[sub_resource type="Resource" id="Round_2"]
+script = ExtResource("2_encounter")
+title = "Round 2"
+arena = ExtResource("a_rock_circle")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer")])
+enemies = Array[PackedScene]([ExtResource("c_kobold_archer"), ExtResource("c_kobold_archer")])
+
+[sub_resource type="Resource" id="Round_3"]
+script = ExtResource("2_encounter")
+title = "Round 3"
+arena = ExtResource("a_long")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_mage")])
+enemies = Array[PackedScene]([ExtResource("c_goblin_fighter"), ExtResource("c_bandit_arcanist")])
+
+[sub_resource type="Resource" id="Round_4"]
+script = ExtResource("2_encounter")
+title = "Round 4"
+arena = ExtResource("a_pit")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_kobold_archer"), ExtResource("c_orc_shaman")])
+
+[sub_resource type="Resource" id="Round_5"]
+script = ExtResource("2_encounter")
+title = "Round 5"
+arena = ExtResource("a_rock_field")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage")])
+enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_bandit_arcanist"), ExtResource("c_orc_shaman")])
+
+[sub_resource type="Resource" id="Round_6"]
+script = ExtResource("2_encounter")
+title = "Round 6"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_stone_golem")])
+
+[sub_resource type="Resource" id="Round_7"]
+script = ExtResource("2_encounter")
+title = "Round 7"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_living_armor")])
+
+[sub_resource type="Resource" id="Round_8"]
+script = ExtResource("2_encounter")
+title = "Round 8"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_kobold_archer"), ExtResource("c_ogre_warrior")])
+
+[sub_resource type="Resource" id="Round_9"]
+script = ExtResource("2_encounter")
+title = "Round 9"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_living_armor"), ExtResource("c_orc_shaman"), ExtResource("c_goblin_fighter"), ExtResource("c_goblin_fighter")])
+
+[sub_resource type="Resource" id="Round_10"]
+script = ExtResource("2_encounter")
+title = "Round 10"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_dragon_hatchling")])
+
+[sub_resource type="Resource" id="Round_11"]
+script = ExtResource("2_encounter")
+title = "Special Match"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_living_armor"), ExtResource("c_dragon_hatchling")])
+
+[resource]
+script = ExtResource("1_rush")
+rounds = Array[ExtResource("2_encounter")]([SubResource("Round_1"), SubResource("Round_2"), SubResource("Round_3"), SubResource("Round_4"), SubResource("Round_5"), SubResource("Round_6"), SubResource("Round_7"), SubResource("Round_8"), SubResource("Round_9"), SubResource("Round_10"), SubResource("Round_11")])

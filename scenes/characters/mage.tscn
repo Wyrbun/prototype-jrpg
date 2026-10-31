@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/party_member.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.6, 0.3, 0.85, 1)
+
+[node name="Mage" instance=ExtResource("1_base")]
+display_name = "Mage"
+max_hp = 80
+speed = 8.0
+attack_power = 14
+attack_reach = 3.0
+combo_limit = 45.0
+move_speed = 4.5
+
+[node name="Body" parent="."]
+surface_material_override/0 = SubResource("Mat_body")

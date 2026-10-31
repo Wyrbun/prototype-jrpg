@@ -48,11 +48,16 @@ signal strike_finished
 ## How many timeline units fill the bar. A fighter acts on reaching it.
 const TIMELINE_LENGTH := 100.0
 ## Fighters can't walk further than this from the center of the arena.
-const ARENA_HALF_SIZE := 11.0
 
 enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 
 ## Multiplies everyone's speed. Raise it to make the whole battle faster.
+## The rounds to play (data/boss_rush.tres). Each round sets the arena,
+## the party lineup and the enemies.
+@export var boss_rush: BossRush
+## Which round to start on when you press F5 (1 = the first).
+@export var start_round: int = 1
+
 @export var time_scale: float = 3.0
 ## Overall battle pace between turns: slows the timeline, enemy and ally
 ## movement, and AP recharge together (1.0 = the original pace, 0.7 = 30%
@@ -147,6 +152,12 @@ class Strike:
 	var markers: Array[MeshInstance3D] = []
 
 
+## The round being played, kept across scene reloads (0-based; -1 = not
+## chosen yet, so start_round is used).
+static var _round_index := -1
+
+var arena: Arena = null
+var encounter: Encounter = null
 var party: Array[Combatant] = []
 var enemies: Array[Combatant] = []
 var combatants: Array[Combatant] = []
@@ -205,14 +216,7 @@ var _flash_time_left := 0.0
 
 
 func _ready() -> void:
-	# Children run _ready() before their parent, so every Combatant
-	# has already joined the "combatants" group by the time we get here.
-	for node in get_tree().get_nodes_in_group("combatants"):
-		var fighter := node as Combatant
-		if fighter.team == Combatant.Team.PARTY:
-			party.append(fighter)
-		else:
-			enemies.append(fighter)
+	_load_round()
 	combatants.append_array(party)
 	combatants.append_array(enemies)
 
@@ -234,8 +238,49 @@ func _ready() -> void:
 	# own view direction (+Z is "behind" a camera in Godot).
 	_camera_offset = camera.global_basis.z * camera_distance
 	camera.global_position = _camera_focus() + _camera_offset
-	print("Battle start! Party: %s  vs  Enemies: %s" % [_names(party), _names(enemies)])
+	print("%s! Party: %s  vs  Enemies: %s" % [encounter.title, _names(party), _names(enemies)])
+	_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
 
+
+## Builds the current round: its arena, then the party and the enemies
+## at their starting spots.
+func _load_round() -> void:
+	var count := boss_rush.rounds.size()
+	if _round_index < 0:
+		_round_index = clampi(start_round - 1, 0, count - 1)
+	_round_index = posmod(_round_index, count)
+	encounter = boss_rush.rounds[_round_index]
+	arena = encounter.arena.instantiate() as Arena
+	add_child(arena)
+	party = _spawn(encounter.party, $Party, false)
+	enemies = _spawn(encounter.enemies, $Enemies, true)
+
+
+func _spawn(scenes: Array[PackedScene], holder: Node3D, enemy_side: bool) -> Array[Combatant]:
+	var spots := arena.spawn_points(enemy_side, scenes.size())
+	var spawned: Array[Combatant] = []
+	var used_names := {}
+	for i in scenes.size():
+		var fighter := scenes[i].instantiate() as Combatant
+		# Two of the same enemy get a letter: Kobold Archer A, Kobold Archer B.
+		var copies := 0
+		for other in scenes:
+			if other == scenes[i]:
+				copies += 1
+		if copies > 1:
+			var n: int = used_names.get(fighter.display_name, 0)
+			used_names[fighter.display_name] = n + 1
+			fighter.display_name += " " + "ABCD"[n]
+		fighter.transform = spots[i]
+		holder.add_child(fighter)
+		spawned.append(fighter)
+	return spawned
+
+
+## N / P: jump to the next or previous round (restarts the scene).
+func _change_round(step: int) -> void:
+	_round_index += step
+	get_tree().reload_current_scene()
 
 func _process(delta: float) -> void:
 	_world_moved = false
@@ -259,6 +304,10 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("next_round") or event.is_action_pressed("previous_round"):
+		get_viewport().set_input_as_handled()
+		_change_round(1 if event.is_action_pressed("next_round") else -1)
+		return
 	if _game_over:
 		if event.is_action_pressed("restart"):
 			get_viewport().set_input_as_handled()
@@ -432,10 +481,13 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		# Preparing a skill or holding a stance: stand still, turn slowly.
 		enemy.face_toward(to_target, delta, enemy.cast_turn_speed_degrees)
 		return
-	enemy.face_toward(to_target, delta)
-	var stop_distance := enemy.body_radius + target.body_radius + 0.3
-	var facing_target := enemy.flat_forward().angle_to(to_target) < deg_to_rad(45.0)
-	if to_target.length() > stop_distance and facing_target:
+	var stop_distance := enemy.body_radius + target.body_radius + enemy.preferred_gap
+	var wants_closer := to_target.length() > stop_distance or not _can_see(enemy, target)
+	# Walk around rocks and pits on the way.
+	var heading := arena.steer(enemy.global_position, to_target, enemy.body_radius) if wants_closer else to_target
+	enemy.face_toward(heading, delta)
+	var facing_target := enemy.flat_forward().angle_to(heading) < deg_to_rad(45.0)
+	if wants_closer and facing_target:
 		enemy.global_position += enemy.flat_forward() * enemy.move_speed * delta
 		_keep_in_arena(enemy)
 
@@ -479,7 +531,7 @@ func _safe_step(fighter: Combatant, direction: Vector3, delta: float) -> bool:
 	direction.y = 0.0
 	if direction.length_squared() < 0.0001:
 		return false
-	direction = direction.normalized()
+	direction = arena.steer(fighter.global_position, direction.normalized(), fighter.body_radius)
 	var margin := fighter.body_radius + ally_danger_margin
 	for degrees in [0.0, 35.0, -35.0, 70.0, -70.0, 90.0, -90.0]:
 		var dir := direction.rotated(Vector3.UP, deg_to_rad(degrees))
@@ -532,10 +584,14 @@ func _resolve_overlaps() -> void:
 		_keep_in_arena(c)
 
 
+## Keeps a fighter inside the arena's edges and out of rocks and pits.
 func _keep_in_arena(fighter: Combatant) -> void:
-	var limit := ARENA_HALF_SIZE - fighter.body_radius
-	fighter.global_position.x = clampf(fighter.global_position.x, -limit, limit)
-	fighter.global_position.z = clampf(fighter.global_position.z, -limit, limit)
+	arena.keep_inside(fighter, fighter.body_radius)
+
+
+## True if nothing (a rock) stands between two fighters.
+func _can_see(a: Combatant, b: Combatant) -> bool:
+	return arena.has_line_of_sight(a.global_position, b.global_position)
 
 
 # --- Enemy skills ---------------------------------------------------------
@@ -579,7 +635,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.loaded_def.is_offensive():
 		var targets: Array[Combatant] = []
 		for member in _standing(party):
-			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
+			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius) \
+					and _can_see(enemy, member):
 				targets.append(member)
 		if targets.is_empty():
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
@@ -636,7 +693,7 @@ func _update_attack_ranges() -> void:
 		var targets: PackedStringArray = []
 		if _is_live_threat(enemy):
 			for member in _standing(party):
-				if enemy.attack_range.contains(member.global_position, member.body_radius):
+				if enemy.attack_range.contains(member.global_position, member.body_radius) and _can_see(enemy, member):
 					targets.append(member.display_name)
 		enemy.attack_range.set_alert(not targets.is_empty())
 		if targets.is_empty():
@@ -1125,7 +1182,7 @@ func _attack_target() -> Combatant:
 	var best_gap := INF
 	for enemy in _standing(enemies):
 		var gap := controlled.gap_to(enemy)
-		if gap <= controlled.attack_reach and gap < best_gap:
+		if gap <= controlled.attack_reach and gap < best_gap and _can_see(controlled, enemy):
 			best = enemy
 			best_gap = gap
 	return best
@@ -1201,7 +1258,7 @@ func _update_ui(delta: float) -> void:
 	for member in party:
 		var in_reach := false
 		for enemy in _standing(enemies):
-			if member.gap_to(enemy) <= member.attack_reach:
+			if member.gap_to(enemy) <= member.attack_reach and _can_see(member, enemy):
 				in_reach = true
 				break
 		member.update_reach_ring(member == controlled, in_reach)
@@ -1216,7 +1273,8 @@ func _update_ui(delta: float) -> void:
 		turn_label.text = _result_text
 		warning_label.text = _flash_message
 		controls_label.visible = true
-		controls_label.text = "R: restart the battle"
+		var won := _result_text == "Victory!"
+		controls_label.text = ("N: next round     R: play again" if won else "R: retry     N / P: next / previous round")
 		return
 	var party_turn := _party_turn()
 	controls_label.visible = (active == null or party_turn) and _strike == null and _menu_mode != BattleMenu.Mode.EXECUTING
@@ -1274,7 +1332,7 @@ func _controls_hint() -> String:
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
 	var tab_part := "     Tab: switch to %s" % next_name if next_name != "" else ""
-	return "WASD: move %s (free)%s" % [controlled.display_name if controlled else "", tab_part]
+	return "WASD: move %s (free)%s     N / P: change round" % [controlled.display_name if controlled else "", tab_part]
 
 
 ## Shows a short message under the turn label for a moment.

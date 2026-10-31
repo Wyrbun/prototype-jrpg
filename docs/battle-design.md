@@ -73,6 +73,24 @@ threat ranges, and chained attacks.
      (`ally_range_share`, 80% of reach): close in if too far, back off if much
      too close, detouring around danger.
 
+## Boss rush, arenas and sight (built)
+
+- `data/boss_rush.tres` lists the rounds. Each is an `Encounter`: title,
+  arena scene, party scenes (the first starts under control), enemy scenes.
+  Duplicates get letters (Kobold Archer A / B). `start_round` on BattleArena
+  picks where F5 starts; N / P change round at any time.
+- **Arenas** are scenes with an `Arena` root (rectangle or circle, size,
+  floor color), `PartySpawn` / `EnemySpawn` markers (fighters stand side by
+  side there, facing the other side), and `ArenaObstacle` children:
+  - **Rock**: blocks movement and **line of sight**. An enemy's area doesn't
+    hit anyone behind a rock from the enemy's point of view, and a party
+    member can't attack an enemy behind one (the reach ring stays dim).
+    Grazing the edge doesn't block (85% of the rock counts).
+  - **Pit**: blocks movement only.
+- Enemies and allies **steer around** obstacles; an enemy without a clear
+  view of its target keeps walking until it has one.
+- Rounds 6-9 use the Round 10 arena for now (no mockup yet).
+
 ## Enemy skills (built)
 
 Every enemy has a **Skills** list (Inspector, Combat group). Each entry is an
@@ -90,7 +108,7 @@ Every enemy has a **Skills** list (Inspector, Combat group). Each entry is an
 
 An enemy with an empty list uses the basic triangle set from `skills.gd`.
 
-**Stone Golem** (240 HP), following the roster:
+**Stone Golem** (320 HP), following the roster:
 
 | Skill | Kind | Area | Damage | Wind-up | Weight |
 |---|---|---|---|---|---|
@@ -181,7 +199,7 @@ down, which can:
 - **J opens the command menu** (fighter name, Attack / Abilities / Items,
   with Defend: Q / Parry: E as reminders). W/S choose, J select, K close.
   Abilities and Items are placeholders. Attack needs an enemy within the
-  fighter's `attack_reach` (Fighter 0.8 m, Mage 3 m, Archer 6 m; shown by
+  fighter's `attack_reach` (Knight 0.8 m, Mage 3 m, Archer 6 m; shown by
   the gold ring around each fighter).
 - **Attack opens the combo bar** (inspired by Legend of Legaia): a move list
   on top and a bar below. J adds the selected move, K removes the last one,
@@ -194,7 +212,7 @@ down, which can:
   | Double Slash   | 15 | 2 x 0.7     | two hits                       |
   | Overhead Smash | 30 | 1 x 2.2     | Smash-type, breaks Defense     |
 
-- **Bar length = the fighter's `combo_limit`** (Fighter 60, Archer 50,
+- **Bar length = the fighter's `combo_limit`** (Knight 60, Archer 50,
   Mage 45), so the bar grows for characters with longer combos. Moves are
   **paid from party AP**; the part of the bar you can't afford right now is
   shown locked (red hatching).

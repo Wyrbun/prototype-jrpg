@@ -1,0 +1,66 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/battle/enemy_skill.gd" id="2_skill"]
+
+[sub_resource type="Resource" id="Skill_1"]
+script = ExtResource("2_skill")
+skill_name = "Heavy Attack"
+kind = 1
+weight = 3
+shape = 0
+radius = 4.2
+angle = 70.0
+damage = 35
+windup = 1.4
+
+[sub_resource type="Resource" id="Skill_2"]
+script = ExtResource("2_skill")
+skill_name = "Crush"
+kind = 1
+weight = 2
+shape = 2
+radius = 8.0
+width = 1.4
+damage = 40
+windup = 1.6
+
+[sub_resource type="Resource" id="Skill_3"]
+script = ExtResource("2_skill")
+skill_name = "Rock Stomp"
+kind = 0
+weight = 3
+shape = 1
+radius = 2.6
+angle = 360.0
+damage = 20
+windup = 1.0
+
+[sub_resource type="BoxMesh" id="Mesh_body"]
+size = Vector3(1.6, 1.6, 1.6)
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.55, 0.5, 0.45, 1)
+
+[node name="StoneGolem" instance=ExtResource("1_base")]
+display_name = "Stone Golem"
+max_hp = 320
+speed = 9.0
+move_speed = 2.5
+turn_speed_degrees = 90.0
+body_radius = 0.95
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
+
+[node name="Body" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+mesh = SubResource("Mesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="Nose" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.04, -0.9)
+
+[node name="NameLabel" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+
+[node name="AttackRange" parent="."]
+radius = 3.7

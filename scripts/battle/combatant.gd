@@ -40,6 +40,9 @@ enum Team { PARTY, ENEMY }
 ## Enemies only: how fast it can turn while preparing a skill (it can't
 ## walk then). Slower means it's easier to slip around it.
 @export var cast_turn_speed_degrees: float = 40.0
+## Enemies only: how close it walks to its target, in meters between body
+## edges. Ranged enemies keep their distance with a bigger number.
+@export var preferred_gap: float = 0.3
 
 var hp: int
 ## HP lost while defending. It comes back at this fighter's next turn,

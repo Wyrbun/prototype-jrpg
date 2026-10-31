@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/party_member.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.3, 0.75, 0.4, 1)
+
+[node name="Archer" instance=ExtResource("1_base")]
+display_name = "Archer"
+max_hp = 90
+speed = 13.0
+attack_power = 11
+attack_reach = 6.0
+combo_limit = 50.0
+move_speed = 5.5
+
+[node name="Body" parent="."]
+surface_material_override/0 = SubResource("Mat_body")

@@ -1,0 +1,17 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/arena.gd" id="1_arena"]
+[ext_resource type="Script" path="res://scripts/battle/arena_obstacle.gd" id="2_obstacle"]
+
+[node name="ArenaGrand" type="Node3D"]
+script = ExtResource("1_arena")
+shape = 0
+size = Vector2(24, 24)
+floor_color = Color(0.28, 0.3, 0.36, 1)
+
+[node name="PartySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7.5)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -7.5)
+

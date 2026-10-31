@@ -12,8 +12,33 @@ classic battle systems into one hybrid:
 - **Legend of Legaia**: building combos in an AP bar and playing them with
   timed button presses.
 
-Everything is still placeholder art: capsules for the party, a cube for the
-enemy. The goal of this stage is a fun core loop, not visuals.
+Everything is still placeholder art: capsules for the party, boxes for the
+enemies. The goal of this stage is a fun core loop, not visuals.
+
+## Boss rush
+
+The game plays as an **11-fight boss rush** (`data/boss_rush.tres`), with a
+different party lineup and arena each round, to test how enemies and party
+members combine. **N / P** jump to the next or previous round at any time.
+
+| Round | Party | Enemies | Arena |
+|---|---|---|---|
+| 1 | Knight | Goblin Fighter | square |
+| 2 | Knight, Archer | 2 Kobold Archers | circle with 3 rocks |
+| 3 | Knight, Mage | Goblin Fighter, Bandit Arcanist | long rectangle |
+| 4 | Knight, Cleric | Kobold Archer, Orc Shaman | circle around a pit |
+| 5 | Knight, Archer, Mage | Ogre Warrior, Bandit Arcanist, Orc Shaman | rectangle with 4 rocks |
+| 6 | full party | Stone Golem | large arena |
+| 7 | full party | Living Armor | large arena |
+| 8 | full party | Stone Golem, Kobold Archer, Ogre Warrior | large arena |
+| 9 | full party | Living Armor, Orc Shaman, 2 Goblin Fighters | large arena |
+| 10 | full party | Dragon Hatchling | large arena |
+| Special | full party | Stone Golem, Living Armor, Dragon Hatchling | large arena |
+
+Rocks block movement and line of sight (no attacks through them, either
+way). The pit blocks movement only.
+
+![The arenas](docs/arenas.png)
 
 ## How a battle works
 
@@ -27,9 +52,8 @@ part of the challenge.
 member in real time and press **Tab** to switch between them. Enemies and the
 AI-controlled allies move too. Each enemy shows its threat area on the floor:
 faint while harmless, colored once its skill is revealed. Step into a live
-area and the enemy strikes immediately. The Stone Golem picks between Heavy
-Attack (a Smash cone), Crush (a long, thin line) and Rock Stomp (a circle
-around itself).
+area and the enemy strikes immediately. Each enemy has its own skills and
+area shapes: cones, circles, lines and donuts.
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu
 opens: **Attack** (needs an enemy within the gold reach ring around the
@@ -65,7 +89,8 @@ resets max AP to 100, so the better you play, the more you have to lose.
 | Combo playing | J | Timed hit: press inside the box for a Perfect |
 | Enemy strike | E | Parry (when the ring turns gold) |
 | Enemy strike | Q | Defend (costs AP) |
-| Battle over | R | Restart |
+| Any time | N / P | Next / previous round |
+| Battle over | R | Restart the round |
 
 Keys can be changed in **Project > Project Settings > Input Map**.
 
@@ -78,7 +103,13 @@ Keys can be changed in **Project > Project Settings > Input Map**.
 ## Project layout
 
 ```
-scenes/battle/battle_arena.tscn   the battle scene (main scene)
+scenes/battle/battle_arena.tscn   the battle scene (main scene); loads the current round
+scenes/arenas/                    one scene per arena: floor shape, rocks, pit, start spots
+scenes/characters/                one scene per party member and enemy (stats and skills)
+data/boss_rush.tres               the rounds: arena, party lineup, enemies
+scripts/battle/arena.gd           arena edges, obstacles, steering, line of sight
+scripts/battle/arena_obstacle.gd  a rock (blocks sight) or pit (doesn't)
+scripts/battle/encounter.gd       one round's data; boss_rush.gd holds the list
 scripts/battle/battle_arena.gd    the battle flow: timeline, turns, strikes, combos, AI
 scripts/battle/combatant.gd       shared by every fighter: stats, HP, timeline, enemy skill setup
 scripts/battle/skills.gd          the skill triangle: names, colors, default areas
@@ -94,10 +125,12 @@ backups/                          zipped snapshots from before version control
 ```
 
 Most tuning numbers are exposed in Godot's **Inspector**: select the
-BattleArena node for battle-wide settings (AP, timing windows, battle speed),
-or a fighter for its own stats (HP, speed, attack power, reach, combo limit).
+BattleArena node for battle-wide settings (AP, timing windows, battle speed,
+which round F5 starts on). Open a character scene in `scenes/characters/` to
+change its stats (HP, speed, attack power, reach, combo limit), or an arena
+scene in `scenes/arenas/` to move rocks and start spots.
 
-**Designing an enemy:** select it and open **Combat > Skills** in the
+**Designing an enemy:** open its scene and look at **Combat > Skills** in the
 Inspector. Each skill has a name, a triangle kind (Attack, Smash, Defense,
 Counter), a weight (how often it's picked), an area (cone, circle, line or
 donut, with its size), damage, wind-up, and the rules "cannot be parried" and
@@ -113,8 +146,9 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Max AP that grows with skill and resets on mistakes
 - [x] Positioning between turns, Wait command (current test setup)
 - [x] Enemy template: design enemy skills in the Inspector without code
-- [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, multi-enemy fights
-- [ ] 10-fight boss rush with different party lineups
+- [x] Boss rush: 11 rounds, arenas with rocks and a pit, multi-enemy fights
+- [ ] Class skills (Knight, Archer, Mage, Cleric)
+- [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass
 - [ ] Abilities and Items

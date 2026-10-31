@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/arena.gd" id="1_arena"]
+[ext_resource type="Script" path="res://scripts/battle/arena_obstacle.gd" id="2_obstacle"]
+
+[node name="ArenaRockCircle" type="Node3D"]
+script = ExtResource("1_arena")
+shape = 1
+size = Vector2(20, 20)
+floor_color = Color(0.36, 0.34, 0.28, 1)
+
+[node name="PartySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -7)
+
+[node name="Rock1" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, 0)
+script = ExtResource("2_obstacle")
+kind = 0
+radius = 1.4
+
+[node name="Rock2" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 0, -4.76)
+script = ExtResource("2_obstacle")
+kind = 0
+radius = 1.4
+
+[node name="Rock3" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 0, 4.76)
+script = ExtResource("2_obstacle")
+kind = 0
+radius = 1.4
+

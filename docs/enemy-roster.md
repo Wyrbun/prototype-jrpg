@@ -14,6 +14,22 @@ be built.
   test combinations of enemies and party members (mockup coming). Mixed enemy
   groups are expected, so multi-enemy fights are needed early.
 
+## What's in the game now
+
+Each enemy is a scene in `scenes/characters/` with the skills that existing
+building blocks allow. Numbers are first guesses.
+
+| Enemy | HP | In game now | Waiting on |
+|---|---|---|---|
+| Goblin Fighter | 90 | Attack (short line), Smash (wide cone, can't be blocked), Defend | 2-hit Attack; Defend as partial reduction |
+| Kobold Archer | 70 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
+| Bandit Arcanist | 75 | Ranged Attack (half-circle), Wind Slash (line) | Fireball; Wind Slash stopping at the first hit |
+| Ogre Warrior | 180 | Attack (short cone), Shield Bash (line, can't be parried), Sword Spin (donut, can't be parried) | 2-hit Attack; Shout; Shield Bash snapping/stopping; Spin following Shout |
+| Orc Shaman | 100 | Attack (long line) | Healing Ritual; Curse |
+| Stone Golem | 320 | Heavy Attack, Crush, Rock Stomp | Rock Spikes |
+| Living Armor | 300 | Combo (as one hit, cone) | 3 hits with launch; Dark Bolt; Shadowflare |
+| Dragon Hatchling | 360 | Breath (massive cone) | damage split by group; Fire Wave; Burning Spike |
+
 ## Normal enemies
 
 ### Goblin Fighter
@@ -95,6 +111,7 @@ be built.
 | **Combo skills** (one skill triggers another) | Ogre (Shout then Sword Spin) | new |
 | **Interruptible casts** (hit count or damage threshold) | Shaman, Living Armor | new; overlaps with the stagger milestone |
 | **Lingering hazards** that last several turns | Golem, Dragon | new |
-| **Terrain** that blocks attacks | Kobold | new: the arena has no obstacles yet |
+| **Terrain** that blocks attacks | Kobold | have (rocks block sight and attacks) |
 | **Damage scaling by group size** | Dragon | new |
-| **Healing enemies** + **multi-enemy fights** | Shaman | new: only single-enemy fights tested so far |
+| **Multi-enemy fights** | rounds 2-5, 8, 9, Special | have |
+| **Healing enemies** | Shaman | new |

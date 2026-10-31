@@ -3,6 +3,27 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Boss rush and arenas
+
+- The battle scene now loads a **round** from `data/boss_rush.tres`: arena,
+  party lineup and enemies. 11 rounds following Thiago's mockup; **N / P**
+  change round, and after a win N goes to the next one.
+- **Six arenas** (`scenes/arenas/`): square, circle with 3 rocks, long
+  rectangle, circle around a pit, rectangle with 4 rocks, and a large arena.
+  Rounds 6-9 use the large arena until they get their own.
+  Layouts were then tidied: rocks evenly spaced (Round 2's three rocks
+  120° apart; Round 5's an equal distance from both walls), start spots
+  centered, and Round 1 and the large arena made truly square.
+- **Rocks** block movement and line of sight: enemy areas don't hit through
+  them, and party members can't attack through them. The **pit** blocks
+  movement only. Enemies and allies steer around both.
+- Every fighter is its own scene (`scenes/characters/`). **Fighter is now the
+  Knight**, and the **Cleric** joins (placeholder stats, no healing yet).
+- All 8 roster enemies exist with the skills that current building blocks
+  allow; the rest are listed in `enemy-roster.md`. Ranged enemies keep their
+  distance (`preferred_gap`).
+- HP panels fit four rows and longer names.
+
 ## Enemy template and Stone Golem
 
 - **Enemy skills are now data:** each enemy has a Skills list in the
