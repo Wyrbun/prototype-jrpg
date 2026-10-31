@@ -24,6 +24,10 @@ enum Team { PARTY, ENEMY }
 ## Party only: how much AP of moves fits in this fighter's combo bar.
 ## A bigger limit means a longer bar and longer combos.
 @export var combo_limit: float = 50.0
+## Enemies only: the skills it can prepare. Add an element, choose
+## "New EnemySkill" and fill it in. Left empty, the enemy uses a basic
+## Attack / Smash / Defense / Counter set.
+@export var skills: Array[EnemySkill] = []
 
 @export_group("Movement")
 ## Walking speed in meters per second.
@@ -54,23 +58,9 @@ var color: Color = Color.GRAY
 ## The enemy's danger cone, if it has one (party members don't).
 var attack_range: AttackRange = null
 
-## Enemies only: how often each skill gets loaded. Bigger number = more often.
-var skill_weights := {
-	Skills.Kind.ATTACK: 4,
-	Skills.Kind.SMASH: 2,
-	Skills.Kind.DEFENSE: 2,
-	Skills.Kind.COUNTER: 1,
-}
-## Enemies only: the shapes its Attack cycles through, one per Attack, in
-## order. Each has a label (shown on reveal), a radius and a width.
-var attack_shapes: Array[Dictionary] = [
-	{"label": "", "radius": 3.7, "angle": 120.0},        # normal cone
-	{"label": "CIRCLE", "radius": 2.4, "angle": 360.0},  # short-range, all around
-	{"label": "LONG", "radius": 7.4, "angle": 30.0},     # narrow, double length
-]
-var _next_attack_shape := 0
-## The shape of the Attack being prepared (empty when not attacking).
-var loaded_shape: Dictionary = {}
+## Enemies only: the skill being prepared, with its shape, damage and
+## rules (null when not preparing or holding a stance).
+var loaded_def: EnemySkill = null
 ## Seconds a Defense/Counter stance stays up after the enemy's turn.
 var stance_time_left := 0.0
 
@@ -231,26 +221,34 @@ func play_lunge() -> void:
 	_lunge_tween.tween_property(body, "position", _body_rest_position, 0.15)
 
 
-## Enemies only: picks a skill at random, following skill_weights.
-func pick_skill() -> int:
+## Enemies only: picks one of its skills at random, by weight.
+func pick_skill() -> EnemySkill:
+	var pool := skills if not skills.is_empty() else _basic_skills()
 	var total := 0
-	for weight in skill_weights.values():
-		total += weight
+	for skill in pool:
+		total += skill.weight
+	if total <= 0:
+		return pool[0]
 	var roll := randi_range(1, total)
-	for kind in skill_weights:
-		roll -= skill_weights[kind]
+	for skill in pool:
+		roll -= skill.weight
 		if roll <= 0:
-			return kind
-	return Skills.Kind.ATTACK
+			return skill
+	return pool[0]
 
 
-## Enemies only: the next Attack shape in the cycle.
-func take_attack_shape() -> Dictionary:
-	if attack_shapes.is_empty():
-		return {}
-	var shape := attack_shapes[_next_attack_shape % attack_shapes.size()]
-	_next_attack_shape += 1
-	return shape
+static var _basic_cache: Array[EnemySkill] = []
+
+## The plain skill-triangle set, for enemies with no skills of their own.
+static func _basic_skills() -> Array[EnemySkill]:
+	if _basic_cache.is_empty():
+		var weights := {Skills.Kind.ATTACK: 4, Skills.Kind.SMASH: 2, Skills.Kind.DEFENSE: 2, Skills.Kind.COUNTER: 1}
+		for kind in weights:
+			var info := Skills.info(kind)
+			var shape := EnemySkill.Shape.CIRCLE if info["angle"] >= 360.0 else EnemySkill.Shape.CONE
+			_basic_cache.append(EnemySkill.make(info["name"], kind, shape, info["radius"], info["angle"],
+					info.get("damage", 0), info.get("windup", 1.0), weights[kind]))
+	return _basic_cache
 
 
 ## Enemies only: sets the floating skill text ("" hides it).

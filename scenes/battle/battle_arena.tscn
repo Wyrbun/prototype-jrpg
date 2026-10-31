@@ -6,6 +6,40 @@
 [ext_resource type="Script" path="res://scripts/battle/attack_range.gd" id="4_range"]
 [ext_resource type="Script" path="res://scripts/battle/party_status.gd" id="5_status"]
 [ext_resource type="Script" path="res://scripts/battle/battle_menu.gd" id="6_menu"]
+[ext_resource type="Script" path="res://scripts/battle/enemy_skill.gd" id="7_skill"]
+
+[sub_resource type="Resource" id="Skill_heavy"]
+script = ExtResource("7_skill")
+skill_name = "Heavy Attack"
+kind = 1
+weight = 3
+shape = 0
+radius = 4.2
+angle = 70.0
+damage = 35
+windup = 1.4
+
+[sub_resource type="Resource" id="Skill_crush"]
+script = ExtResource("7_skill")
+skill_name = "Crush"
+kind = 1
+weight = 2
+shape = 2
+radius = 8.0
+width = 1.4
+damage = 40
+windup = 1.6
+
+[sub_resource type="Resource" id="Skill_stomp"]
+script = ExtResource("7_skill")
+skill_name = "Rock Stomp"
+kind = 0
+weight = 3
+shape = 1
+radius = 2.6
+angle = 360.0
+damage = 20
+windup = 1.0
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -174,10 +208,11 @@ outline_size = 12
 [node name="Golem" type="Node3D" parent="Enemies"]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -2)
 script = ExtResource("2_combatant")
-display_name = "Golem"
+display_name = "Stone Golem"
 team = 1
 max_hp = 240
 speed = 9.0
+skills = Array[ExtResource("7_skill")]([SubResource("Skill_heavy"), SubResource("Skill_crush"), SubResource("Skill_stomp")])
 move_speed = 2.5
 turn_speed_degrees = 90.0
 body_radius = 0.95
@@ -195,7 +230,7 @@ surface_material_override/0 = SubResource("Mat_nose")
 [node name="NameLabel" type="Label3D" parent="Enemies/Golem"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
 billboard = 1
-text = "Golem"
+text = "Stone Golem"
 font_size = 64
 outline_size = 16
 

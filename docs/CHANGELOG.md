@@ -3,6 +3,19 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Enemy template and Stone Golem
+
+- **Enemy skills are now data:** each enemy has a Skills list in the
+  Inspector. A skill sets its name, triangle kind, weight, area, damage,
+  wind-up, and whether it can be parried or blocked.
+- **New area shapes:** **line** (a rectangle in front of the enemy) and
+  **donut** (safe close up and far away). Half-circles are 180° cones.
+- **Golem is now the Stone Golem:** Heavy Attack (Smash cone), Crush (Smash
+  line, 8 m) and Rock Stomp (Attack circle). Rock Spikes waits for hazards.
+  It dropped the old Attack shape cycle and the Defense/Counter stances.
+- The strike prompt says when a skill can't be parried or blocked.
+- HP panels make room for longer names.
+
 ## Positioning test and Golem update
 
 - **New turn flow (test):** positioning now happens *between* turns. While

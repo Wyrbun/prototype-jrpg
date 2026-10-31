@@ -29,11 +29,8 @@ threat ranges, and chained attacks.
     (from 75, even while hidden) and **linger for `stance_linger` (3 s)
     after the enemy's turn**, counted while the timeline runs. The enemy holds
     its ground (turning slowly) while a stance is up.
-  - **Golem Attack shapes:** each Attack the Golem prepares uses the next
-    shape in a cycle (`attack_shapes` on the enemy): normal cone (120°,
-    3.7 m), **short-range circle** (360°, 2.4 m), **long narrow cone** (30°,
-    7.4 m, double the normal reach). The shape shows only on reveal, as
-    "ATTACK (CIRCLE)" / "ATTACK (LONG)".
+  - **Which skill** is picked from the enemy's own skill list, by weight
+    (see "Enemy skills" below). Its name and area show only on reveal.
   - Attack/Smash fire at the end of the bar, or early if you touch the
     revealed area.
   - **Idea (later): per-character reveal.** Each character could see hidden
@@ -75,6 +72,35 @@ threat ranges, and chained attacks.
   2. **Stand near the edge of their attack range** from the nearest enemy
      (`ally_range_share`, 80% of reach): close in if too far, back off if much
      too close, detouring around danger.
+
+## Enemy skills (built)
+
+Every enemy has a **Skills** list (Inspector, Combat group). Each entry is an
+`EnemySkill` (`scripts/battle/enemy_skill.gd`):
+
+| Field | Meaning |
+|---|---|
+| skill_name | shown on reveal, above the enemy and on the timeline |
+| kind | Attack / Smash / Defense / Counter: its place in the skill triangle |
+| weight | how often it's picked compared to the others |
+| shape | **Cone** (angle; 180 = half-circle), **Circle** around itself, **Line** (length = radius, plus width), **Donut** (radius plus a safe inner_radius) |
+| damage, windup | hit damage, and seconds until it lands |
+| cannot_be_parried | E does nothing ("can't be parried") |
+| cannot_be_blocked | Q does nothing ("can't be blocked") |
+
+An enemy with an empty list uses the basic triangle set from `skills.gd`.
+
+**Stone Golem** (240 HP), following the roster:
+
+| Skill | Kind | Area | Damage | Wind-up | Weight |
+|---|---|---|---|---|---|
+| Heavy Attack | Smash | cone 70°, 4.2 m | 35 | 1.4 s | 3 |
+| Crush | Smash | line 8 m x 1.4 m | 40 | 1.6 s | 2 |
+| Rock Stomp | Attack | circle 2.6 m | 20 | 1.0 s | 3 |
+| Rock Spikes | Special | targeted hazard | | | later |
+
+The Golem no longer uses Defense/Counter stances (not in its roster entry).
+Stances still work for any enemy that lists them.
 
 ## Strikes and reactions (milestone 5, built)
 
@@ -128,7 +154,7 @@ Each skill has its own area shape so it can be read from the floor:
 
 | Skill   | Area                    | Beats                            | Loses to                     |
 |---------|-------------------------|----------------------------------|------------------------------|
-| Attack  | wide cone (120°, 3.7 m); Golem cycles cone / circle / long cone | Smash (interrupts its wind-up) | Defense, Counter       |
+| Attack  | wide cone (120°, 3.7 m) by default; each enemy sets its own | Smash (interrupts its wind-up) | Defense, Counter       |
 | Smash   | narrow cone, long (50°, 4.4 m) | Defense (breaks guard), knocks down | Attack, Counter    |
 | Defense | small circle (stance)   | Attack (blocked)                 | Smash                        |
 | Counter | circle (stance)         | Attack and Smash, if timed       | waiting it out, (later) ranged/magic |

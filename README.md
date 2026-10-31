@@ -27,8 +27,9 @@ part of the challenge.
 member in real time and press **Tab** to switch between them. Enemies and the
 AI-controlled allies move too. Each enemy shows its threat area on the floor:
 faint while harmless, colored once its skill is revealed. Step into a live
-area and the enemy strikes immediately. The Golem cycles its Attack between a
-wide cone, a circle around itself, and a long narrow cone.
+area and the enemy strikes immediately. The Stone Golem picks between Heavy
+Attack (a Smash cone), Crush (a long, thin line) and Rock Stomp (a circle
+around itself).
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu
 opens: **Attack** (needs an enemy within the gold reach ring around the
@@ -80,7 +81,8 @@ Keys can be changed in **Project > Project Settings > Input Map**.
 scenes/battle/battle_arena.tscn   the battle scene (main scene)
 scripts/battle/battle_arena.gd    the battle flow: timeline, turns, strikes, combos, AI
 scripts/battle/combatant.gd       shared by every fighter: stats, HP, timeline, enemy skill setup
-scripts/battle/skills.gd          the skill triangle: names, colors, areas, damage, wind-up
+scripts/battle/skills.gd          the skill triangle: names, colors, default areas
+scripts/battle/enemy_skill.gd     one enemy skill: shape, damage, wind-up, rules (edited in the Inspector)
 scripts/battle/moves.gd           the party's combo moves: AP cost, hits, timing, effects
 scripts/battle/attack_range.gd    an enemy's threat area drawn on the floor
 scripts/battle/timeline_bar.gd    the turn-order bar
@@ -95,6 +97,12 @@ Most tuning numbers are exposed in Godot's **Inspector**: select the
 BattleArena node for battle-wide settings (AP, timing windows, battle speed),
 or a fighter for its own stats (HP, speed, attack power, reach, combo limit).
 
+**Designing an enemy:** select it and open **Combat > Skills** in the
+Inspector. Each skill has a name, a triangle kind (Attack, Smash, Defense,
+Counter), a weight (how often it's picked), an area (cone, circle, line or
+donut, with its size), damage, wind-up, and the rules "cannot be parried" and
+"cannot be blocked".
+
 ## Roadmap
 
 - [x] Arena, timeline and turn order
@@ -104,7 +112,9 @@ or a fighter for its own stats (HP, speed, attack power, reach, combo limit).
 - [x] Command menu and Legaia-style combo bar with timed hits
 - [x] Max AP that grows with skill and resets on mistakes
 - [x] Positioning between turns, Wait command (current test setup)
-- [ ] Enemy template: design new enemies in the Inspector without code
+- [x] Enemy template: design enemy skills in the Inspector without code
+- [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, multi-enemy fights
+- [ ] 10-fight boss rush with different party lineups
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass
 - [ ] Abilities and Items

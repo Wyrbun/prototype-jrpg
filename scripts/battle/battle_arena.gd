@@ -135,6 +135,7 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 class Strike:
 	var enemy: Combatant
 	var skill: int
+	var def: EnemySkill
 	var targets: Array[Combatant] = []
 	var windup: float = 1.0
 	var time_left: float = 1.0
@@ -543,34 +544,27 @@ func _keep_in_arena(fighter: Combatant) -> void:
 ## you only see that it's preparing something, not what.
 ## Defense and Counter take effect right away (still hidden).
 func _begin_cast(enemy: Combatant) -> void:
-	enemy.loaded_skill = enemy.pick_skill()
+	enemy.loaded_def = enemy.pick_skill()
+	enemy.loaded_skill = enemy.loaded_def.kind
 	enemy.skill_revealed = false
 	enemy.stance_time_left = 0.0
-	enemy.loaded_shape = enemy.take_attack_shape() if enemy.loaded_skill == Skills.Kind.ATTACK else {}
 	enemy.stance = Skills.NONE if Skills.is_offensive(enemy.loaded_skill) else enemy.loaded_skill
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
-	print("%s is preparing %s (hidden)" % [enemy.display_name, Skills.info(enemy.loaded_skill)["name"]])
+	print("%s is preparing %s (hidden)" % [enemy.display_name, enemy.loaded_def.skill_name])
 
 
 ## Late in the casting zone the prepared skill becomes visible: on the
 ## bar, above the enemy, and as a live area on the floor.
 func _reveal_skill(enemy: Combatant) -> void:
 	enemy.skill_revealed = true
-	var skill := Skills.info(enemy.loaded_skill)
-	var radius: float = skill["radius"]
-	var angle: float = skill["angle"]
-	var text := String(skill["name"]).to_upper()
-	if not enemy.loaded_shape.is_empty():
-		radius = enemy.loaded_shape["radius"]
-		angle = enemy.loaded_shape["angle"]
-		if enemy.loaded_shape["label"] != "":
-			text += " (%s)" % enemy.loaded_shape["label"]
+	var def := enemy.loaded_def
+	var text := def.skill_name.to_upper()
 	if enemy.attack_range:
-		enemy.attack_range.show_skill(radius, angle, skill["color"])
-	if not skill["offensive"]:
+		enemy.attack_range.show_skill(def)
+	if not def.is_offensive():
 		text += " STANCE"
-	enemy.show_skill_text(text, skill["color"])
-	print("%s reveals %s" % [enemy.display_name, skill["name"]])
+	enemy.show_skill_text(text, def.color())
+	print("%s reveals %s" % [enemy.display_name, def.skill_name])
 
 
 ## The enemy reached the end of the bar (or was triggered). Attack and
@@ -581,9 +575,8 @@ func _reveal_skill(enemy: Combatant) -> void:
 func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
-	var skill := Skills.info(enemy.loaded_skill)
-	var skill_name: String = skill["name"]
-	if skill["offensive"]:
+	var skill_name := enemy.loaded_def.skill_name
+	if enemy.loaded_def.is_offensive():
 		var targets: Array[Combatant] = []
 		for member in _standing(party):
 			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
@@ -613,7 +606,7 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.skill_revealed = false
 	enemy.stance = Skills.NONE
 	enemy.stance_time_left = 0.0
-	enemy.loaded_shape = {}
+	enemy.loaded_def = null
 	if reset_timeline:
 		_send_to_start(enemy)
 
@@ -624,7 +617,7 @@ func _tick_stances(delta: float) -> void:
 		if enemy.stance == Skills.NONE or enemy.loaded_skill != Skills.NONE or enemy.stance_time_left <= 0.0:
 			continue
 		enemy.stance_time_left -= delta
-		var skill_name: String = Skills.info(enemy.stance)["name"]
+		var skill_name: String = enemy.loaded_def.skill_name if enemy.loaded_def else Skills.info(enemy.stance)["name"]
 		if enemy.stance_time_left <= 0.0:
 			_flash("%s's %s stance ends" % [enemy.display_name, skill_name])
 			_finish_enemy_skill(enemy, false)
@@ -651,7 +644,7 @@ func _update_attack_ranges() -> void:
 		if _world_moved and active == null and _strike == null:
 			_enemy_unleash(enemy, true)  # someone touched it: it strikes now
 		else:
-			var skill_name: String = Skills.info(enemy.loaded_skill)["name"]
+			var skill_name := enemy.loaded_def.skill_name
 			warnings.append("%s's %s will hit: %s" % [enemy.display_name, skill_name, ", ".join(targets)])
 	warning_label.text = "\n".join(warnings)
 
@@ -675,8 +668,9 @@ func _begin_strike(enemy: Combatant, targets: Array[Combatant], reset_timeline: 
 	var s := Strike.new()
 	s.enemy = enemy
 	s.skill = enemy.loaded_skill
+	s.def = enemy.loaded_def
 	s.targets = targets
-	s.windup = Skills.info(s.skill)["windup"]
+	s.windup = s.def.windup
 	s.time_left = s.windup
 	s.reset_timeline = reset_timeline
 	for target in targets:
@@ -690,7 +684,7 @@ func _begin_strike(enemy: Combatant, targets: Array[Combatant], reset_timeline: 
 		s.markers.append(marker)
 		s.rings.append(ring)
 	_strike = s
-	print("%s's %s strikes at %s" % [enemy.display_name, Skills.info(s.skill)["name"], _names(targets)])
+	print("%s's %s strikes at %s" % [enemy.display_name, s.def.skill_name, _names(targets)])
 
 
 func _update_strike(delta: float) -> void:
@@ -719,6 +713,9 @@ func _update_strike(delta: float) -> void:
 func _try_parry() -> void:
 	if _strike.reaction != Reaction.NONE:
 		return
+	if _strike.def.cannot_be_parried:
+		_flash("%s can't be parried!" % _strike.def.skill_name)
+		return
 	if _strike.time_left <= parry_window:
 		_strike.reaction = Reaction.PARRY
 	else:
@@ -728,6 +725,9 @@ func _try_parry() -> void:
 ## Q: Defend. Costs AP, can't be combined with a parry attempt.
 func _try_defend() -> void:
 	if _strike.reaction != Reaction.NONE:
+		return
+	if _strike.def.cannot_be_blocked:
+		_flash("%s can't be blocked!" % _strike.def.skill_name)
 		return
 	if ap < defend_cost:
 		_flash("Not enough AP to defend (%d needed)" % defend_cost)
@@ -742,9 +742,8 @@ func _resolve_strike() -> void:
 	for node in s.rings + s.markers:
 		node.queue_free()
 
-	var skill := Skills.info(s.skill)
-	var skill_name: String = skill["name"]
-	var damage: int = skill["damage"]
+	var skill_name := s.def.skill_name
+	var damage := s.def.damage
 	var who := _names(s.targets)
 	var lines: PackedStringArray = []
 
@@ -1224,7 +1223,7 @@ func _update_ui(delta: float) -> void:
 	controls_label.text = _controls_hint()
 
 	if _strike != null:
-		var skill_name: String = Skills.info(_strike.skill)["name"]
+		var skill_name := _strike.def.skill_name
 		turn_label.text = "%s: %s!" % [_strike.enemy.display_name, skill_name.to_upper()]
 		warning_label.text = _strike_prompt()
 	elif active == null:
@@ -1256,7 +1255,9 @@ func _strike_prompt() -> String:
 			return "Too early!"
 		Reaction.DEFEND:
 			return "Defending..."
-	var prompt := "E: Parry when the ring turns gold     Q: Defend (%d AP)" % defend_cost
+	var parry_hint := "E: can't Parry this" if _strike.def.cannot_be_parried else "E: Parry when the ring turns gold"
+	var defend_hint := "Q: can't Defend this" if _strike.def.cannot_be_blocked else "Q: Defend (%d AP)" % defend_cost
+	var prompt := parry_hint + "     " + defend_hint
 	if _flash_time_left > 0.0:
 		prompt = _flash_message + "\n" + prompt
 	return prompt

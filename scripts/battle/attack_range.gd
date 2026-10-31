@@ -20,6 +20,11 @@ extends MeshInstance3D
 const SEGMENTS := 40
 
 var live := false
+## The current shape (an EnemySkill.Shape). Dormant is always a cone.
+var shape: int = EnemySkill.Shape.CONE
+## Line width and donut hole size, used by those shapes.
+var width: float = 1.2
+var inner_radius: float = 0.0
 var _live_color := Color.RED
 var _alert := false
 var _base_radius: float
@@ -36,27 +41,31 @@ func _ready() -> void:
 	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material_override = _material
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh = _build_cone_mesh()
+	mesh = _build_mesh()
 	_refresh_color()
 
 
 ## Reshapes the area for a loaded skill and makes it live.
-func show_skill(new_radius: float, new_angle: float, color: Color) -> void:
-	radius = new_radius
-	angle_degrees = new_angle
-	_live_color = color
+func show_skill(skill: EnemySkill) -> void:
+	shape = skill.shape
+	radius = skill.radius
+	angle_degrees = 360.0 if skill.shape == EnemySkill.Shape.CIRCLE else skill.angle
+	width = skill.width
+	inner_radius = skill.inner_radius
+	_live_color = skill.color()
 	live = true
-	mesh = _build_cone_mesh()
+	mesh = _build_mesh()
 	_refresh_color()
 
 
 ## Back to the faint, harmless default shape.
 func go_dormant() -> void:
+	shape = EnemySkill.Shape.CONE
 	radius = _base_radius
 	angle_degrees = _base_angle
 	live = false
 	_alert = false
-	mesh = _build_cone_mesh()
+	mesh = _build_mesh()
 	_refresh_color()
 
 
@@ -64,13 +73,24 @@ func go_dormant() -> void:
 func contains(point: Vector3, extra_radius: float = 0.0) -> bool:
 	var to_point := point - global_position
 	to_point.y = 0.0
+	var forward := -global_basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
 	var distance := to_point.length()
+	match shape:
+		EnemySkill.Shape.LINE:
+			# A rectangle starting at the enemy and running forward.
+			var along := to_point.dot(forward)
+			var side := absf(to_point.dot(forward.cross(Vector3.UP)))
+			return along >= -extra_radius and along <= radius + extra_radius \
+					and side <= width / 2.0 + extra_radius
+		EnemySkill.Shape.DONUT:
+			# Safe close up and far away.
+			return distance <= radius + extra_radius and distance >= inner_radius - extra_radius
 	if distance > radius + extra_radius:
 		return false
 	if distance < 0.001 or angle_degrees >= 360.0:
 		return true
-	var forward := -global_basis.z
-	forward.y = 0.0
 	return rad_to_deg(forward.angle_to(to_point)) <= angle_degrees / 2.0
 
 
@@ -90,20 +110,34 @@ func _refresh_color() -> void:
 	_material.albedo_color = c
 
 
-## Builds a flat fan of triangles pointing forward (-Z), lying on the floor.
-func _build_cone_mesh() -> ArrayMesh:
-	var half := deg_to_rad(angle_degrees) / 2.0
+func _build_mesh() -> ArrayMesh:
 	var vertices := PackedVector3Array()
-	for i in SEGMENTS:
-		var a0 := -half + 2.0 * half * i / SEGMENTS
-		var a1 := -half + 2.0 * half * (i + 1) / SEGMENTS
-		vertices.append(Vector3.ZERO)
-		vertices.append(Vector3(sin(a0), 0.0, -cos(a0)) * radius)
-		vertices.append(Vector3(sin(a1), 0.0, -cos(a1)) * radius)
+	match shape:
+		EnemySkill.Shape.LINE:
+			var h := width / 2.0
+			var corners := [Vector3(-h, 0, 0), Vector3(h, 0, 0), Vector3(h, 0, -radius), Vector3(-h, 0, -radius)]
+			vertices.append_array([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]])
+		EnemySkill.Shape.DONUT:
+			var inner := clampf(inner_radius, 0.0, radius)
+			for i in SEGMENTS:
+				var a0 := TAU * i / SEGMENTS
+				var a1 := TAU * (i + 1) / SEGMENTS
+				var d0 := Vector3(sin(a0), 0.0, -cos(a0))
+				var d1 := Vector3(sin(a1), 0.0, -cos(a1))
+				vertices.append_array([d0 * inner, d0 * radius, d1 * radius, d0 * inner, d1 * radius, d1 * inner])
+		_:
+			# A flat fan of triangles pointing forward (-Z).
+			var half := deg_to_rad(angle_degrees) / 2.0
+			for i in SEGMENTS:
+				var a0 := -half + 2.0 * half * i / SEGMENTS
+				var a1 := -half + 2.0 * half * (i + 1) / SEGMENTS
+				vertices.append(Vector3.ZERO)
+				vertices.append(Vector3(sin(a0), 0.0, -cos(a0)) * radius)
+				vertices.append(Vector3(sin(a1), 0.0, -cos(a1)) * radius)
 
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var cone := ArrayMesh.new()
-	cone.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return cone
+	var area := ArrayMesh.new()
+	area.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return area

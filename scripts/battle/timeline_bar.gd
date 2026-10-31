@@ -45,12 +45,10 @@ func _draw() -> void:
 		draw_line(Vector2(x, mid_y), icon, Color(0.9, 0.9, 0.95), 2.0)
 		if c.loaded_skill != Skills.NONE:
 			# Preparing: grey "???" until the skill is revealed.
-			var skill := Skills.info(c.loaded_skill)
-			var skill_color: Color = skill["color"] if c.skill_revealed else Color(0.6, 0.6, 0.65)
+			var def := c.loaded_def
+			var skill_color: Color = def.color() if c.skill_revealed and def else Color(0.6, 0.6, 0.65)
 			draw_circle(icon, radius + 7.0, skill_color)
-			var skill_name := String(skill["name"]).to_upper() if c.skill_revealed else "???"
-			if c.skill_revealed and not c.loaded_shape.is_empty() and c.loaded_shape["label"] != "":
-				skill_name += " (%s)" % c.loaded_shape["label"]
+			var skill_name := def.skill_name.to_upper() if c.skill_revealed and def else "???"
 			var name_size := font.get_string_size(skill_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
 			var name_pos := icon + Vector2(-name_size.x / 2.0, direction * (radius + 22.0) + 5.0)
 			draw_string_outline(font, name_pos, skill_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color.BLACK)

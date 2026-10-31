@@ -7,6 +7,7 @@ extends Control
 ## turn if they don't get hit again first.
 
 const ROW_HEIGHT := 30.0
+## Where bars start at the least; pushed right for long names.
 const BAR_X := 84.0
 const BAR_WIDTH := 170.0
 const BAR_HEIGHT := 14.0
@@ -21,13 +22,17 @@ func _process(_delta: float) -> void:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
+	# Bars start after the longest name, so names like "Stone Golem" fit.
+	var bar_x := BAR_X
+	for c in party:
+		bar_x = maxf(bar_x, font.get_string_size(c.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 12.0)
 	for i in party.size():
 		var c := party[i]
 		var y := i * ROW_HEIGHT
 		var name_color := Color(0.5, 0.5, 0.5) if c.is_down else (Color(1.0, 0.82, 0.2) if c == controlled else Color.WHITE)
 		_text(font, Vector2(0, y + 17), c.display_name, 17, name_color)
 
-		var bar := Rect2(BAR_X, y + 5, BAR_WIDTH, BAR_HEIGHT)
+		var bar := Rect2(bar_x, y + 5, BAR_WIDTH, BAR_HEIGHT)
 		draw_rect(bar, Color(0.08, 0.09, 0.13, 0.85))
 		var hp_width := BAR_WIDTH * float(c.hp) / c.max_hp
 		var recoverable_width := BAR_WIDTH * float(c.recoverable) / c.max_hp
