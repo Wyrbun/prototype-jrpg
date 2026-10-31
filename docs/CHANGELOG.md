@@ -3,6 +3,13 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Fix: title screen error
+
+- Choosing an option on the title screen raised a script error right after
+  switching scenes (the menu marked the key press as handled after it had
+  already left the scene). In the editor this paused the game, which looked
+  like a crash. Fixed for Tutorial, Boss Rush and Round Select.
+
 ## Enemy balance pass
 
 - Every roster enemy has **2.5x HP** and deals **1.3x damage** (rounded),

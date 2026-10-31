@@ -79,7 +79,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif down and count > 0:
 		index = (index + 1) % count
 	elif select:
+		# Marked as handled first: _select may switch scenes, after which this
+		# menu is no longer in the tree and has no viewport.
+		get_viewport().set_input_as_handled()
 		_select()
+		return
 	elif back and page != Page.MAIN:
 		index = 1 + page  # back onto the item that opened this page
 		page = Page.MAIN
