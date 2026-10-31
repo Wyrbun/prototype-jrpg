@@ -63,8 +63,8 @@ to slip out.
 **Positioning (between turns).** While the timeline runs, you steer one party
 member in real time and press **Tab** to switch between them. Enemies and the
 AI-controlled allies move too. Each enemy shows its threat area on the floor:
-faint while harmless, colored once its skill is revealed. Step into a live
-area and the enemy strikes immediately. Each enemy has its own skills and
+faint while harmless, colored once its skill is revealed. When the enemy's
+icon reaches the end of the bar, anyone inside its area is hit. Each enemy has its own skills and
 area shapes: cones, circles, lines and donuts.
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu

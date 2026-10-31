@@ -212,7 +212,7 @@ func _build_steps() -> void:
 
 	# 4. Reading the enemy
 	_note(4, "Reading the enemy",
-		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. If you're inside a revealed Attack or Smash area, it strikes at once.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area.",
+		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. It strikes when its icon reaches the end of the bar, hitting anyone still inside the area.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area.",
 		func():
 			knight.hold = true
 			_golem_repeat("Attack"))
@@ -304,7 +304,7 @@ func _build_steps() -> void:
 		"Rocks block movement and attacks, in both directions: an enemy's area doesn't reach anyone hidden behind a rock, and you can't attack through one either. Pits, in later arenas, only block movement.",
 		func(): _golem_rest())
 	_goal(9, "Rocks",
-		"The Golem has revealed Long Strike, a long, straight line, and is waiting for you. Steer the Knight behind the rock: it strikes as soon as you're hidden.",
+		"The Golem has revealed Long Strike, a long, straight line, and is waiting for you. Steer the Knight behind the rock: once you're hidden, it finishes its cast and strikes.",
 		"Let the rock block a Long Strike",
 		func(): return _stat("rock_saves") >= 1,
 		func():

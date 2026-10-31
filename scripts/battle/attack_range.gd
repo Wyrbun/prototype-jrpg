@@ -8,8 +8,8 @@ extends MeshInstance3D
 ## It has two looks:
 ## - Dormant: a faint outline showing the enemy's reach and facing. Harmless.
 ## - Live: while the enemy is casting, the area takes the shape and color
-##   of the loaded skill. Touching a live offensive area makes the enemy
-##   use its skill on you.
+##   of the loaded skill. Anyone inside a live offensive area when the
+##   enemy's turn comes is hit.
 
 ## Dormant reach, in meters.
 @export var radius: float = 3.0

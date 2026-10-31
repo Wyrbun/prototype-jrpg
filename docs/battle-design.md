@@ -17,28 +17,28 @@ threat ranges, and chained attacks.
 - Every fighter slides along one bar at their own `speed`.
 - Reaching the end of the bar starts that fighter's turn and freezes the timeline.
 - After acting, the fighter goes back to the start of the bar.
-- The last stretch of the bar (from 55) is the **casting zone**. An enemy
+- The last stretch of the bar (from 73) is the **casting zone**. An enemy
   entering it **prepares a skill**. This is the Mabinogi "visible skill
   loading", told the Grandia way.
   - **Where, then what:** as soon as the enemy enters the zone its area
     appears on the floor **in grey** ("..." above it, "???" on the bar): you
     see where it will land, not what it is. The skill is **revealed** at
-    `reveal_at` (80): its name, and the area in color (now live: touching
-    it triggers the strike).
+    `reveal_at` (88): its name, and the area in color (live: it glows and
+    warns whoever is inside).
   - While preparing, the enemy **stands still** and **tracks the party
     member it locked onto** when the cast began (or whoever taunted it) at
     its full turning speed. In the last `cast_slow_seconds` (1 s) it slows
     to `cast_turn_speed_degrees` (40°/s): that's the window to slip out.
   - The **timeline speed** (`time_scale` 1.8, 40% slower than before) makes
-    a cast last about 3–4.5 s depending on the enemy's speed.
+    a cast last about 1.8–2.7 s depending on the enemy's speed.
   - **Defense/Counter** stances are active for the **whole casting zone**
-    (from 55, even while hidden) and **linger for `stance_linger` (3 s)
+    (from 73, even while hidden) and **linger for `stance_linger` (3 s)
     after the enemy's turn**, counted while the timeline runs. The enemy holds
     its ground (turning slowly) while a stance is up.
   - **Which skill** is picked from the enemy's own skill list, by weight
     (see "Enemy skills" below). Its name and area show only on reveal.
-  - Attack/Smash fire at the end of the bar, or early if you touch the
-    revealed area.
+  - Attack/Smash fire when the icon reaches the end of the bar, never
+    earlier, hitting everyone inside the area at that moment.
   - **Idea (later): per-character reveal.** Each character could see hidden
     skills earlier depending on type: some read **defensive** skills
     (Defense/Counter) early, others read **offensive** ones (Attack/Smash)
@@ -79,9 +79,9 @@ threat ranges, and chained attacks.
   strike rings and combo timing aren't slowed.
 - Every enemy shows its area on the floor: **dormant** (faint, harmless)
   most of the time, including while the skill is hidden, and **live** once
-  revealed. A party member touching a live Attack/Smash area (by walking in,
-  or the enemy turning onto them) makes it strike right away, which also
-  spends the enemy's turn.
+  revealed. The strike lands when the enemy's turn comes, on whoever is
+  inside the area then (an earlier "touch it and it strikes at once" rule
+  was removed: with tracking enemies it made them act ahead of the bar).
 - **Ally AI** (party members you aren't steering), in priority order:
   1. **Stay out of danger:** leave any enemy area that could hit, never step
      into one. Danger = a revealed Attack/Smash, or anything still being

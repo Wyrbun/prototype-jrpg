@@ -3,6 +3,15 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Strikes follow the timeline, shorter casting zone
+
+- Enemies no longer strike early when someone stands in their revealed
+  area: every strike lands exactly when the enemy's icon reaches the end of
+  the bar. (With tracking, the old "touch it and it strikes" rule made
+  enemies act ahead of the timeline.)
+- The orange casting zone is 40% shorter: it starts at 73 (was 55), and
+  skills are revealed at 88 (was 80). Casts last about 1.8–2.7 s.
+
 ## Combo target selection
 
 - When more than one enemy is in reach, **Attack asks which one to hit**:

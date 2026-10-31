@@ -69,10 +69,10 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## How long an enemy turn stays on screen after it acts, in seconds.
 @export var enemy_turn_seconds: float = 0.8
 ## Where the casting zone starts on the timeline (the bar is 100 long).
-@export_range(0.0, 100.0) var cast_zone_start: float = 55.0
+@export_range(0.0, 100.0) var cast_zone_start: float = 73.0
 ## Where an enemy's prepared skill is revealed. Closer to 100 means less
 ## time to see it coming.
-@export_range(0.0, 100.0) var reveal_at: float = 80.0
+@export_range(0.0, 100.0) var reveal_at: float = 88.0
 
 @export_group("AP")
 ## The most AP the party can hold at the start of the fight. Parries and
@@ -898,11 +898,10 @@ func _update_attack_ranges() -> void:
 		enemy.attack_range.set_alert(not targets.is_empty())
 		if targets.is_empty():
 			continue
-		if _world_moved and active == null and _strike == null and not enemy.hold:
-			_enemy_unleash(enemy, true)  # someone touched it: it strikes now
-		else:
-			var skill_name := enemy.loaded_def.skill_name
-			warnings.append("%s's %s will hit: %s" % [enemy.display_name, skill_name, ", ".join(targets)])
+		# Strikes always land when the enemy's icon reaches the end of the bar;
+		# until then the area just glows and warns who's standing in it.
+		var skill_name := enemy.loaded_def.skill_name
+		warnings.append("%s's %s will hit: %s" % [enemy.display_name, skill_name, ", ".join(targets)])
 	warning_label.text = "\n".join(warnings)
 
 
