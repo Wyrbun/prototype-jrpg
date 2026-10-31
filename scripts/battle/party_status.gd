@@ -14,6 +14,9 @@ const BAR_HEIGHT := 14.0
 
 var party: Array[Combatant] = []
 var controlled: Combatant = null
+## Effect tags (BRACE 2, SHIELD 26...) go after the HP numbers, or to the
+## left of the name for the enemy panel on the right edge.
+var tags_on_left := false
 
 
 func _process(_delta: float) -> void:
@@ -41,8 +44,19 @@ func _draw() -> void:
 		draw_rect(Rect2(bar.position + Vector2(hp_width, 0), Vector2(recoverable_width, BAR_HEIGHT)), Color(1, 1, 1, 0.45))
 		draw_rect(bar, Color(0.8, 0.8, 0.9), false, 1.5)
 
+		if c.shield > 0 and not c.is_down:
+			# Barrier/shield: a light-blue strip along the top of the bar.
+			var shield_width := minf(BAR_WIDTH * float(c.shield) / c.max_hp, BAR_WIDTH)
+			draw_rect(Rect2(bar.position, Vector2(shield_width, 4)), Color(0.55, 0.8, 1.0))
+
 		var hp_text := "DOWN" if c.is_down else "%d / %d" % [c.hp, c.max_hp]
 		_text(font, Vector2(bar.end.x + 10, y + 17), hp_text, 15, name_color)
+		var tags := "" if c.is_down else c.status_text()
+		if tags != "" and tags_on_left:
+			var width := font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+			_text(font, Vector2(-width - 10, y + 17), tags, 13, Color(1.0, 0.6, 0.45))
+		elif tags != "":
+			_text(font, Vector2(bar.end.x + 92, y + 17), tags, 13, Color(0.6, 0.85, 1.0))
 
 
 func _text(font: Font, pos: Vector2, text: String, size: int, color: Color) -> void:

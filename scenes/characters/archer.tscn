@@ -7,11 +7,14 @@ albedo_color = Color(0.3, 0.75, 0.4, 1)
 
 [node name="Archer" instance=ExtResource("1_base")]
 display_name = "Archer"
-max_hp = 90
-speed = 13.0
-attack_power = 11
+class_id = "archer"
+max_hp = 150
+combo_limit = 70.0
+can_block = false
+can_parry = false
+attack_power = 12
 attack_reach = 6.0
-combo_limit = 50.0
+speed = 13.0
 move_speed = 5.5
 
 [node name="Body" parent="."]

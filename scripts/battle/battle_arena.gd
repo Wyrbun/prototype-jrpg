@@ -178,7 +178,19 @@ var _result_text := ""
 
 ## The command menu / combo bar state (see BattleMenu.Mode).
 var _menu_mode: int = BattleMenu.Mode.HIDDEN
-var _moves: Array[Dictionary] = Moves.all()
+## The controlled fighter's attacks (combo bar) or skills (Abilities).
+var _moves: Array[Dictionary] = []
+var _skills: Array[Dictionary] = []
+## What each combo slot will do (see BattleMenu.plan); also holds "move",
+## "hits" and "duration" for playback.
+var _plan: Array[Dictionary] = []
+## Seconds of Concentrate left (doubles AP recharge).
+var _concentrate_left := 0.0
+## Abilities: the skill waiting for a target, the choices, and the marker.
+var _pending_skill: Dictionary = {}
+var _target_choices: Array[Combatant] = []
+var _target_index := 0
+var _target_marker: MeshInstance3D = null
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
@@ -225,11 +237,11 @@ func _ready() -> void:
 	timeline_bar.cast_zone_start = cast_zone_start
 	party_status.party = party
 	enemy_status.party = enemies
-	battle_menu.moves = _moves
+	enemy_status.tags_on_left = true  # keeps the right edge tidy
 	battle_menu.commands = PackedStringArray(["Attack", "Wait", "Abilities", "Items"])
-	var enabled: Array[bool] = [true, true, false, false]
+	var enabled: Array[bool] = [true, true, true, false]
 	battle_menu.command_enabled = enabled
-	battle_menu.command_notes = PackedStringArray(["", "", "coming later", "coming later"])
+	battle_menu.command_notes = PackedStringArray(["", "", "", "coming later"])
 	controlled = party[0]
 	controlled.set_highlighted(true)
 	ap = starting_ap
@@ -289,12 +301,18 @@ func _process(delta: float) -> void:
 			_update_strike(delta)  # everything else waits while a strike plays
 		elif active == null:
 			var world_delta := delta * battle_speed
-			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * world_delta, current_max_ap)
+			var concentrate := 2.0 if _concentrate_left > 0.0 else 1.0
+			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * concentrate * world_delta, current_max_ap)
+			_concentrate_left = maxf(_concentrate_left - world_delta, 0.0)
+			for member in party:
+				member.riposte_left = maxf(member.riposte_left - world_delta, 0.0)
 			_free_roam(delta, world_delta)
 			_tick_stances(world_delta)
 			_advance_timeline(world_delta)
 		elif _party_turn() and _menu_mode == BattleMenu.Mode.EXECUTING:
 			_update_combo(delta)
+		elif _party_turn() and _menu_mode == BattleMenu.Mode.TARGET:
+			_update_target_marker(delta)
 		# On a party turn the fighter is locked in place until a command is chosen.
 	# Checked again: the strike above may have just knocked out the last fighter.
 	if not _game_over:
@@ -374,6 +392,13 @@ func _start_turn(fighter: Combatant) -> void:
 	_flash_time_left = 0.0  # don't carry old messages into a new turn
 	timeline_bar.active = fighter
 	print("%s's turn" % fighter.display_name)
+	# Effects cast by this fighter count down one of their turns.
+	var ended: PackedStringArray = []
+	for c in combatants:
+		for status_name in c.tick_statuses(fighter):
+			ended.append("%s's %s" % [c.display_name, String(status_name).replace("_", " ")])
+	if not ended.is_empty():
+		_flash("Wore off: " + ", ".join(ended))
 
 	if fighter.team == Combatant.Team.PARTY:
 		var recovered := fighter.recover_hp()
@@ -470,7 +495,7 @@ func _set_controlled(fighter: Combatant) -> void:
 ## enemy can be outmaneuvered. While preparing a skill they stand still and
 ## can only turn slowly.
 func _enemy_step(enemy: Combatant, delta: float) -> void:
-	var target := _nearest(enemy, _standing(party))
+	var target := _enemy_target(enemy)
 	if target == null:
 		return
 	var to_target := target.global_position - enemy.global_position
@@ -490,6 +515,15 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 	if wants_closer and facing_target:
 		enemy.global_position += enemy.flat_forward() * enemy.move_speed * delta
 		_keep_in_arena(enemy)
+
+
+## Who an enemy goes after: whoever taunted it, otherwise the nearest.
+func _enemy_target(enemy: Combatant) -> Combatant:
+	if enemy.statuses.has("taunt"):
+		var taunter: Combatant = enemy.statuses["taunt"]["caster"]
+		if taunter != null and not taunter.is_down:
+			return taunter
+	return _nearest(enemy, _standing(party))
 
 
 ## Ally AI, in priority order:
@@ -515,7 +549,7 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 		return
 	var to_threat := threat.global_position - ally.global_position
 	var gap := ally.gap_to(threat)
-	var ideal := ally.attack_reach * ally_range_share
+	var ideal := ally.reach() * ally_range_share
 	if gap > ideal + 0.15:
 		if _safe_step(ally, to_threat, delta):
 			return
@@ -773,6 +807,9 @@ func _try_parry() -> void:
 	if _strike.def.cannot_be_parried:
 		_flash("%s can't be parried!" % _strike.def.skill_name)
 		return
+	if not _strike_targets_can("parry"):
+		_flash("%s can't parry" % _names(_strike.targets))
+		return
 	if _strike.time_left <= parry_window:
 		_strike.reaction = Reaction.PARRY
 	else:
@@ -785,6 +822,9 @@ func _try_defend() -> void:
 		return
 	if _strike.def.cannot_be_blocked:
 		_flash("%s can't be blocked!" % _strike.def.skill_name)
+		return
+	if not _strike_targets_can("block"):
+		_flash("%s can't block" % _names(_strike.targets))
 		return
 	if ap < defend_cost:
 		_flash("Not enough AP to defend (%d needed)" % defend_cost)
@@ -801,38 +841,47 @@ func _resolve_strike() -> void:
 
 	var skill_name := s.def.skill_name
 	var damage := s.def.damage
-	var who := _names(s.targets)
 	var lines: PackedStringArray = []
+	var parried := false
+	var parry_missed := false
 
-	match s.reaction:
-		Reaction.PARRY:
-			s.enemy.timeline_penalty += stagger_push
-			lines.append("%s parried %s's %s! %s is staggered" % [who, s.enemy.display_name, skill_name, s.enemy.display_name])
-			_popup(s.targets[0], "PARRY!", Color(1.0, 0.85, 0.2))
-			lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
-		Reaction.DEFEND:
+	# One Parry/Defend input covers everyone hit, but only those whose class
+	# can parry/block get the benefit; the rest take the full hit.
+	for target in s.targets:
+		if target.riposte_left > 0.0:
+			_riposte(target, s.enemy, lines)
+			continue
+		var can_parry := target.can_parry and not s.def.cannot_be_parried
+		var can_block := target.can_block and not s.def.cannot_be_blocked
+		if s.reaction == Reaction.PARRY and can_parry:
+			parried = true
+			_popup(target, "PARRY!", Color(1.0, 0.85, 0.2))
+			lines.append("%s parried %s's %s!" % [target.display_name, s.enemy.display_name, skill_name])
+		elif s.reaction == Reaction.DEFEND and can_block:
 			var share := defend_share_vs_smash if s.skill == Skills.Kind.SMASH else defend_share_vs_attack
-			var taken := ceili(damage * share)
-			for target in s.targets:
-				target.take_damage(taken, true)
-				_popup(target, str(taken), Color(0.6, 0.8, 1.0))
+			var taken := target.take_damage(ceili(damage * share), true)
+			_popup(target, str(taken), Color(0.6, 0.8, 1.0))
 			var guard_note := " Guard broken!" if s.skill == Skills.Kind.SMASH else ""
-			lines.append("%s defended:%s -%d HP (recoverable)" % [who, guard_note, taken])
-		Reaction.PARRY_MISSED:
-			for target in s.targets:
-				target.take_damage(damage, false)
-				_popup(target, str(damage), Color(1.0, 0.4, 0.3))
+			lines.append("%s defended:%s -%d HP (recoverable)" % [target.display_name, guard_note, taken])
+		else:
+			var taken := target.take_damage(damage, false)
+			_popup(target, str(taken), Color(1.0, 0.4, 0.3))
+			if s.reaction == Reaction.PARRY_MISSED and can_parry:
+				parry_missed = true
 				_push_back(target, parry_miss_push)
-			ap *= 0.5
-			lines.append("Parry too early! %s takes %d, turn delayed, AP halved" % [who, damage])
-			var reset_note := _reset_max_ap()
-			if reset_note != "":
-				lines.append(reset_note)
-		_:
-			for target in s.targets:
-				target.take_damage(damage, false)
-				_popup(target, str(damage), Color(1.0, 0.4, 0.3))
-			lines.append("%s's %s hits %s for %d!" % [s.enemy.display_name, skill_name, who, damage])
+			lines.append("%s's %s hits %s for %d!%s" % [s.enemy.display_name, skill_name, target.display_name, taken,
+					_absorb_note(damage, taken)])
+
+	if parried:
+		s.enemy.timeline_penalty += stagger_push
+		lines.append("%s is staggered" % s.enemy.display_name)
+		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
+	if parry_missed:
+		ap *= 0.5
+		lines.append("Parry too early! Turn delayed, AP halved")
+		var reset_note := _reset_max_ap()
+		if reset_note != "":
+			lines.append(reset_note)
 
 	for target in s.targets:
 		if target.is_down:
@@ -848,6 +897,41 @@ func _resolve_strike() -> void:
 
 ## Handles knocked-out fighters: hands control back if needed, and ends
 ## the battle if nobody is left standing.
+## True if anyone caught in the strike can "parry" or "block" it.
+func _strike_targets_can(reaction: String) -> bool:
+	for target in _strike.targets:
+		if (target.can_parry if reaction == "parry" else target.can_block):
+			return true
+	return false
+
+
+## " (Brace / shield soaked 12)" when less HP was lost than the hit dealt.
+func _absorb_note(damage: int, taken: int) -> String:
+	return " (%d soaked)" % (damage - taken) if taken < damage else ""
+
+
+## Archer's Riposte: the hit is countered, the enemy hurt and pushed away.
+func _riposte(archer: Combatant, enemy: Combatant, lines: PackedStringArray) -> void:
+	var damage := ceili(archer.attack_power * 2.0)
+	enemy.take_damage(damage, false)
+	_popup(archer, "RIPOSTE!", Color(1.0, 0.85, 0.2))
+	_popup(enemy, str(damage), Color.WHITE)
+	_knock_away(enemy, archer.global_position, 3.0)
+	lines.append("%s ripostes! %s takes %d and is pushed back" % [archer.display_name, enemy.display_name, damage])
+
+
+## Shoves a fighter straight away from a point, stopping at walls and rocks.
+func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
+	var away := fighter.global_position - from
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = -fighter.flat_forward()
+	var steps := 8
+	for i in steps:
+		fighter.global_position += away.normalized() * meters / steps
+		_keep_in_arena(fighter)
+
+
 func _check_party() -> void:
 	if _standing(party).is_empty():
 		_game_over = true  # _update_ui shows the game-over text from now on
@@ -876,7 +960,8 @@ func _check_enemies() -> void:
 
 # --- Party attacks --------------------------------------------------------
 
-## J: open the command menu. Attack needs an enemy within reach.
+## A party turn starts: the command menu opens. Attack needs an enemy that
+## at least one of the fighter's attacks can reach.
 func _open_commands() -> void:
 	_menu_mode = BattleMenu.Mode.COMMANDS
 	var can_attack := _attack_target() != null
@@ -902,39 +987,59 @@ func _menu_input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 
-	if _menu_mode == BattleMenu.Mode.COMMANDS:
-		var count := battle_menu.commands.size()
-		if up:
-			battle_menu.command_index = (battle_menu.command_index - 1 + count) % count
-		elif down:
-			battle_menu.command_index = (battle_menu.command_index + 1) % count
-		elif confirm:
-			var index := battle_menu.command_index
-			if not battle_menu.command_enabled[index]:
-				_flash("%s: %s" % [battle_menu.commands[index], battle_menu.command_notes[index]])
-			elif index == 0:
-				_open_combo_bar()
-			elif index == 1:
-				_wait_command()
-		return
-
-	# Combo bar
-	if up:
-		battle_menu.move_index = (battle_menu.move_index - 1 + _moves.size()) % _moves.size()
-	elif down:
-		battle_menu.move_index = (battle_menu.move_index + 1) % _moves.size()
-	elif confirm:
-		_add_to_combo(battle_menu.move_index)
-	elif cancel:
-		if battle_menu.combo.is_empty():
-			_menu_mode = BattleMenu.Mode.COMMANDS
-		else:
-			battle_menu.combo.pop_back()
-	elif begin:
-		if battle_menu.combo.is_empty():
-			_flash("Add at least one move first (J)")
-		else:
-			_execute_combo()
+	match _menu_mode:
+		BattleMenu.Mode.COMMANDS:
+			var count := battle_menu.commands.size()
+			if up:
+				battle_menu.command_index = (battle_menu.command_index - 1 + count) % count
+			elif down:
+				battle_menu.command_index = (battle_menu.command_index + 1) % count
+			elif confirm:
+				var index := battle_menu.command_index
+				if not battle_menu.command_enabled[index]:
+					_flash("%s: %s" % [battle_menu.commands[index], battle_menu.command_notes[index]])
+				elif index == 0:
+					_open_combo_bar()
+				elif index == 1:
+					_wait_command()
+				elif index == 2:
+					_open_skills()
+		BattleMenu.Mode.SKILLS:
+			if up or down:
+				var n := _skills.size()
+				battle_menu.move_index = (battle_menu.move_index + (1 if down else -1) + n) % n
+			elif confirm:
+				_choose_skill(battle_menu.move_index)
+			elif cancel:
+				_menu_mode = BattleMenu.Mode.COMMANDS
+		BattleMenu.Mode.TARGET:
+			var by_point: bool = _pending_skill["target"] == Moves.Target.POINT
+			if (up or down) and not by_point and not _target_choices.is_empty():
+				var n := _target_choices.size()
+				_target_index = (_target_index + (1 if down else -1) + n) % n
+			elif confirm:
+				_confirm_target()
+			elif cancel:
+				_clear_target_marker()
+				_menu_mode = BattleMenu.Mode.SKILLS
+		BattleMenu.Mode.COMBO:
+			if up:
+				battle_menu.move_index = (battle_menu.move_index - 1 + _moves.size()) % _moves.size()
+			elif down:
+				battle_menu.move_index = (battle_menu.move_index + 1) % _moves.size()
+			elif confirm:
+				_add_to_combo(battle_menu.move_index)
+			elif cancel:
+				if _plan.is_empty():
+					_menu_mode = BattleMenu.Mode.COMMANDS
+				else:
+					_plan.pop_back()
+					battle_menu.combo.pop_back()
+			elif begin:
+				if _plan.is_empty():
+					_flash("Add at least one move first (J)")
+				else:
+					_execute_combo()
 
 
 ## Wait: end the turn without spending AP. The fighter's bar restarts a
@@ -948,24 +1053,87 @@ func _wait_command() -> void:
 
 func _open_combo_bar() -> void:
 	_combo_target = _attack_target()
+	_moves = Moves.attacks(controlled.class_id)
+	var doubled := controlled.statuses.has("arcane_cost")
+	var usable: Array[bool] = []
+	var notes: PackedStringArray = []
+	for move in _moves:
+		if doubled:
+			move["cost"] = int(move["cost"]) * 2
+		var reaches := _can_target(controlled, _combo_target, move)
+		usable.append(reaches)
+		notes.append("" if reaches else "%s is out of its reach" % _combo_target.display_name)
 	_menu_mode = BattleMenu.Mode.COMBO
+	_plan.clear()
+	battle_menu.moves = _moves
+	battle_menu.move_usable = usable
+	battle_menu.move_notes = notes
+	battle_menu.plan = _plan
 	battle_menu.combo.clear()
 	battle_menu.move_index = 0
 	battle_menu.executing_slot = -1
 	battle_menu.slot_results.clear()
+	if doubled:
+		_flash("Arcane Barrier: attacks cost double this turn")
 
 
 ## Adds a move to the bar if it fits both the fighter's combo limit and
-## the party's AP.
+## the party's AP. The slot's exact hits and timings are worked out now.
 func _add_to_combo(index: int) -> void:
-	var cost := float(_moves[index]["cost"])
+	if not battle_menu.move_usable[index]:
+		_flash(battle_menu.move_notes[index])
+		return
+	var entry := _plan_slot(_moves[index])
+	var cost := float(entry["cost"])
 	var used := battle_menu.combo_cost()
 	if used + cost > controlled.combo_limit:
 		_flash("%s's combo bar is full" % controlled.display_name)
 	elif used + cost > ap:
 		_flash("Not enough AP (%d left)" % floori(ap - used))
 	else:
+		_plan.append(entry)
 		battle_menu.combo.append(index)
+
+
+## What one combo slot will do: its hits, where each lands (as a fraction of
+## the block), and its timing box. Handles Bash's growing hits, Agility's
+## extra hit, and delayed or random timings.
+func _plan_slot(move: Dictionary) -> Dictionary:
+	var hits: Array = (move["hits"] as Array).duplicate()
+	var times: Array = (move.get("times", []) as Array).duplicate()
+	var duration: float = move["duration"]
+	if move["escalating"]:
+		var count := 1
+		for entry in _plan:
+			if entry["name"] == move["name"]:
+				count += 1
+		hits = []
+		for i in count:
+			hits.append(move["hits"][0])
+		duration = 0.3 + 0.22 * count
+		if count > 3:
+			# From the fourth Bash on, the hits land at random moments.
+			var spacing := 1.0 / count
+			for i in count - 1:
+				times.append(spacing * (i + 1) + randf_range(-0.35, 0.35) * spacing)
+			times.append(1.0)
+	if controlled.statuses.has("agility"):
+		if times.is_empty():
+			duration *= float(hits.size() + 1) / hits.size()
+			hits.append(hits[0])
+		else:
+			var last: float = times[-1]
+			var before: float = times[-2] if times.size() > 1 else 0.0
+			hits.insert(hits.size() - 1, hits[0])
+			times.insert(times.size() - 1, (before + last) / 2.0)
+	if times.is_empty():
+		for i in hits.size():
+			times.append(float(i + 1) / hits.size())
+	return {
+		"move": move, "name": move["name"], "color": move["color"], "cost": move["cost"],
+		"hits": hits, "times": times, "duration": duration,
+		"window": float(move["window"]) / duration,
+	}
 
 
 ## Starts playing the combo. _update_combo then runs it frame by frame.
@@ -974,12 +1142,12 @@ func _execute_combo() -> void:
 	_exec_attacker = controlled
 	_ap_before_combo = ap
 	ap -= battle_menu.combo_cost()
+	_exec_attacker.statuses.erase("arcane_cost")  # Arcane Barrier's cost lasts until the next attack
 	_exec_attacker.face_toward(_combo_target.global_position - _exec_attacker.global_position, 1.0, 100000.0)
 	battle_menu.slot_results.clear()
-	for i in battle_menu.combo.size():
-		var hit_count := (_moves[battle_menu.combo[i]]["hits"] as Array).size()
+	for entry in _plan:
 		var per_hit: Array[int] = []
-		per_hit.resize(hit_count)
+		per_hit.resize((entry["hits"] as Array).size())
 		per_hit.fill(Timing.NONE)
 		battle_menu.slot_results.append(per_hit)
 	_exec_outro = -1.0
@@ -994,15 +1162,14 @@ func _start_combo_slot(slot: int) -> void:
 	_exec_time = 0.0
 	_exec_hits_done = 0
 	_exec_timings.clear()
-	var hit_count := (_moves[battle_menu.combo[slot]]["hits"] as Array).size()
-	_exec_timings.resize(hit_count)
+	_exec_timings.resize((_plan[slot]["hits"] as Array).size())
 	_exec_timings.fill(Timing.NONE)
 	battle_menu.executing_slot = slot
 	battle_menu.slot_progress = 0.0
 
 
 ## Moves the playhead through the current block at that move's own speed,
-## landing its hits along the way (the last one at the end of the block).
+## landing its hits at their planned moments.
 func _update_combo(delta: float) -> void:
 	if _exec_lead_in > 0.0:
 		_exec_lead_in -= delta
@@ -1018,13 +1185,14 @@ func _update_combo(delta: float) -> void:
 				_end_turn()
 		return
 
-	var move := _moves[battle_menu.combo[_exec_slot]]
-	var duration: float = move["duration"]
-	var hits: Array = move["hits"]
+	var entry := _plan[_exec_slot]
+	var duration: float = entry["duration"]
+	var hits: Array = entry["hits"]
+	var times: Array = entry["times"]
 	_exec_time += delta
 	battle_menu.slot_progress = clampf(_exec_time / duration, 0.0, 1.0)
 
-	while _exec_hits_done < hits.size() and _exec_time >= duration * (_exec_hits_done + 1) / hits.size():
+	while _exec_hits_done < hits.size() and _exec_time >= duration * float(times[_exec_hits_done]):
 		var multiplier: float = hits[_exec_hits_done]
 		var perfect := _exec_timings[_exec_hits_done] == Timing.PERFECT
 		if _exec_timings[_exec_hits_done] == Timing.NONE:
@@ -1032,7 +1200,7 @@ func _update_combo(delta: float) -> void:
 		if perfect:
 			multiplier *= 1.0 + perfect_damage_bonus
 		_exec_attacker.play_lunge()
-		var keep_going := _resolve_combo_hit(_exec_attacker, _combo_target, move, multiplier)
+		var keep_going := _land_hit(_exec_attacker, entry["move"], multiplier, _exec_hits_done == 0)
 		_exec_hits_done += 1
 		if perfect:
 			_popup(_exec_attacker, "PERFECT!", Color(1.0, 0.85, 0.2))
@@ -1042,10 +1210,10 @@ func _update_combo(delta: float) -> void:
 			return
 
 	if _exec_hits_done >= hits.size():
-		if _exec_slot + 1 < battle_menu.combo.size():
+		if _exec_slot + 1 < _plan.size():
 			_start_combo_slot(_exec_slot + 1)
 		else:
-			battle_menu.executing_slot = battle_menu.combo.size()  # playhead to the end
+			battle_menu.executing_slot = _plan.size()  # playhead to the end
 			_exec_outro = 0.4
 
 
@@ -1054,14 +1222,13 @@ func _update_combo(delta: float) -> void:
 func _judge_timing() -> void:
 	if _exec_outro >= 0.0 or _exec_lead_in > 0.0:  # presses during the lead-in are ignored
 		return
-	var move := _moves[battle_menu.combo[_exec_slot]]
-	var duration: float = move["duration"]
-	var window: float = move["window"]
-	# The press is judged against the next hit still to land.
+	var entry := _plan[_exec_slot]
+	var duration: float = entry["duration"]
+	var window: float = float(entry["window"]) * duration
 	var hit := _exec_hits_done
 	if hit >= _exec_timings.size() or _exec_timings[hit] != Timing.NONE:
 		return  # one try per hit
-	var hit_time := duration * float(hit + 1) / _exec_timings.size()
+	var hit_time := duration * float(entry["times"][hit])
 	if _exec_time >= hit_time - window:
 		_exec_timings[hit] = Timing.PERFECT
 		battle_menu.slot_results[_exec_slot][hit] = Timing.PERFECT
@@ -1115,18 +1282,94 @@ func _stop_combo() -> void:
 	_exec_outro = 0.7
 
 
-## Applies the skill triangle to one hit of a combo. Returns false if the
-## combo should stop (countered, or the target is down).
+## One hit of a move lands: works out everyone it reaches (by the move's
+## area), applies it to each, and handles barriers. Returns false if the
+## combo should stop (countered, attacker down, nobody left to hit).
+func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_hit: bool) -> bool:
+	if attacker.is_down:
+		return false
+	if first_hit and float(move["barrier"]) > 0.0:
+		_give_barrier(attacker, move)
+	var keep_going := true
+	for victim in _hit_victims(attacker, move):
+		var enemy: Combatant = victim[0]
+		if not _resolve_combo_hit(attacker, enemy, move, multiplier * float(victim[1])):
+			keep_going = false
+			break
+	_check_enemies()
+	if _game_over or not keep_going:
+		return false
+	if _combo_target.is_down:
+		# The target fell: carry on against the nearest enemy still in reach.
+		_combo_target = _attack_target()
+		if _combo_target == null:
+			return false
+		_flash("%s turns to %s" % [attacker.display_name, _combo_target.display_name])
+	return true
+
+
+## Everyone one hit reaches, each with a damage share: [[enemy, share], ...].
+func _hit_victims(attacker: Combatant, move: Dictionary) -> Array:
+	var result := []
+	var size: float = move["area_size"]
+	match move["area"]:
+		Moves.Area.TARGET_CIRCLE:
+			for enemy in _standing(enemies):
+				var d := enemy.global_position.distance_to(_combo_target.global_position) - enemy.body_radius
+				if enemy == _combo_target or d <= size:
+					result.append([enemy, 1.0])
+		Moves.Area.LINE:
+			# From the attacker through the target and beyond: full damage on
+			# the first enemy, falloff on everyone behind.
+			var dir := _combo_target.global_position - attacker.global_position
+			dir.y = 0.0
+			var length := dir.length() + 6.0
+			dir = dir.normalized()
+			var in_line := []
+			for enemy in _standing(enemies):
+				var offset := enemy.global_position - attacker.global_position
+				offset.y = 0.0
+				var along := offset.dot(dir)
+				var side := (offset - dir * along).length()
+				if along >= 0.0 and along <= length and side <= size / 2.0 + enemy.body_radius and _can_see(attacker, enemy):
+					in_line.append([enemy, along])
+			in_line.sort_custom(func(a, b): return a[1] < b[1])
+			for i in in_line.size():
+				result.append([in_line[i][0], 1.0 if i == 0 else float(move["falloff"])])
+		Moves.Area.SELF_CIRCLE:
+			for enemy in _standing(enemies):
+				if attacker.gap_to(enemy) <= size:
+					result.append([enemy, 1.0])
+		Moves.Area.ALL:
+			for enemy in _standing(enemies):
+				result.append([enemy, 1.0])
+		_:
+			result.append([_combo_target, 1.0])
+	return result
+
+
+## Cleric's Divine Barrier: allies near the user get barrier HP.
+func _give_barrier(user: Combatant, move: Dictionary) -> void:
+	for ally in _standing(party):
+		if ally.global_position.distance_to(user.global_position) <= float(move["barrier_radius"]):
+			var gained := ally.add_shield(ceili(ally.max_hp * float(move["barrier"])))
+			if gained > 0:
+				_popup(ally, "+%d BARRIER" % gained, Color(0.55, 0.8, 1.0))
+
+
+## Applies the skill triangle to one hit on one enemy, then the move's extra
+## effects (stun, knockback). Returns false only if a Counter stance
+## punished the attacker (the combo stops).
 func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary, multiplier: float) -> bool:
 	if attacker.is_down or target.is_down:
-		return false
+		return true
 	var move_name: String = move["name"]
 
 	if target.stance == Skills.Kind.COUNTER:
 		# Counter beats every attack: the enemy punishes you, combo over.
-		attacker.take_damage(counter_stance_damage, false)
+		var taken := attacker.take_damage(counter_stance_damage, false)
 		_popup(target, "COUNTER!", Skills.info(Skills.Kind.COUNTER)["color"])
-		_popup(attacker, str(counter_stance_damage), Color(1.0, 0.4, 0.3))
+		_popup(attacker, str(taken), Color(1.0, 0.4, 0.3))
 		_flash("%s's Counter stance punishes the %s! Combo stopped" % [target.display_name, move_name])
 		_check_party()
 		return false
@@ -1141,7 +1384,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 				note = "Pierce!"
 			_:
 				_popup(target, "BLOCKED", Skills.info(Skills.Kind.DEFENSE)["color"])
-				_flash("%s's Defense blocks the %s. Thrust pierces it, Smash breaks it!" % [target.display_name, move_name])
+				_flash("%s's Defense blocks the %s. Piercing or breaking moves get through!" % [target.display_name, move_name])
 				return true
 	elif target.loaded_skill == Skills.Kind.SMASH and move["kind"] == Skills.Kind.ATTACK:
 		note = "Smash interrupted!"
@@ -1151,13 +1394,21 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 	target.take_damage(damage, false)
 	var is_smash: bool = move["kind"] == Skills.Kind.SMASH
 	_popup(target, str(damage), Color(1.0, 0.7, 0.3) if is_smash else Color.WHITE)
+
+	if move["stun"] and not target.is_down and target.loaded_skill != Skills.NONE \
+			and Skills.is_offensive(target.loaded_skill):
+		# Stunning Arrow: an enemy about to strike loses its turn.
+		_finish_enemy_skill(target, false)
+		target.timeline_pos = 0.0
+		note = "Stunned! Turn cancelled"
+	if float(move["knockback"]) > 0.0 and not target.is_down:
+		_knock_away(target, attacker.global_position, move["knockback"])
+
 	if note != "":
 		_popup(target, note.to_upper(), Color(1.0, 0.85, 0.2))
 		_flash(note)
 	if target.is_down:
 		_flash("%s is defeated!" % target.display_name)
-		_check_enemies()
-		return false
 	return true
 
 
@@ -1176,16 +1427,247 @@ func _knock_back_enemy(enemy: Combatant, amount: float) -> void:
 		_finish_enemy_skill(enemy, false)
 
 
-## The nearest standing enemy within the controlled fighter's reach.
+## How far a move reaches for this fighter (its own reach, or the fighter's;
+## True Sight extends both).
+func _move_reach(fighter: Combatant, move: Dictionary) -> float:
+	var own: float = move["reach"]
+	if own >= Moves.UNLIMITED:
+		return INF
+	var sight := fighter.reach() / fighter.attack_reach if fighter.attack_reach > 0.0 else 1.0
+	return own * sight if own >= 0.0 else fighter.reach()
+
+
+func _can_target(fighter: Combatant, enemy: Combatant, move: Dictionary) -> bool:
+	var move_reach := _move_reach(fighter, move)
+	if fighter.gap_to(enemy) > move_reach:
+		return false
+	return move_reach == INF or _can_see(fighter, enemy)
+
+
+## The enemy the controlled fighter's attacks go after: the nearest one in
+## its normal reach, or else the nearest one a long-range attack (Holy Light,
+## Meteor Strike) can reach.
 func _attack_target() -> Combatant:
-	var best: Combatant = null
-	var best_gap := INF
-	for enemy in _standing(enemies):
-		var gap := controlled.gap_to(enemy)
-		if gap <= controlled.attack_reach and gap < best_gap and _can_see(controlled, enemy):
-			best = enemy
-			best_gap = gap
-	return best
+	var attacks := Moves.attacks(controlled.class_id)
+	var normal: Array[Dictionary] = attacks.filter(func(m): return float(m["reach"]) < 0.0)
+	for pool in [normal, attacks]:
+		var best: Combatant = null
+		var best_gap := INF
+		for enemy in _standing(enemies):
+			var gap := controlled.gap_to(enemy)
+			if gap >= best_gap:
+				continue
+			for move in pool:
+				if _can_target(controlled, enemy, move):
+					best = enemy
+					best_gap = gap
+					break
+		if best != null:
+			return best
+	return null
+
+
+# --- Skills (Abilities) ----------------------------------------------------
+
+func _open_skills() -> void:
+	_skills = Moves.skills(controlled.class_id)
+	var usable: Array[bool] = []
+	var notes: PackedStringArray = []
+	for skill in _skills:
+		var note := ""
+		if int(skill["cost"]) > ap:
+			note = "Not enough AP"
+		elif int(skill["cost"]) > controlled.combo_limit:
+			note = "Costs more than %s's AP limit" % controlled.display_name
+		elif skill["target"] == Moves.Target.ENEMY and _skill_choices(skill).is_empty():
+			note = "No enemy in range"
+		elif skill["target"] == Moves.Target.OTHER_ALLY and _skill_choices(skill).is_empty():
+			note = "No ally to choose"
+		usable.append(note == "")
+		notes.append(note)
+	if _skills.is_empty():
+		_flash("%s has no skills" % controlled.display_name)
+		return
+	_menu_mode = BattleMenu.Mode.SKILLS
+	battle_menu.moves = _skills
+	battle_menu.move_usable = usable
+	battle_menu.move_notes = notes
+	battle_menu.move_index = 0
+
+
+## Who a skill can be used on, nearest first.
+func _skill_choices(skill: Dictionary) -> Array[Combatant]:
+	var choices: Array[Combatant] = []
+	match skill["target"]:
+		Moves.Target.ALLY:
+			choices = _standing(party)
+			choices.erase(controlled)
+			choices.push_front(controlled)
+		Moves.Target.OTHER_ALLY:
+			choices = _standing(party)
+			choices.erase(controlled)
+		Moves.Target.ENEMY:
+			for enemy in _standing(enemies):
+				if controlled.gap_to(enemy) <= float(skill["range"]) and _can_see(controlled, enemy):
+					choices.append(enemy)
+			choices.sort_custom(func(a, b): return controlled.gap_to(a) < controlled.gap_to(b))
+	return choices
+
+
+func _choose_skill(index: int) -> void:
+	var skill := _skills[index]
+	if not battle_menu.move_usable[index]:
+		_flash("%s: %s" % [skill["name"], battle_menu.move_notes[index]])
+		return
+	match skill["target"]:
+		Moves.Target.SELF, Moves.Target.NONE:
+			_use_skill(skill, controlled, controlled.global_position)
+		Moves.Target.POINT:
+			_begin_targeting(skill, "%s: move the marker with WASD" % skill["name"])
+			_target_marker.global_position = controlled.global_position + controlled.flat_forward() * 3.0
+			_keep_marker_in_range()
+		_:
+			_target_choices = _skill_choices(skill)
+			_target_index = 0
+			var what := "an enemy" if skill["target"] == Moves.Target.ENEMY else "an ally"
+			_begin_targeting(skill, "%s: choose %s (W / S)" % [skill["name"], what])
+
+
+func _begin_targeting(skill: Dictionary, prompt: String) -> void:
+	_pending_skill = skill
+	_menu_mode = BattleMenu.Mode.TARGET
+	battle_menu.target_prompt = prompt
+	_clear_target_marker()
+	_target_marker = _make_ring(0.75, 0.12, Color(1.0, 0.85, 0.3))
+	add_child(_target_marker)
+	_update_target_marker(0.0)
+
+
+## Keeps the marker on the chosen fighter, or moves it with WASD for Jump.
+func _update_target_marker(delta: float) -> void:
+	if _target_marker == null:
+		return
+	if _pending_skill["target"] == Moves.Target.POINT:
+		var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+		_target_marker.global_position += Vector3(input.x, 0.0, input.y) * 7.0 * delta
+		_keep_marker_in_range()
+	elif not _target_choices.is_empty():
+		var chosen := _target_choices[_target_index]
+		_target_marker.global_position = chosen.global_position + Vector3(0, 0.05, 0)
+		var label := "%s: %s" % [_pending_skill["name"], chosen.display_name]
+		battle_menu.target_prompt = label + "   (W / S to change)"
+
+
+func _keep_marker_in_range() -> void:
+	var from := controlled.global_position
+	var offset := _target_marker.global_position - from
+	offset.y = 0.0
+	var limit: float = _pending_skill["range"]
+	if offset.length() > limit:
+		offset = offset.normalized() * limit
+	_target_marker.global_position = from + offset
+	arena.keep_inside(_target_marker, controlled.body_radius)
+	_target_marker.global_position.y = 0.05
+
+
+func _confirm_target() -> void:
+	var point := _target_marker.global_position
+	var chosen: Combatant = null
+	if not _target_choices.is_empty() and _pending_skill["target"] != Moves.Target.POINT:
+		chosen = _target_choices[_target_index]
+	_clear_target_marker()
+	_use_skill(_pending_skill, chosen, point)
+
+
+func _clear_target_marker() -> void:
+	if _target_marker != null:
+		_target_marker.queue_free()
+		_target_marker = null
+
+
+## Carries out a skill, then the turn ends.
+func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
+	var user := controlled
+	ap -= float(skill["cost"])
+	var turns := int(skill["turns"])
+	var message := "%s uses %s" % [user.display_name, skill["name"]]
+	var head_start := 0.0
+	match skill["name"]:
+		"Light Heal", "Healing", "Full Cure":
+			var who := target if target != null else user
+			var healed := who.heal(ceili(who.max_hp * float(skill["heal"])))
+			_popup(who, "+%d" % healed, Color(0.45, 0.95, 0.5))
+			message += ": %s recovers %d HP" % [who.display_name, healed]
+		"Brace", "Agility":
+			user.add_status(String(skill["name"]).to_lower(), turns, user)
+			_popup(user, String(skill["name"]).to_upper(), skill["color"])
+		"Shield Bash":
+			var dir := target.global_position - user.global_position
+			dir.y = 0.0
+			user.global_position = target.global_position - dir.normalized() * (target.body_radius + user.body_radius + 0.15)
+			_keep_in_arena(user)
+			user.face_toward(dir, 1.0, 100000.0)
+			head_start = wait_head_start
+			message += " on %s: next turn comes sooner" % target.display_name
+		"Taunt":
+			var taunted: Array[Combatant] = []
+			for enemy in _standing(enemies):
+				if user.gap_to(enemy) <= float(skill["radius"]):
+					enemy.add_status("taunt", turns, user)
+					taunted.append(enemy)
+					_popup(enemy, "TAUNTED", skill["color"])
+			message += ": " + (_names(taunted) + " now target " + user.display_name if not taunted.is_empty() else "nobody is close enough")
+		"Jump":
+			user.global_position = Vector3(point.x, user.global_position.y, point.z)
+			_keep_in_arena(user)
+		"Riposte":
+			user.riposte_left = float(skill["seconds"])
+			_popup(user, "RIPOSTE", skill["color"])
+		"True Sight":
+			for ally in _standing(party):
+				ally.add_status("true_sight", turns, user)
+			message += ": everyone's reach +25%"
+		"Arcane Barrier":
+			user.add_status("arcane_barrier", 0, user)
+			user.add_status("arcane_cost", 0, user)
+			_popup(user, "BARRIER", skill["color"])
+		"Concentrate":
+			_concentrate_left = float(skill["seconds"])
+			message += ": AP recharges twice as fast"
+		"Teleport":
+			user.global_position = _spot_next_to(target, user)
+			message += " next to %s" % target.display_name
+		"Shielding":
+			for ally in _standing(party):
+				var gained := ally.add_shield(ceili(ally.max_hp * float(skill["shield"])))
+				_popup(ally, "+%d SHIELD" % gained, Color(0.55, 0.8, 1.0))
+		"Haste":
+			target.add_status("haste", turns, user)
+			_popup(target, "HASTE", skill["color"])
+			message += " on %s" % target.display_name
+	_flash(message)
+	print(message)
+	_menu_mode = BattleMenu.Mode.HIDDEN
+	_end_turn()
+	user.timeline_pos += head_start
+
+
+## A free spot right beside a fighter (for Teleport).
+func _spot_next_to(fighter: Combatant, mover: Combatant) -> Vector3:
+	var distance := fighter.body_radius + mover.body_radius + 0.2
+	for i in 8:
+		var spot := fighter.global_position + Vector3.BACK.rotated(Vector3.UP, TAU * i / 8.0) * distance
+		var free := true
+		for c in combatants:
+			if c != mover and not c.is_down and c.global_position.distance_to(spot) < c.body_radius + mover.body_radius:
+				free = false
+				break
+		if free:
+			mover.global_position = spot
+			_keep_in_arena(mover)
+			if mover.global_position.distance_to(spot) < 0.05:
+				return spot
+	return fighter.global_position + Vector3.BACK * distance
 
 
 ## A floating number or word that rises and fades above a fighter.
@@ -1258,7 +1740,7 @@ func _update_ui(delta: float) -> void:
 	for member in party:
 		var in_reach := false
 		for enemy in _standing(enemies):
-			if member.gap_to(enemy) <= member.attack_reach and _can_see(member, enemy):
+			if member.gap_to(enemy) <= member.reach() and _can_see(member, enemy):
 				in_reach = true
 				break
 		member.update_reach_ring(member == controlled, in_reach)
@@ -1315,6 +1797,10 @@ func _strike_prompt() -> String:
 			return "Defending..."
 	var parry_hint := "E: can't Parry this" if _strike.def.cannot_be_parried else "E: Parry when the ring turns gold"
 	var defend_hint := "Q: can't Defend this" if _strike.def.cannot_be_blocked else "Q: Defend (%d AP)" % defend_cost
+	if not _strike_targets_can("parry"):
+		parry_hint = "E: %s can't parry" % _names(_strike.targets)
+	if not _strike_targets_can("block"):
+		defend_hint = "Q: %s can't block" % _names(_strike.targets)
 	var prompt := parry_hint + "     " + defend_hint
 	if _flash_time_left > 0.0:
 		prompt = _flash_message + "\n" + prompt
@@ -1327,6 +1813,10 @@ func _controls_hint() -> String:
 			return "W / S: choose     J: select"
 		BattleMenu.Mode.COMBO:
 			return "W / S: choose move     J: add to bar     K: remove last     Space: begin combo"
+		BattleMenu.Mode.SKILLS:
+			return "W / S: choose skill     J: use (ends the turn)     K: back"
+		BattleMenu.Mode.TARGET:
+			return ""
 	var standing := _standing(party)
 	var next_name := ""
 	if standing.size() > 1 and controlled != null:

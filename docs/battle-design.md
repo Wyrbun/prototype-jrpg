@@ -196,49 +196,108 @@ down, which can:
 
 ## Party attacks (milestone 6, built; reworked)
 
-- **J opens the command menu** (fighter name, Attack / Abilities / Items,
-  with Defend: Q / Parry: E as reminders). W/S choose, J select, K close.
-  Abilities and Items are placeholders. Attack needs an enemy within the
-  fighter's `attack_reach` (Knight 0.8 m, Mage 3 m, Archer 6 m; shown by
-  the gold ring around each fighter).
-- **Attack opens the combo bar** (inspired by Legend of Legaia): a move list
-  on top and a bar below. J adds the selected move, K removes the last one,
-  **Space begins** the combo. Moves (`scripts/battle/moves.gd`):
-
-  | Move           | AP | Hits        | Effect                         |
-  |----------------|----|-------------|--------------------------------|
-  | Slash          | 10 | 1 x 1.0     | single hit                     |
-  | Thrust         | 15 | 1 x 1.1     | pierces Defense                |
-  | Double Slash   | 15 | 2 x 0.7     | two hits                       |
-  | Overhead Smash | 30 | 1 x 2.2     | Smash-type, breaks Defense     |
-
-- **Bar length = the fighter's `combo_limit`** (Knight 60, Archer 50,
-  Mage 45), so the bar grows for characters with longer combos. Moves are
-  **paid from party AP**; the part of the bar you can't afford right now is
-  shown locked (red hatching).
+- **The command menu opens on each party turn**: Attack / Wait / Abilities /
+  Items (placeholder), with Defend: Q / Parry: E as reminders. W/S choose,
+  J select, K back.
+- **Attack opens the combo bar** (inspired by Legend of Legaia) with the
+  class's own attacks. J adds the selected move, K removes the last one,
+  **Space begins**. The bar is as long as the **class's AP** (Knight 60,
+  Archer 70, Mage 90, Cleric 60); moves are **paid from party AP**, and the
+  part you can't afford right now is shown locked (red hatching).
+- **Target:** the nearest enemy in the fighter's normal reach; if there is
+  none, the nearest one a long-range attack can reach (Holy Light, Meteor
+  Strike). Moves that can't reach the target are greyed out. If the target
+  falls mid-combo, the rest goes to the nearest enemy still in reach.
 - The combo plays hit by hit, then **the turn ends**. While it plays, the
   menus hide and the bar drops to a strip at the bottom with a **white
-  playhead** sweeping through it.
-- A **1 s "READY" lead-in** (`combo_lead_in`) sits in front of the strip;
-  the playhead crosses it before the first move starts, so the player can
-  get ready. J presses during the lead-in are ignored.
-- **Each move has its own animation timing** (`duration`: Slash 0.55 s,
-  Thrust 0.7 s, Double Slash 0.9 s, Overhead Smash 1.2 s), so the playhead
-  speeds up and slows down per block. Hits land along the block, the last one
-  at its end. Players can time off the playhead or (later) the animations.
-- **Timing boxes:** every **hit** has its own box (`window`, ~0.15 s) ending
-  where that hit lands, so Double Slash has two (middle and end of its block).
-  - **J inside a box = Perfect** for that hit: +50% damage on it, and
-    **max AP rises by 5** for the rest of the fight. Box turns gold.
-  - **J outside the next hit's box = miss:** box turns red, **the chain ends
-    immediately** (AP already spent stays spent), and **max AP resets to 100**.
-  - **No press:** normal hit, chain continues (confirmed). Timing is an
-    optional risk, like Legend of Legaia.
-- **Skill triangle, per hit:** a **Counter** stance punishes the first hit
-  (25 damage) and stops the combo; **Defense** blocks normal hits, Thrust
-  pierces it, Overhead Smash breaks it (cancels the stance, knocks the enemy
-  back 30); an **Attack-type hit on an enemy preparing Smash** interrupts it.
+  playhead**, after a 1 s **READY** lead-in.
+- **Timing boxes:** every hit has its own box ending where it lands.
+  J inside = **Perfect** (+50% damage, max AP +5). J outside = the chain
+  ends and max AP resets. No press = a normal hit (costs 5 of the extra
+  max AP).
+- **Skill triangle, per hit and per enemy hit:** a **Counter** stance
+  punishes the attacker (25 damage) and stops the combo; **Defense** blocks
+  basic attacks, piercing moves ignore it, breaking moves break it; an
+  **Attack-type hit on an enemy preparing Smash** interrupts it.
 - At the start of each party turn **AP is topped up to 30**.
+
+## Classes (built)
+
+All numbers are in `scripts/battle/moves.gd`. Damage = the fighter's
+attack_power x the hit's multiplier.
+
+### Knight (200 HP, 60 AP, can Block and Parry)
+| Attack | AP | Hits | Notes |
+|---|---|---|---|
+| Slash | 10 | 1.0 | basic |
+| Thrust | 20 | 1.2 | ignores Defense |
+| Double Slash | 15 | 0.7 x2 | basic |
+| Smash | 30 | 2.2 | Smash-type, breaks Defense |
+
+| Skill | AP | Effect |
+|---|---|---|
+| Light Heal | 25 | heals 20% of max HP |
+| Brace | 20 | takes 50% less damage, 3 Knight turns |
+| Shield Bash | 30 | rushes next to an enemy within 9 m (in sight); next turn starts a third of the way along, like Wait |
+| Taunt | 60 | enemies within 6 m go after the Knight for 3 Knight turns |
+
+### Archer (150 HP, 70 AP, cannot Block or Parry)
+| Attack | AP | Hits | Notes |
+|---|---|---|---|
+| Shoot | 10 | 1.0 | basic |
+| Triple Shot | 25 | 0.6, 0.6, 0.7 | lands at 20%, 40% and 100% of the block (last one delayed) |
+| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar |
+| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away |
+
+| Skill | AP | Effect |
+|---|---|---|
+| Jump | 30 | move a marker with WASD (up to 8 m) and leap there |
+| Riposte | 40 | counter stance for 4 s: a strike on the Archer is countered (2x attack power) and the enemy is pushed 3 m away |
+| True Sight | 50 | every ally's reach +25% (moves with their own reach too), 3 Archer turns |
+| Agility | 70 | the Archer's attacks get one extra hit, 5 Archer turns |
+
+### Mage (100 HP, 90 AP, can Parry, cannot Block)
+| Attack | AP | Hits | Notes |
+|---|---|---|---|
+| Energy Blast | 15 | 1.0 | everyone within 1.8 m of the target |
+| Firebolt | 30 | 1.6 | a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it |
+| Tempest | 45 | 1.2 | everyone within 3.5 m of the Mage, pushed 6 m away |
+| Meteor Strike | 90 | 1.8 | every enemy, anywhere; breaks Defense |
+
+| Skill | AP | Effect |
+|---|---|---|
+| Arcane Barrier | 20 | the next hit on the Mage does nothing; the Mage's next combo costs double |
+| Concentrate | 40 | AP recharges twice as fast for 10 s |
+| Teleport | 60 | appear next to a chosen ally |
+
+### Cleric (130 HP, 60 AP, can Block, cannot Parry)
+| Attack | AP | Hits | Notes |
+|---|---|---|---|
+| Bash | 10 | 0.8 per hit | the 1st Bash has 1 hit, the 2nd 2 hits, and so on; from the 4th Bash the hits land at random moments |
+| Divine Barrier | 25 | 1.0 | also gives allies within 4 m a barrier of 10% of their max HP |
+| Holy Light | 30 | 1.4 | reach 9 m; breaks Defense |
+
+| Skill | AP | Effect |
+|---|---|---|
+| Healing | 25 | an ally (or self) heals 25% of their max HP |
+| Shielding | 40 | every ally gets a shield of 30% of their max HP |
+| Haste | 50 | an ally runs 20% faster, 3 Cleric turns |
+| Full Cure | 60 | an ally is fully healed |
+
+### Shared rules
+- **Durations count the caster's turns**: "3 turns" runs out when the
+  caster's third turn after using it begins. Riposte and Concentrate run on
+  seconds instead, counted while the timeline runs.
+- **Barriers and shields** soak up damage before HP and stack, up to half
+  of max HP. Shown as a light-blue strip on the HP bar.
+- **Damage order on a party member:** Arcane Barrier (ignores the hit) ->
+  Brace (halves it) -> shields -> HP.
+- **Block / Parry per class:** one E or Q press still covers everyone caught
+  in a strike, but only those whose class can parry/block benefit; the rest
+  take the full hit. A missed Parry only penalizes classes that can parry.
+- **"Pushes back"** (Gale Shot, Tempest, Riposte) is a physical shove across
+  the arena, stopped by walls and rocks.
+- Effects show as tags next to the HP bars (BRACE 2, SHIELD 26, RIPOSTE 3s...).
 
 ### Parked for later (from the earlier attack design)
 

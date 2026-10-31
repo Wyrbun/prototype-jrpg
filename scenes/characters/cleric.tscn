@@ -7,11 +7,14 @@ albedo_color = Color(0.95, 0.85, 0.55, 1)
 
 [node name="Cleric" instance=ExtResource("1_base")]
 display_name = "Cleric"
-max_hp = 95
+class_id = "cleric"
+max_hp = 130
+combo_limit = 60.0
+can_block = true
+can_parry = false
+attack_power = 11
+attack_reach = 1.5
 speed = 9.0
-attack_power = 10
-attack_reach = 2.0
-combo_limit = 45.0
 move_speed = 4.8
 
 [node name="Body" parent="."]

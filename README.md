@@ -56,17 +56,31 @@ area and the enemy strikes immediately. Each enemy has its own skills and
 area shapes: cones, circles, lines and donuts.
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu
-opens: **Attack** (needs an enemy within the gold reach ring around the
-fighter) or **Wait** (spends no AP and brings the next turn sooner).
+opens: **Attack** (needs an enemy in reach), **Abilities** (one skill, then
+the turn ends), or **Wait** (spends no AP and brings the next turn sooner).
 
-**Combos.** Attack opens a Legaia-style combo bar. Pick moves (Slash, Thrust,
-Double Slash, Overhead Smash) to fill the bar with party AP, then watch a
-playhead sweep across it. Every hit has a timing box: press **J** inside it for
-a **Perfect** hit.
+**Combos.** Attack opens a Legaia-style combo bar with the class's own
+attacks. Fill the bar with party AP (the bar is as long as the class's AP),
+then watch a playhead sweep across it. Every hit has a timing box: press **J**
+inside it for a **Perfect** hit.
 
 **Enemy strikes.** When an enemy attacks, a ring shrinks onto the target.
 Press **E** as it turns gold to **Parry**, or **Q** to **Defend** (costs AP;
 the damage you take comes back if you aren't hit again before your next turn).
+Not every class can do both (see below).
+
+## Classes
+
+| Class | HP | AP | Block / Parry | Attacks | Skills |
+|---|---|---|---|---|---|
+| Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Double Slash, Smash (breaks Defense) | Light Heal, Brace, Shield Bash, Taunt |
+| Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow, Gale Shot | Jump, Riposte, True Sight, Agility |
+| Mage | 100 | 90 | Parry only | Energy Blast, Firebolt, Tempest, Meteor Strike | Arcane Barrier, Concentrate, Teleport |
+| Cleric | 130 | 60 | Block only | Bash, Divine Barrier, Holy Light | Healing, Shielding, Haste, Full Cure |
+
+A class's **AP** is the most it can spend in one turn, on a combo or a skill;
+the AP itself comes from the shared party pool. Effects that last "3 turns"
+count the caster's turns. Every number lives in `scripts/battle/moves.gd`.
 
 **The skill triangle.** Attack beats Smash, Smash breaks Defense, Defense
 blocks Attack, and Counter punishes anything that hits it. It applies both to
@@ -85,6 +99,8 @@ resets max AP to 100, so the better you play, the more you have to lose.
 | Between turns | Tab | Switch to the next party member |
 | Your turn | W / S, J | Choose and select in the menu |
 | Combo bar | J / K | Add a move / remove the last one (or go back) |
+| Abilities | W / S, J / K | Choose a skill, use it / go back |
+| Choosing a target | W / S (Jump: WASD), J / K | Pick who or where, confirm / go back |
 | Combo bar | Space | Begin the combo |
 | Combo playing | J | Timed hit: press inside the box for a Perfect |
 | Enemy strike | E | Parry (when the ring turns gold) |
@@ -114,7 +130,7 @@ scripts/battle/battle_arena.gd    the battle flow: timeline, turns, strikes, com
 scripts/battle/combatant.gd       shared by every fighter: stats, HP, timeline, enemy skill setup
 scripts/battle/skills.gd          the skill triangle: names, colors, default areas
 scripts/battle/enemy_skill.gd     one enemy skill: shape, damage, wind-up, rules (edited in the Inspector)
-scripts/battle/moves.gd           the party's combo moves: AP cost, hits, timing, effects
+scripts/battle/moves.gd           every class's attacks and skills: AP cost, hits, timing, areas, effects
 scripts/battle/attack_range.gd    an enemy's threat area drawn on the floor
 scripts/battle/timeline_bar.gd    the turn-order bar
 scripts/battle/battle_menu.gd     the command menu and combo bar
@@ -147,7 +163,7 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Positioning between turns, Wait command (current test setup)
 - [x] Enemy template: design enemy skills in the Inspector without code
 - [x] Boss rush: 11 rounds, arenas with rocks and a pit, multi-enemy fights
-- [ ] Class skills (Knight, Archer, Mage, Cleric)
+- [x] Classes: Knight, Archer, Mage, Cleric, each with attacks and skills
 - [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass

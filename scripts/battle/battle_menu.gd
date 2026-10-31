@@ -9,8 +9,10 @@ extends Control
 ## it a bar as long as the fighter's combo limit. Each move fills part of the
 ## bar according to its AP cost. The part of the bar the party can't afford
 ## right now is shown locked.
+## Abilities: the class's skills in the same list style; choosing one may ask
+## for a target (TARGET mode shows the prompt).
 
-enum Mode { HIDDEN, COMMANDS, COMBO, EXECUTING }
+enum Mode { HIDDEN, COMMANDS, COMBO, EXECUTING, SKILLS, TARGET }
 
 ## Pixels of bar per AP, so a bigger combo limit means a longer bar.
 const PX_PER_AP := 8.0
@@ -27,10 +29,21 @@ var command_enabled: Array[bool] = [true, false, false]
 var command_notes: PackedStringArray = ["", "coming later", "coming later"]
 var command_index := 0
 
+## The list on screen: the fighter's attacks (COMBO) or skills (SKILLS).
+## Each entry's "cost" is what it costs right now.
 var moves: Array[Dictionary] = []
+## Per entry: false = greyed out, with the reason in move_notes.
+var move_usable: Array[bool] = []
+var move_notes: PackedStringArray = []
 var move_index := 0
 ## Indices into moves, in the order they'll be performed.
 var combo: Array[int] = []
+## One entry per combo slot: what that slot will actually do, worked out when
+## it was added: "name", "color", "cost", "times" (where each hit lands, as a
+## fraction of the block) and "window" (timing box size as a fraction).
+var plan: Array[Dictionary] = []
+## TARGET mode: what to show, e.g. "Healing: choose an ally".
+var target_prompt := ""
 var combo_limit: float = 50.0
 var ap_available: float = 0.0
 ## During execution: which combo slot is playing (-1 = none yet).
@@ -62,8 +75,8 @@ func _process(_delta: float) -> void:
 
 func combo_cost() -> float:
 	var total := 0.0
-	for index in combo:
-		total += float(moves[index]["cost"])
+	for entry in plan:
+		total += float(entry["cost"])
 	return total
 
 
@@ -80,6 +93,13 @@ func _draw() -> void:
 	if mode == Mode.COMBO:
 		_draw_move_list(font)
 		_draw_combo_bar(font)
+	elif mode == Mode.SKILLS:
+		_draw_move_list(font)
+	elif mode == Mode.TARGET:
+		var panel := Rect2((size.x - 520) / 2.0, size.y - 250, 520, 62)
+		draw_style_box(_panel_style, panel)
+		_text(font, panel.position + Vector2(16, 27), target_prompt, 19, GOLD)
+		_text(font, panel.position + Vector2(16, 50), "J: confirm     K: back", 15, Color(0.75, 0.75, 0.8))
 
 
 # --- Command menu ----------------------------------------------------------
@@ -111,28 +131,34 @@ func _draw_commands(font: Font) -> void:
 func _draw_move_list(font: Font) -> void:
 	var width := 560.0
 	var row_height := 30.0
-	var panel := Rect2((size.x - width) / 2.0, size.y - 375, width, 16 + moves.size() * row_height)
+	width = 600.0
+	var top := size.y - 400 if mode == Mode.COMBO else size.y - 340
+	var panel := Rect2((size.x - width) / 2.0, top, width, 16 + moves.size() * row_height)
 	draw_style_box(_panel_style, panel)
-	var room := minf(combo_limit, ap_available) - combo_cost()
+	var room := minf(combo_limit, ap_available) - (combo_cost() if mode == Mode.COMBO else 0.0)
 	for i in moves.size():
 		var move := moves[i]
 		var row := Rect2(panel.position + Vector2(8, 8 + i * row_height), Vector2(width - 16, row_height - 2))
-		var fits := float(move["cost"]) <= room
-		if i == move_index and mode == Mode.COMBO:
+		var usable := i >= move_usable.size() or move_usable[i]
+		var fits := float(move["cost"]) <= room and usable
+		if i == move_index:
 			draw_rect(row, Color(GOLD, 0.22))
 			_text(font, row.position + Vector2(6, 21), ">", 18, GOLD)
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
 		draw_rect(Rect2(row.position + Vector2(24, 8), Vector2(12, 12)), move["color"] if fits else Color(0.35, 0.35, 0.4))
 		_text(font, row.position + Vector2(44, 21), move["name"], 17, color)
 		_text(font, row.position + Vector2(200, 21), "%d AP" % move["cost"], 17, GOLD if fits else color)
-		_text(font, row.position + Vector2(270, 21), move["desc"], 15, color.darkened(0.15))
+		var desc: String = move["desc"]
+		if not usable and i < move_notes.size() and move_notes[i] != "":
+			desc = move_notes[i]
+		_text(font, row.position + Vector2(270, 21), desc, 15, color.darkened(0.15))
 
 
 func _draw_combo_bar(font: Font) -> void:
 	var bar_width := combo_limit * PX_PER_AP
 	# While building, the bar sits under the move list; while the combo plays,
 	# it drops to the bottom edge of the screen.
-	var bar_y := size.y - 52 if mode == Mode.EXECUTING else size.y - 205
+	var bar_y := size.y - 52 if mode == Mode.EXECUTING else size.y - 232
 	var bar_x := (size.x - bar_width) / 2.0
 	if mode == Mode.EXECUTING:
 		bar_x += LEAD_IN_PX / 2.0  # keep lead-in + strip centered together
@@ -159,8 +185,8 @@ func _draw_combo_bar(font: Font) -> void:
 			x += 10.0
 
 	var cursor := bar.position.x
-	for slot in combo.size():
-		var move := moves[combo[slot]]
+	for slot in plan.size():
+		var move := plan[slot]
 		var segment := Rect2(cursor, bar.position.y, float(move["cost"]) * PX_PER_AP, bar.size.y)
 		var color: Color = move["color"]
 		if mode == Mode.EXECUTING and slot < executing_slot:
@@ -176,10 +202,10 @@ func _draw_combo_bar(font: Font) -> void:
 		_text(font, Vector2(segment.position.x + (segment.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
 		# One timing box per hit, ending where that hit lands (the last one at
 		# the end of the block): press J while the playhead is inside it.
-		var hit_count := (move["hits"] as Array).size()
-		var box_width := segment.size.x * float(move["window"]) / float(move["duration"])
-		for hit in hit_count:
-			var hit_x := segment.position.x + segment.size.x * float(hit + 1) / hit_count
+		var times: Array = move["times"]
+		var box_width := segment.size.x * float(move["window"])
+		for hit in times.size():
+			var hit_x := segment.position.x + segment.size.x * float(times[hit])
 			var box := Rect2(hit_x - box_width, segment.position.y - 3, box_width, segment.size.y + 6)
 			var result := 0
 			if slot < slot_results.size() and hit < (slot_results[slot] as Array).size():
@@ -212,11 +238,11 @@ func _draw_combo_bar(font: Font) -> void:
 	if mode == Mode.EXECUTING and executing_slot >= 0 and lead_in_progress < 0.0:
 		# Playhead: where in the combo we are right now.
 		var x := cursor  # past the last move = finished
-		if executing_slot < combo.size():
+		if executing_slot < plan.size():
 			var start := bar.position.x
 			for slot in executing_slot:
-				start += float(moves[combo[slot]]["cost"]) * PX_PER_AP
-			var width := float(moves[combo[executing_slot]]["cost"]) * PX_PER_AP
+				start += float(plan[slot]["cost"]) * PX_PER_AP
+			var width := float(plan[executing_slot]["cost"]) * PX_PER_AP
 			x = start + width * slot_progress
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color.WHITE, 3.0)

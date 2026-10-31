@@ -16,13 +16,19 @@ enum Team { PARTY, ENEMY }
 @export var speed: float = 10.0
 
 @export_group("Combat")
+## Party only: which class's attacks and skills this fighter uses
+## ("knight", "archer", "mage", "cleric"; see scripts/battle/moves.gd).
+@export var class_id: String = ""
+## Party only: whether Defend (Q) and Parry (E) work for this fighter.
+@export var can_block: bool = true
+@export var can_parry: bool = true
 ## Damage of a normal Attack. Smash multiplies it.
 @export var attack_power: int = 12
 ## How far this fighter can hit from, in meters between body edges.
 ## Small for melee, large for ranged fighters.
 @export var attack_reach: float = 0.8
-## Party only: how much AP of moves fits in this fighter's combo bar.
-## A bigger limit means a longer bar and longer combos.
+## Party only: the class's AP: the most it can spend in one turn (the
+## combo bar's length, and the limit for a skill's cost).
 @export var combo_limit: float = 50.0
 ## Enemies only: the skills it can prepare. Add an element, choose
 ## "New EnemySkill" and fill it in. Left empty, the enemy uses a basic
@@ -73,6 +79,15 @@ var loaded_skill: int = Skills.NONE
 var skill_revealed := false
 ## Defense or Counter while that stance is active (the whole casting zone).
 var stance: int = Skills.NONE
+
+## Timed effects on this fighter, by name ("brace", "haste", "taunt"...).
+## Each counts down on its caster's turns: {"turns": n, "caster": Combatant}.
+## Effects without a turn count last until used up (e.g. "arcane_barrier").
+var statuses := {}
+## Barrier/shield HP: soaks up damage before HP does.
+var shield: int = 0
+## Archer's Riposte: seconds of counter stance left.
+var riposte_left := 0.0
 
 var _skill_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
@@ -153,6 +168,8 @@ func update_reach_ring(is_controlled: bool, enemy_in_reach: bool) -> void:
 	if _reach_ring == null:
 		return
 	_reach_ring.visible = not is_down
+	var grow := (body_radius + reach()) / (body_radius + attack_reach)
+	_reach_ring.scale = Vector3(grow, 1.0, grow)
 	var alpha := 0.85 if is_controlled else 0.25
 	if enemy_in_reach:
 		alpha = minf(alpha + 0.15, 1.0)
@@ -171,7 +188,20 @@ func set_highlighted(on: bool) -> void:
 
 ## Loses HP. If recoverable_hit is true (a defended hit), the HP lost can
 ## come back later. Any new hit locks in earlier recoverable damage.
-func take_damage(amount: int, recoverable_hit: bool) -> void:
+## Returns the HP actually lost. Arcane Barrier ignores the hit entirely,
+## Brace halves it, and shields soak up what's left before HP.
+func take_damage(amount: int, recoverable_hit: bool) -> int:
+	if statuses.has("arcane_barrier"):
+		statuses.erase("arcane_barrier")
+		return 0
+	if statuses.has("brace"):
+		amount = ceili(amount * 0.5)
+	if shield > 0:
+		var absorbed := mini(shield, amount)
+		shield -= absorbed
+		amount -= absorbed
+	if amount <= 0:
+		return 0
 	recoverable = 0
 	var lost := mini(amount, hp)
 	hp -= lost
@@ -179,6 +209,65 @@ func take_damage(amount: int, recoverable_hit: bool) -> void:
 		_go_down()
 	elif recoverable_hit:
 		recoverable = lost
+	return lost
+
+
+func heal(amount: int) -> int:
+	var before := hp
+	hp = mini(hp + amount, max_hp)
+	return hp - before
+
+
+## Adds barrier HP, up to half of max HP.
+func add_shield(amount: int) -> int:
+	var before := shield
+	shield = mini(shield + amount, max_hp / 2)
+	return shield - before
+
+
+func add_status(status_name: String, turns: int, caster: Combatant) -> void:
+	statuses[status_name] = {"turns": turns, "caster": caster}
+
+
+## Called at the start of every turn: effects cast by that fighter count
+## down by one, and run out at zero. Returns the names that ran out.
+func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
+	var ended: PackedStringArray = []
+	for status_name in statuses.keys():
+		var entry: Dictionary = statuses[status_name]
+		if entry.get("caster") != turn_owner or int(entry.get("turns", 0)) <= 0:
+			continue
+		entry["turns"] = int(entry["turns"]) - 1
+		if entry["turns"] <= 0:
+			statuses.erase(status_name)
+			ended.append(status_name)
+	return ended
+
+
+## Attack reach right now (True Sight adds 25%).
+func reach() -> float:
+	return attack_reach * (1.25 if statuses.has("true_sight") else 1.0)
+
+
+## Walking speed right now (Haste adds 20%).
+func current_move_speed() -> float:
+	return move_speed * (1.2 if statuses.has("haste") else 1.0)
+
+
+## Short tags for the HP panel, e.g. "BRACE 2  SHIELD 26".
+func status_text() -> String:
+	var tags: PackedStringArray = []
+	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
+			"taunt": "TAUNTED", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST"}
+	for status_name in statuses:
+		var turns := int(statuses[status_name].get("turns", 0))
+		var label: String = labels.get(status_name, String(status_name).to_upper())
+		tags.append("%s %d" % [label, turns] if turns > 0 else label)
+	if shield > 0:
+		tags.append("SHIELD %d" % shield)
+	if riposte_left > 0.0:
+		tags.append("RIPOSTE %.0fs" % ceilf(riposte_left))
+	return "  ".join(tags)
 
 
 ## Gives back recoverable HP. Called when this fighter's turn starts.
@@ -275,7 +364,7 @@ func step(direction: Vector3, delta: float) -> void:
 	if direction.length_squared() < 0.0001:
 		return
 	direction = direction.normalized()
-	global_position += direction * move_speed * delta
+	global_position += direction * current_move_speed() * delta
 	face_toward(direction, delta)
 
 

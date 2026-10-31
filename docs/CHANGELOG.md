@@ -3,6 +3,23 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Classes
+
+- **Knight, Archer, Mage and Cleric** each have their own HP, AP, attacks and
+  skills (Thiago's class sheet). All numbers are in `scripts/battle/moves.gd`.
+- A class's AP is the length of its combo bar and the most it can spend in
+  a turn; AP still comes from the shared party pool.
+- **Abilities** menu: pick a skill, choose a target if it needs one (an
+  ally, an enemy, or a spot for Jump), and the turn ends.
+- New attack mechanics: area hits (circle on the target, line with falloff,
+  circle on self, all enemies), per-move reach, knockback, stun, Bash's
+  growing hits with random timing, delayed last hits, barriers.
+- New effects: Brace, Taunt, True Sight, Agility, Haste, Arcane Barrier,
+  Concentrate, Riposte, shields and barriers. Durations count the caster's
+  turns.
+- Block and Parry now depend on the class (the Archer can do neither).
+- Targeting prefers enemies in normal reach; long-range moves cover the rest.
+
 ## Boss rush and arenas
 
 - The battle scene now loads a **round** from `data/boss_rush.tres`: arena,

@@ -7,11 +7,14 @@ albedo_color = Color(0.6, 0.3, 0.85, 1)
 
 [node name="Mage" instance=ExtResource("1_base")]
 display_name = "Mage"
-max_hp = 80
-speed = 8.0
+class_id = "mage"
+max_hp = 100
+combo_limit = 90.0
+can_block = false
+can_parry = true
 attack_power = 14
 attack_reach = 3.0
-combo_limit = 45.0
+speed = 8.0
 move_speed = 4.5
 
 [node name="Body" parent="."]
