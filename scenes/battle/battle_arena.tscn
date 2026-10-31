@@ -1,0 +1,309 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/battle_arena.gd" id="1_arena"]
+[ext_resource type="Script" path="res://scripts/battle/combatant.gd" id="2_combatant"]
+[ext_resource type="Script" path="res://scripts/battle/timeline_bar.gd" id="3_timeline"]
+[ext_resource type="Script" path="res://scripts/battle/attack_range.gd" id="4_range"]
+[ext_resource type="Script" path="res://scripts/battle/party_status.gd" id="5_status"]
+[ext_resource type="Script" path="res://scripts/battle/battle_menu.gd" id="6_menu"]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.11, 0.12, 0.17, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.65, 0.68, 0.8, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.32, 0.36, 0.33, 1)
+
+[sub_resource type="PlaneMesh" id="Mesh_floor"]
+material = SubResource("Mat_floor")
+size = Vector2(24, 24)
+
+[sub_resource type="CapsuleMesh" id="Mesh_hero"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="BoxMesh" id="Mesh_enemy"]
+size = Vector3(1.6, 1.6, 1.6)
+
+[sub_resource type="BoxMesh" id="Mesh_nose"]
+size = Vector3(0.25, 0.25, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="Mat_fighter"]
+albedo_color = Color(0.25, 0.45, 0.9, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_mage"]
+albedo_color = Color(0.6, 0.3, 0.85, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_archer"]
+albedo_color = Color(0.3, 0.75, 0.4, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_enemy"]
+albedo_color = Color(0.85, 0.25, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_nose"]
+albedo_color = Color(0.95, 0.9, 0.6, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_ap_bg"]
+bg_color = Color(0.08, 0.09, 0.13, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.8, 0.8, 0.9, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_ap_fill"]
+bg_color = Color(0.3, 0.75, 0.95, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="BattleArena" type="Node3D"]
+script = ExtResource("1_arena")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.819152, 0.573576, 0, -0.573576, 0.819152, 0, 7, 13)
+fov = 55.0
+current = true
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("Mesh_floor")
+
+[node name="Party" type="Node3D" parent="."]
+
+[node name="Fighter" type="Node3D" parent="Party"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 4)
+script = ExtResource("2_combatant")
+display_name = "Fighter"
+max_hp = 120
+speed = 10.0
+attack_power = 18
+attack_reach = 0.8
+combo_limit = 60.0
+
+[node name="Body" type="MeshInstance3D" parent="Party/Fighter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("Mesh_hero")
+surface_material_override/0 = SubResource("Mat_fighter")
+
+[node name="Nose" type="MeshInstance3D" parent="Party/Fighter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, -0.45)
+mesh = SubResource("Mesh_nose")
+surface_material_override/0 = SubResource("Mat_nose")
+
+[node name="NameLabel" type="Label3D" parent="Party/Fighter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "Fighter"
+font_size = 48
+outline_size = 12
+
+[node name="Mage" type="Node3D" parent="Party"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
+script = ExtResource("2_combatant")
+display_name = "Mage"
+max_hp = 80
+speed = 8.0
+attack_power = 14
+attack_reach = 3.0
+combo_limit = 45.0
+move_speed = 4.5
+
+[node name="Body" type="MeshInstance3D" parent="Party/Mage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("Mesh_hero")
+surface_material_override/0 = SubResource("Mat_mage")
+
+[node name="Nose" type="MeshInstance3D" parent="Party/Mage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, -0.45)
+mesh = SubResource("Mesh_nose")
+surface_material_override/0 = SubResource("Mat_nose")
+
+[node name="NameLabel" type="Label3D" parent="Party/Mage"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "Mage"
+font_size = 48
+outline_size = 12
+
+[node name="Archer" type="Node3D" parent="Party"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 4)
+script = ExtResource("2_combatant")
+display_name = "Archer"
+max_hp = 90
+speed = 13.0
+attack_power = 11
+attack_reach = 6.0
+combo_limit = 50.0
+move_speed = 5.5
+
+[node name="Body" type="MeshInstance3D" parent="Party/Archer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("Mesh_hero")
+surface_material_override/0 = SubResource("Mat_archer")
+
+[node name="Nose" type="MeshInstance3D" parent="Party/Archer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, -0.45)
+mesh = SubResource("Mesh_nose")
+surface_material_override/0 = SubResource("Mat_nose")
+
+[node name="NameLabel" type="Label3D" parent="Party/Archer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "Archer"
+font_size = 48
+outline_size = 12
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Golem" type="Node3D" parent="Enemies"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -2)
+script = ExtResource("2_combatant")
+display_name = "Golem"
+team = 1
+max_hp = 240
+speed = 9.0
+move_speed = 2.5
+turn_speed_degrees = 90.0
+body_radius = 0.95
+
+[node name="Body" type="MeshInstance3D" parent="Enemies/Golem"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+mesh = SubResource("Mesh_enemy")
+surface_material_override/0 = SubResource("Mat_enemy")
+
+[node name="Nose" type="MeshInstance3D" parent="Enemies/Golem"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, -0.95)
+mesh = SubResource("Mesh_nose")
+surface_material_override/0 = SubResource("Mat_nose")
+
+[node name="NameLabel" type="Label3D" parent="Enemies/Golem"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "Golem"
+font_size = 64
+outline_size = 16
+
+[node name="AttackRange" type="MeshInstance3D" parent="Enemies/Golem"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+script = ExtResource("4_range")
+radius = 3.7
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="TimelineBar" type="Control" parent="UI"]
+layout_mode = 3
+anchor_left = 0.15
+anchor_right = 0.85
+offset_top = 16.0
+offset_bottom = 96.0
+mouse_filter = 2
+script = ExtResource("3_timeline")
+
+[node name="TurnLabel" type="Label" parent="UI"]
+layout_mode = 3
+anchor_right = 1.0
+offset_top = 100.0
+offset_bottom = 140.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+
+[node name="WarningLabel" type="Label" parent="UI"]
+layout_mode = 3
+anchor_right = 1.0
+offset_top = 142.0
+offset_bottom = 210.0
+theme_override_colors/font_color = Color(1, 0.5, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+
+[node name="APBar" type="ProgressBar" parent="UI"]
+layout_mode = 3
+anchor_left = 0.35
+anchor_top = 1.0
+anchor_right = 0.65
+anchor_bottom = 1.0
+offset_top = -92.0
+offset_bottom = -62.0
+theme_override_styles/background = SubResource("Style_ap_bg")
+theme_override_styles/fill = SubResource("Style_ap_fill")
+show_percentage = false
+
+[node name="APLabel" type="Label" parent="UI/APBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ControlsLabel" type="Label" parent="UI"]
+layout_mode = 3
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -50.0
+offset_bottom = -18.0
+theme_override_colors/font_color = Color(0.85, 0.87, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+
+[node name="PartyStatus" type="Control" parent="UI"]
+layout_mode = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -152.0
+offset_right = 360.0
+offset_bottom = -58.0
+mouse_filter = 2
+script = ExtResource("5_status")
+
+[node name="EnemyStatus" type="Control" parent="UI"]
+layout_mode = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -380.0
+offset_top = -152.0
+offset_right = -30.0
+offset_bottom = -58.0
+mouse_filter = 2
+script = ExtResource("5_status")
+
+[node name="BattleMenu" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_menu")
