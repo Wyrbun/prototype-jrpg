@@ -3,6 +3,13 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Combo target selection
+
+- When more than one enemy is in reach, **Attack asks which one to hit**:
+  W / S cycles (nearest first, marked with a gold ring), J confirms, K goes
+  back. With a single choice it skips straight to the combo bar.
+- The combo bar shows "Target: <enemy>" above it.
+
 ## Readable enemy casts
 
 - The **casting zone** (orange) now starts at 55 instead of 75, and the

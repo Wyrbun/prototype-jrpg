@@ -247,9 +247,11 @@ down, which can:
   **Space begins**. The bar is as long as the **class's AP** (Knight 60,
   Archer 70, Mage 90, Cleric 60); moves are **paid from party AP**, and the
   part you can't afford right now is shown locked (red hatching).
-- **Target:** the nearest enemy in the fighter's normal reach; if there is
-  none, the nearest one a long-range attack can reach (Holy Light, Meteor
-  Strike). Moves that can't reach the target are greyed out. If the target
+- **Target:** if more than one enemy is in reach, Attack first asks which
+  one (W / S cycles, a gold ring marks it, J confirms, K goes back); the
+  default is the nearest in the fighter's normal reach, otherwise the nearest
+  a long-range attack can reach (Holy Light, Meteor Strike). With only one
+  choice it goes straight to the combo bar, which shows the target's name. Moves that can't reach the target are greyed out. If the target
   falls mid-combo, the rest goes to the nearest enemy still in reach.
 - The combo plays hit by hit, then **the turn ends**. While it plays, the
   menus hide and the bar drops to a strip at the bottom with a **white

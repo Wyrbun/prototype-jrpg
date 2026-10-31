@@ -71,7 +71,8 @@ area shapes: cones, circles, lines and donuts.
 opens: **Attack** (needs an enemy in reach), **Abilities** (one skill, then
 the turn ends), or **Wait** (spends no AP and brings the next turn sooner).
 
-**Combos.** Attack opens a Legaia-style combo bar with the class's own
+**Combos.** Attack asks which enemy to hit when more than one is in reach
+(W / S, then J), then opens a Legaia-style combo bar with the class's own
 attacks. Fill the bar with party AP (the bar is as long as the class's AP),
 then watch a playhead sweep across it. Every hit has a timing box: press **J**
 inside it for a **Perfect** hit.

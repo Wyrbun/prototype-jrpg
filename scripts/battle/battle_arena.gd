@@ -221,6 +221,8 @@ var _pending_skill: Dictionary = {}
 var _target_choices: Array[Combatant] = []
 var _target_index := 0
 var _target_marker: MeshInstance3D = null
+## True while picking which enemy a combo will hit (TARGET mode for Attack).
+var _choosing_attack_target := false
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
@@ -549,6 +551,9 @@ func _run_enemy_turn(fighter: Combatant) -> void:
 func _end_turn() -> void:
 	if active == null:
 		return
+	if _choosing_attack_target:
+		_choosing_attack_target = false
+		_clear_target_marker()
 	if active != controlled:
 		active.set_highlighted(false)
 	_send_to_start(active)
@@ -1162,7 +1167,7 @@ func _menu_input(event: InputEvent) -> void:
 				if not battle_menu.command_enabled[index]:
 					_flash("%s: %s" % [battle_menu.commands[index], battle_menu.command_notes[index]])
 				elif index == 0:
-					_open_combo_bar()
+					_choose_attack_target()
 				elif index == 1:
 					_open_skills()
 				elif index == 2:
@@ -1184,7 +1189,11 @@ func _menu_input(event: InputEvent) -> void:
 				_confirm_target()
 			elif cancel:
 				_clear_target_marker()
-				_menu_mode = BattleMenu.Mode.SKILLS
+				if _choosing_attack_target:
+					_choosing_attack_target = false
+					_menu_mode = BattleMenu.Mode.COMMANDS
+				else:
+					_menu_mode = BattleMenu.Mode.SKILLS
 		BattleMenu.Mode.COMBO:
 			if up:
 				battle_menu.move_index = (battle_menu.move_index - 1 + _moves.size()) % _moves.size()
@@ -1219,8 +1228,31 @@ func _wait_command() -> void:
 			break
 
 
-func _open_combo_bar() -> void:
-	_combo_target = _attack_target()
+## Attack: if more than one enemy is in reach, pick which one the combo hits
+## (W / S, nearest first); with only one, go straight to the combo bar.
+func _choose_attack_target() -> void:
+	var first := _attack_target()
+	var choices: Array[Combatant] = []
+	for enemy in _standing(enemies):
+		for move in Moves.attacks(controlled.class_id):
+			if _can_target(controlled, enemy, move):
+				choices.append(enemy)
+				break
+	choices.sort_custom(func(a, b): return controlled.gap_to(a) < controlled.gap_to(b))
+	if first != null:
+		choices.erase(first)
+		choices.push_front(first)  # the default pick: nearest in normal reach
+	if choices.size() <= 1:
+		_open_combo_bar(first)
+		return
+	_target_choices = choices
+	_target_index = 0
+	_choosing_attack_target = true
+	_begin_targeting({"name": "Attack", "target": Moves.Target.ENEMY, "range": 0.0}, "Attack: choose an enemy (W / S)")
+
+
+func _open_combo_bar(target: Combatant = null) -> void:
+	_combo_target = target if target != null else _attack_target()
 	_moves = Moves.attacks(controlled.class_id)
 	var doubled := controlled.statuses.has("arcane_cost")
 	var usable: Array[bool] = []
@@ -1750,6 +1782,10 @@ func _confirm_target() -> void:
 	if not _target_choices.is_empty() and _pending_skill["target"] != Moves.Target.POINT:
 		chosen = _target_choices[_target_index]
 	_clear_target_marker()
+	if _choosing_attack_target:
+		_choosing_attack_target = false
+		_open_combo_bar(chosen)
+		return
 	_use_skill(_pending_skill, chosen, point)
 
 
@@ -1983,6 +2019,7 @@ func _update_ui(delta: float) -> void:
 	battle_menu.mode = _menu_mode if _party_turn() and not _game_over else BattleMenu.Mode.HIDDEN
 	if controlled != null:
 		battle_menu.fighter_name = controlled.display_name
+		battle_menu.target_name = _combo_target.display_name if _combo_target != null else ""
 		battle_menu.show_defend = controlled.can_block
 		battle_menu.show_parry = controlled.can_parry
 		battle_menu.combo_limit = controlled.combo_limit

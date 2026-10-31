@@ -45,6 +45,8 @@ var combo: Array[int] = []
 ## it was added: "name", "color", "cost", "times" (where each hit lands, as a
 ## fraction of the block) and "window" (timing box size as a fraction).
 var plan: Array[Dictionary] = []
+## The enemy the combo will hit, shown above the combo bar.
+var target_name := ""
 ## TARGET mode: what to show, e.g. "Healing: choose an ally".
 var target_prompt := ""
 var combo_limit: float = 50.0
@@ -178,6 +180,8 @@ func _draw_combo_bar(font: Font) -> void:
 	var header := "%d / %d AP" % [used, affordable]
 	if affordable < combo_limit:
 		header += "   (limit %d)" % combo_limit
+	if target_name != "":
+		header = "Target: %s     %s" % [target_name, header]
 	var header_size := font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 17)
 	if mode != Mode.EXECUTING:  # the AP bar already says this during the combo
 		_text(font, Vector2(bar.position.x + (bar_width - header_size.x) / 2.0, bar.position.y - 8), header, 17, GOLD)
