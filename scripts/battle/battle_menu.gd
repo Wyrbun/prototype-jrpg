@@ -28,6 +28,9 @@ var command_enabled: Array[bool] = [true, false, false]
 ## Shown next to a disabled command, e.g. "no enemy in reach".
 var command_notes: PackedStringArray = ["", "coming later", "coming later"]
 var command_index := 0
+## Which reaction reminders to show above the menu (depends on the class).
+var show_defend := true
+var show_parry := true
 
 ## The list on screen: the fighter's attacks (COMBO) or skills (SKILLS).
 ## Each entry's "cost" is what it costs right now.
@@ -108,8 +111,13 @@ func _draw_commands(font: Font) -> void:
 	var panel := Rect2(40, 200, 280, 40 + commands.size() * 38)
 	var dimmed := mode != Mode.COMMANDS
 	_text(font, panel.position + Vector2(4, -12), fighter_name, 22, GOLD)
-	_text(font, panel.position + Vector2(panel.size.x - 110, -30), "Defend: Q", 15, Color(0.6, 0.8, 1.0))
-	_text(font, panel.position + Vector2(panel.size.x - 110, -10), "Parry: E", 15, Color(1.0, 0.85, 0.3))
+	# Reaction reminders, only for what this class can do (stacked upward).
+	var reminder_y := -10.0
+	if show_parry:
+		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), "Parry: E", 15, Color(1.0, 0.85, 0.3))
+		reminder_y -= 20.0
+	if show_defend:
+		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), "Defend: Q", 15, Color(0.6, 0.8, 1.0))
 	draw_style_box(_panel_style, panel)
 
 	for i in commands.size():

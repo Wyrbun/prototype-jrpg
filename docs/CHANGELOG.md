@@ -3,6 +3,11 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Reaction reminders per class
+
+- The command menu only shows the reaction keys the current class can use:
+  Knight both, Mage "Parry: E", Cleric "Defend: Q", Archer neither.
+
 ## Fix: title screen error
 
 - Choosing an option on the title screen raised a script error right after

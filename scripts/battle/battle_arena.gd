@@ -1956,6 +1956,8 @@ func _update_ui(delta: float) -> void:
 	battle_menu.mode = _menu_mode if _party_turn() and not _game_over else BattleMenu.Mode.HIDDEN
 	if controlled != null:
 		battle_menu.fighter_name = controlled.display_name
+		battle_menu.show_defend = controlled.can_block
+		battle_menu.show_parry = controlled.can_parry
 		battle_menu.combo_limit = controlled.combo_limit
 		battle_menu.ap_available = _ap_before_combo if _menu_mode == BattleMenu.Mode.EXECUTING else ap
 	if _game_over:
