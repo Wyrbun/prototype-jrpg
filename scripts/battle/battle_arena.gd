@@ -1,3 +1,4 @@
+class_name BattleArena
 extends Node3D
 ## The battle scene's main script.
 ##
@@ -155,6 +156,18 @@ class Strike:
 ## The round being played, kept across scene reloads (0-based; -1 = not
 ## chosen yet, so start_round is used).
 static var _round_index := -1
+## True when the title screen started the tutorial instead of a round.
+static var tutorial_mode := false
+
+## The tutorial's fight (data/tutorial.tres).
+@export var tutorial_encounter: Encounter
+## The tutorial's guide, when tutorial_mode is on.
+var tutorial: TutorialDirector = null
+## The tutorial pauses the whole fight while it explains something.
+var tutorial_pause := false
+## Counts of things the player has done this fight ("parries", "perfects",
+## "combos_mage"...). The tutorial checks its goals against these.
+var stats := {}
 
 var arena: Arena = null
 var encounter: Encounter = null
@@ -251,7 +264,14 @@ func _ready() -> void:
 	_camera_offset = camera.global_basis.z * camera_distance
 	camera.global_position = _camera_focus() + _camera_offset
 	print("%s! Party: %s  vs  Enemies: %s" % [encounter.title, _names(party), _names(enemies)])
-	_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
+	if tutorial_mode:
+		for c in combatants:
+			c.cannot_fall = true
+		tutorial = TutorialDirector.new()
+		tutorial.battle = self
+		add_child(tutorial)
+	else:
+		_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
 
 
 ## Builds the current round: its arena, then the party and the enemies
@@ -261,7 +281,7 @@ func _load_round() -> void:
 	if _round_index < 0:
 		_round_index = clampi(start_round - 1, 0, count - 1)
 	_round_index = posmod(_round_index, count)
-	encounter = boss_rush.rounds[_round_index]
+	encounter = tutorial_encounter if tutorial_mode else boss_rush.rounds[_round_index]
 	arena = encounter.arena.instantiate() as Arena
 	add_child(arena)
 	party = _spawn(encounter.party, $Party, false)
@@ -289,6 +309,33 @@ func _spawn(scenes: Array[PackedScene], holder: Node3D, enemy_side: bool) -> Arr
 	return spawned
 
 
+## Starts a round (0-based) or the tutorial. Used by the title screen.
+static func start(tree: SceneTree, round_index: int, tutorial: bool) -> void:
+	_round_index = round_index
+	tutorial_mode = tutorial
+	tree.change_scene_to_file("res://scenes/battle/battle_arena.tscn")
+
+
+func _count(key: String) -> void:
+	stats[key] = int(stats.get(key, 0)) + 1
+
+
+## Adds a party member mid-fight (the tutorial's new arrivals), next to the
+## party's starting spot.
+func add_party_member(scene: PackedScene) -> Combatant:
+	var fighter := scene.instantiate() as Combatant
+	var spot := arena.spawn_points(false, 1)[0]
+	spot.origin += Vector3(2.0 * (party.size() - 2), 0, 1.5)
+	fighter.transform = spot
+	$Party.add_child(fighter)
+	party.append(fighter)
+	combatants.append(fighter)
+	fighter.cannot_fall = tutorial_mode
+	fighter.timeline_pos = randf_range(10.0, 40.0)
+	_keep_in_arena(fighter)
+	return fighter
+
+
 ## N / P: jump to the next or previous round (restarts the scene).
 func _change_round(step: int) -> void:
 	_round_index += step
@@ -296,7 +343,7 @@ func _change_round(step: int) -> void:
 
 func _process(delta: float) -> void:
 	_world_moved = false
-	if not _game_over:
+	if not _game_over and not tutorial_pause:
 		if _strike != null:
 			_update_strike(delta)  # everything else waits while a strike plays
 		elif active == null:
@@ -322,6 +369,15 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("menu"):
+		get_viewport().set_input_as_handled()
+		get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")
+		return
+	if tutorial != null and tutorial.wants_input(event):
+		get_viewport().set_input_as_handled()
+		return
+	if tutorial_mode and (event.is_action_pressed("next_round") or event.is_action_pressed("previous_round")):
+		return
 	if event.is_action_pressed("next_round") or event.is_action_pressed("previous_round"):
 		get_viewport().set_input_as_handled()
 		_change_round(1 if event.is_action_pressed("next_round") else -1)
@@ -356,7 +412,7 @@ func _advance_timeline(seconds: float) -> void:
 	var during_party_turn := active != null
 	var next: Combatant = null
 	for c in combatants:
-		if c == active or c.is_down:
+		if c == active or c.is_down or c.hold:
 			continue
 		var before := c.timeline_pos
 		c.timeline_pos += c.speed * time_scale * seconds
@@ -366,6 +422,8 @@ func _advance_timeline(seconds: float) -> void:
 				_begin_cast(c)
 			if c.loaded_skill != Skills.NONE and not c.skill_revealed and c.timeline_pos >= reveal_at:
 				_reveal_skill(c)
+			if c.hold_at >= 0.0 and c.timeline_pos >= c.hold_at:
+				c.hold = true  # the tutorial keeps it here, skill revealed, without striking
 
 		if c.timeline_pos < TIMELINE_LENGTH:
 			continue
@@ -497,6 +555,10 @@ func _set_controlled(fighter: Combatant) -> void:
 func _enemy_step(enemy: Combatant, delta: float) -> void:
 	var target := _enemy_target(enemy)
 	if target == null:
+		return
+	if enemy.hold:
+		var to := target.global_position - enemy.global_position
+		enemy.face_toward(to, delta, enemy.cast_turn_speed_degrees)
 		return
 	var to_target := target.global_position - enemy.global_position
 	to_target.y = 0.0
@@ -668,11 +730,17 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	var skill_name := enemy.loaded_def.skill_name
 	if enemy.loaded_def.is_offensive():
 		var targets: Array[Combatant] = []
+		var shielded := false
 		for member in _standing(party):
-			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius) \
-					and _can_see(enemy, member):
-				targets.append(member)
+			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
+				if _can_see(enemy, member):
+					targets.append(member)
+				else:
+					shielded = true  # in the area, but a rock was in the way
+		if shielded:
+			_count("rock_saves")
 		if targets.is_empty():
+			_count("misses")
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
 			_finish_enemy_skill(enemy, reset_timeline)
 		else:
@@ -732,7 +800,7 @@ func _update_attack_ranges() -> void:
 		enemy.attack_range.set_alert(not targets.is_empty())
 		if targets.is_empty():
 			continue
-		if _world_moved and active == null and _strike == null:
+		if _world_moved and active == null and _strike == null and not enemy.hold:
 			_enemy_unleash(enemy, true)  # someone touched it: it strikes now
 		else:
 			var skill_name := enemy.loaded_def.skill_name
@@ -858,6 +926,7 @@ func _resolve_strike() -> void:
 			_popup(target, "PARRY!", Color(1.0, 0.85, 0.2))
 			lines.append("%s parried %s's %s!" % [target.display_name, s.enemy.display_name, skill_name])
 		elif s.reaction == Reaction.DEFEND and can_block:
+			_count("defends")
 			var share := defend_share_vs_smash if s.skill == Skills.Kind.SMASH else defend_share_vs_attack
 			var taken := target.take_damage(ceili(damage * share), true)
 			_popup(target, str(taken), Color(0.6, 0.8, 1.0))
@@ -873,6 +942,7 @@ func _resolve_strike() -> void:
 					_absorb_note(damage, taken)])
 
 	if parried:
+		_count("parries")
 		s.enemy.timeline_penalty += stagger_push
 		lines.append("%s is staggered" % s.enemy.display_name)
 		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
@@ -954,7 +1024,7 @@ func _check_enemies() -> void:
 			enemy.attack_range.visible = false
 	if _standing(enemies).is_empty():
 		_game_over = true
-		_result_text = "Victory!"
+		_result_text = "Tutorial complete!" if tutorial_mode else "Victory!"
 		print("Victory")
 
 
@@ -1049,6 +1119,11 @@ func _wait_command() -> void:
 	_end_turn()
 	fighter.timeline_pos += wait_head_start
 	_flash("%s waits" % fighter.display_name)
+	_count("waits")
+	for enemy in _standing(enemies):
+		if enemy.stance == Skills.Kind.COUNTER:
+			_count("counter_waits")
+			break
 
 
 func _open_combo_bar() -> void:
@@ -1143,6 +1218,8 @@ func _execute_combo() -> void:
 	_ap_before_combo = ap
 	ap -= battle_menu.combo_cost()
 	_exec_attacker.statuses.erase("arcane_cost")  # Arcane Barrier's cost lasts until the next attack
+	_count("combos")
+	_count("combos_" + _exec_attacker.class_id)
 	_exec_attacker.face_toward(_combo_target.global_position - _exec_attacker.global_position, 1.0, 100000.0)
 	battle_menu.slot_results.clear()
 	for entry in _plan:
@@ -1204,6 +1281,7 @@ func _update_combo(delta: float) -> void:
 		_exec_hits_done += 1
 		if perfect:
 			_popup(_exec_attacker, "PERFECT!", Color(1.0, 0.85, 0.2))
+			_count("perfects")
 			_flash(_grow_max_ap(perfect_max_ap_gain, _exec_attacker))
 		if not keep_going or _game_over:
 			_stop_combo()
@@ -1379,15 +1457,18 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		match move["effect"]:
 			Moves.Effect.BREAK:
 				note = "Guard broken!"
+				_count("guard_breaks")
 				_cancel_enemy_skill(target)
 			Moves.Effect.PIERCE:
 				note = "Pierce!"
+				_count("guard_breaks")
 			_:
 				_popup(target, "BLOCKED", Skills.info(Skills.Kind.DEFENSE)["color"])
 				_flash("%s's Defense blocks the %s. Piercing or breaking moves get through!" % [target.display_name, move_name])
 				return true
 	elif target.loaded_skill == Skills.Kind.SMASH and move["kind"] == Skills.Kind.ATTACK:
 		note = "Smash interrupted!"
+		_count("interrupts")
 		_cancel_enemy_skill(target)
 
 	var damage := ceili(attacker.attack_power * multiplier)
@@ -1589,6 +1670,8 @@ func _clear_target_marker() -> void:
 func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 	var user := controlled
 	ap -= float(skill["cost"])
+	_count("skills")
+	_count("skills_" + user.class_id)
 	var turns := int(skill["turns"])
 	var message := "%s uses %s" % [user.display_name, skill["name"]]
 	var head_start := 0.0
@@ -1756,7 +1839,10 @@ func _update_ui(delta: float) -> void:
 		warning_label.text = _flash_message
 		controls_label.visible = true
 		var won := _result_text == "Victory!"
-		controls_label.text = ("N: next round     R: play again" if won else "R: retry     N / P: next / previous round")
+		if tutorial_mode:
+			controls_label.text = "Esc: back to the menu     R: play the tutorial again"
+		else:
+			controls_label.text = ("N: next round     R: play again     Esc: menu" if won else "R: retry     N / P: next / previous round     Esc: menu")
 		return
 	var party_turn := _party_turn()
 	controls_label.visible = (active == null or party_turn) and _strike == null and _menu_mode != BattleMenu.Mode.EXECUTING
@@ -1822,7 +1908,7 @@ func _controls_hint() -> String:
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
 	var tab_part := "     Tab: switch to %s" % next_name if next_name != "" else ""
-	return "WASD: move %s (free)%s     N / P: change round" % [controlled.display_name if controlled else "", tab_part]
+	return "WASD: move %s (free)%s     Esc: menu" % [controlled.display_name if controlled else "", tab_part]
 
 
 ## Shows a short message under the turn label for a moment.

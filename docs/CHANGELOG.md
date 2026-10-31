@@ -3,6 +3,18 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Title screen and tutorial
+
+- The game opens on a **title screen**: Boss Rush, Tutorial, Round Select,
+  Controls, Quit. Esc goes back to it from a fight.
+- A **guided tutorial** (from a friend's playtest feedback): one continuous
+  fight against a Training Golem, 10 lessons covering every mechanic, the
+  Knight first and the other classes joining along the way. Notes pause the
+  fight, goals wait for you to do the thing, and nobody can fall.
+- Battle additions for it: fighters can be held on the timeline, enemies can
+  be made to prepare a specific skill, party members can join mid-fight, and
+  the battle counts what the player does.
+
 ## Classes
 
 - **Knight, Archer, Mage and Cleric** each have their own HP, AP, attacks and

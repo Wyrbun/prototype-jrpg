@@ -19,7 +19,17 @@ enemies. The goal of this stage is a fun core loop, not visuals.
 
 The game plays as an **11-fight boss rush** (`data/boss_rush.tres`), with a
 different party lineup and arena each round, to test how enemies and party
-members combine. **N / P** jump to the next or previous round at any time.
+members combine. The title screen also has **Round Select**, and **N / P**
+still jump between rounds during a fight.
+
+## Tutorial
+
+**Tutorial** on the title screen is one guided fight against a Training
+Golem that teaches every mechanic in 10 lessons: moving, the timeline, combos
+and timed hits, Wait, reading enemy skills, Parry and Defend, the skill
+triangle, Abilities (the Archer, Mage and Cleric join along the way), max AP,
+and rocks. It ends with free practice. Notes pause the fight until you press
+J; goals run until you've done them. Nobody can fall, so it can't be lost.
 
 | Round | Party | Enemies | Arena |
 |---|---|---|---|
@@ -105,7 +115,8 @@ resets max AP to 100, so the better you play, the more you have to lose.
 | Combo playing | J | Timed hit: press inside the box for a Perfect |
 | Enemy strike | E | Parry (when the ring turns gold) |
 | Enemy strike | Q | Defend (costs AP) |
-| Any time | N / P | Next / previous round |
+| Any time | Esc | Back to the title screen |
+| Any time (not in the tutorial) | N / P | Next / previous round |
 | Battle over | R | Restart the round |
 
 Keys can be changed in **Project > Project Settings > Input Map**.
@@ -114,12 +125,15 @@ Keys can be changed in **Project > Project Settings > Input Map**.
 
 1. Install **Godot 4.7** (standard version, not .NET) from godotengine.org.
 2. Open Godot, click **Import**, and select this folder's `project.godot`.
-3. Press **F5** to play.
+3. Press **F5** to play. The game opens on the title screen.
 
 ## Project layout
 
 ```
-scenes/battle/battle_arena.tscn   the battle scene (main scene); loads the current round
+scenes/ui/title_menu.tscn         the title screen (main scene): Boss Rush, Tutorial, Round Select, Controls
+scenes/battle/battle_arena.tscn   the battle scene; loads the current round or the tutorial
+scripts/battle/tutorial.gd        the tutorial's lessons: text, goals, how each one sets up the fight
+data/tutorial.tres                the tutorial's fight: training arena, Knight, Training Golem
 scenes/arenas/                    one scene per arena: floor shape, rocks, pit, start spots
 scenes/characters/                one scene per party member and enemy (stats and skills)
 data/boss_rush.tres               the rounds: arena, party lineup, enemies
@@ -164,6 +178,7 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Enemy template: design enemy skills in the Inspector without code
 - [x] Boss rush: 11 rounds, arenas with rocks and a pit, multi-enemy fights
 - [x] Classes: Knight, Archer, Mage, Cleric, each with attacks and skills
+- [x] Title screen and a guided tutorial
 - [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass

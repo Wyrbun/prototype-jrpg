@@ -1,0 +1,84 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/battle/enemy_skill.gd" id="2_skill"]
+
+[sub_resource type="Resource" id="Skill_attack"]
+script = ExtResource("2_skill")
+skill_name = "Attack"
+kind = 0
+weight = 3
+shape = 0
+radius = 3.5
+angle = 110.0
+damage = 15
+windup = 1.1
+
+[sub_resource type="Resource" id="Skill_smash"]
+script = ExtResource("2_skill")
+skill_name = "Smash"
+kind = 1
+weight = 2
+shape = 0
+radius = 4.2
+angle = 50.0
+damage = 25
+windup = 1.4
+
+[sub_resource type="Resource" id="Skill_defense"]
+script = ExtResource("2_skill")
+skill_name = "Defense"
+kind = 2
+weight = 1
+shape = 1
+radius = 1.6
+angle = 360.0
+
+[sub_resource type="Resource" id="Skill_counter"]
+script = ExtResource("2_skill")
+skill_name = "Counter"
+kind = 3
+weight = 1
+shape = 1
+radius = 2.0
+angle = 360.0
+
+[sub_resource type="Resource" id="Skill_long"]
+script = ExtResource("2_skill")
+skill_name = "Long Strike"
+kind = 0
+weight = 1
+shape = 2
+radius = 11.0
+width = 1.6
+damage = 20
+windup = 1.4
+
+[sub_resource type="BoxMesh" id="Mesh_body"]
+size = Vector3(1.5, 1.5, 1.5)
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.7, 0.62, 0.45, 1)
+
+[node name="TrainingGolem" instance=ExtResource("1_base")]
+display_name = "Training Golem"
+max_hp = 400
+speed = 9.0
+move_speed = 2.2
+turn_speed_degrees = 80.0
+body_radius = 0.9
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_attack"), SubResource("Skill_smash"), SubResource("Skill_defense"), SubResource("Skill_counter"), SubResource("Skill_long")])
+
+[node name="Body" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+mesh = SubResource("Mesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="Nose" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -0.85)
+
+[node name="NameLabel" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+
+[node name="AttackRange" parent="."]
+radius = 3.5

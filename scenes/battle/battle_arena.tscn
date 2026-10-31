@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/battle/party_status.gd" id="5_status"]
 [ext_resource type="Script" path="res://scripts/battle/battle_menu.gd" id="6_menu"]
 [ext_resource type="Resource" path="res://data/boss_rush.tres" id="7_rush"]
+[ext_resource type="Resource" path="res://data/tutorial.tres" id="8_tutorial"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -36,6 +37,7 @@ corner_radius_bottom_left = 4
 [node name="BattleArena" type="Node3D"]
 script = ExtResource("1_arena")
 boss_rush = ExtResource("7_rush")
+tutorial_encounter = ExtResource("8_tutorial")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")

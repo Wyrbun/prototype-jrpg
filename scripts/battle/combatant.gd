@@ -88,6 +88,15 @@ var statuses := {}
 var shield: int = 0
 ## Archer's Riposte: seconds of counter stance left.
 var riposte_left := 0.0
+## Tutorial controls: "hold" freezes this fighter on the timeline (and an
+## enemy in place, without striking); "cannot_fall" keeps HP at 1 or more;
+## "forced_skill" is prepared every time instead of a random pick.
+var hold := false
+## Tutorial: start holding as soon as this point on the timeline is reached
+## (-1 = never).
+var hold_at := -1.0
+var cannot_fall := false
+var forced_skill: EnemySkill = null
 
 var _skill_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
@@ -204,6 +213,8 @@ func take_damage(amount: int, recoverable_hit: bool) -> int:
 		return 0
 	recoverable = 0
 	var lost := mini(amount, hp)
+	if cannot_fall:
+		lost = mini(lost, hp - 1)
 	hp -= lost
 	if hp <= 0:
 		_go_down()
@@ -315,6 +326,8 @@ func play_lunge() -> void:
 
 ## Enemies only: picks one of its skills at random, by weight.
 func pick_skill() -> EnemySkill:
+	if forced_skill != null:
+		return forced_skill
 	var pool := skills if not skills.is_empty() else _basic_skills()
 	var total := 0
 	for skill in pool:

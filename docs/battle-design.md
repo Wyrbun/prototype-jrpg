@@ -78,7 +78,8 @@ threat ranges, and chained attacks.
 - `data/boss_rush.tres` lists the rounds. Each is an `Encounter`: title,
   arena scene, party scenes (the first starts under control), enemy scenes.
   Duplicates get letters (Kobold Archer A / B). `start_round` on BattleArena
-  picks where F5 starts; N / P change round at any time.
+  picks where a round starts when the scene is run directly; the title
+  screen's Round Select picks it otherwise. N / P change round mid-fight.
 - **Arenas** are scenes with an `Arena` root (rectangle or circle, size,
   floor color), `PartySpawn` / `EnemySpawn` markers (fighters stand side by
   side there, facing the other side), and `ArenaObstacle` children:
@@ -90,6 +91,31 @@ threat ranges, and chained attacks.
 - Enemies and allies **steer around** obstacles; an enemy without a clear
   view of its target keeps walking until it has one.
 - Rounds 6-9 use the Round 10 arena for now (no mockup yet).
+
+## Title screen and tutorial (built)
+
+- The game opens on the **title screen** (`scenes/ui/title_menu.tscn`):
+  Boss Rush, Tutorial, Round Select, Controls, Quit. Keyboard (W/S, J/Enter,
+  K/Esc) or mouse. **Esc** in a fight returns here.
+- The **tutorial** (`scripts/battle/tutorial.gd`) is one continuous guided
+  fight: Knight vs Training Golem in a small arena with one rock
+  (`data/tutorial.tres`). It's a list of steps:
+  - **Notes** pause the whole fight until J / Space.
+  - **Goals** let the fight run until done (checked against counters the
+    battle keeps: parries, perfects, waits, guard breaks...).
+  - Each step can set up the fight first: hold a fighter on the timeline,
+    make the Golem repeat a skill, or have it prepare one and freeze the
+    moment it's revealed (a held enemy doesn't strike or walk).
+- Lessons: 1 Moving, 2 The timeline (reach ring, your turn), 3 Combos, timed
+  hits and Wait, 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
+  Defend, 6 The skill triangle (Thrust/Smash through Defense, Wait out
+  Counter, interrupt Smash), 7 Abilities (Archer joins, then Mage and
+  Cleric), 8 Max AP, 9 Rocks (the Golem waits with Long Strike revealed and
+  strikes once you're hidden behind the rock), 10 Free practice (the Golem
+  fights normally and can be defeated).
+- **Can't be lost:** every fighter has `cannot_fall` (HP stops at 1), party
+  HP is topped up to 60% at each step, the Golem refills before free
+  practice, and AP is topped up where a lesson needs it.
 
 ## Enemy skills (built)
 

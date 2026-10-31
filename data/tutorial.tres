@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="Encounter" format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/encounter.gd" id="1_encounter"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_training.tscn" id="2_arena"]
+[ext_resource type="PackedScene" path="res://scenes/characters/knight.tscn" id="3_knight"]
+[ext_resource type="PackedScene" path="res://scenes/characters/training_golem.tscn" id="4_golem"]
+
+[resource]
+script = ExtResource("1_encounter")
+title = "Tutorial"
+arena = ExtResource("2_arena")
+party = Array[PackedScene]([ExtResource("3_knight")])
+enemies = Array[PackedScene]([ExtResource("4_golem")])
