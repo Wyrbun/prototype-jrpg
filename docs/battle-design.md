@@ -17,16 +17,22 @@ threat ranges, and chained attacks.
 - Every fighter slides along one bar at their own `speed`.
 - Reaching the end of the bar starts that fighter's turn and freezes the timeline.
 - After acting, the fighter goes back to the start of the bar.
-- The last stretch of the bar (from 75) is the **casting zone**. An enemy
+- The last stretch of the bar (from 55) is the **casting zone**. An enemy
   entering it **prepares a skill**. This is the Mabinogi "visible skill
   loading", told the Grandia way.
-  - **Intent is hidden at first** ("..." above it, grey "???" on the bar),
-    so you can't prepare too easily. The skill is **revealed late**, at
-    `reveal_at` (90), on the bar, above the enemy, and as a live area.
-  - While preparing, the enemy **stands still** and can only **turn slowly**
-    (`cast_turn_speed_degrees`, 40°/s), so its area sweeps toward you.
+  - **Where, then what:** as soon as the enemy enters the zone its area
+    appears on the floor **in grey** ("..." above it, "???" on the bar): you
+    see where it will land, not what it is. The skill is **revealed** at
+    `reveal_at` (80): its name, and the area in color (now live: touching
+    it triggers the strike).
+  - While preparing, the enemy **stands still** and **tracks the party
+    member it locked onto** when the cast began (or whoever taunted it) at
+    its full turning speed. In the last `cast_slow_seconds` (1 s) it slows
+    to `cast_turn_speed_degrees` (40°/s): that's the window to slip out.
+  - The **timeline speed** (`time_scale` 1.8, 40% slower than before) makes
+    a cast last about 3–4.5 s depending on the enemy's speed.
   - **Defense/Counter** stances are active for the **whole casting zone**
-    (from 75, even while hidden) and **linger for `stance_linger` (3 s)
+    (from 55, even while hidden) and **linger for `stance_linger` (3 s)
     after the enemy's turn**, counted while the timeline runs. The enemy holds
     its ground (turning slowly) while a stance is up.
   - **Which skill** is picked from the enemy's own skill list, by weight

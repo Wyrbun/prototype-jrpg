@@ -18,6 +18,8 @@ extends MeshInstance3D
 @export var dormant_color: Color = Color(0.9, 0.9, 0.95, 0.08)
 
 const SEGMENTS := 40
+## The color of an area whose skill is still hidden.
+const HIDDEN_COLOR := Color(0.78, 0.78, 0.85)
 
 var live := false
 ## The current shape (an EnemySkill.Shape). Dormant is always a cone.
@@ -46,13 +48,15 @@ func _ready() -> void:
 
 
 ## Reshapes the area for a loaded skill and makes it live.
-func show_skill(skill: EnemySkill) -> void:
+## hidden = true draws the shape in grey: you can see where it will land, not
+## what it is (the skill is still "???").
+func show_skill(skill: EnemySkill, hidden: bool = false) -> void:
 	shape = skill.shape
 	radius = skill.radius
 	angle_degrees = 360.0 if skill.shape == EnemySkill.Shape.CIRCLE else skill.angle
 	width = skill.width
 	inner_radius = skill.inner_radius
-	_live_color = skill.color()
+	_live_color = HIDDEN_COLOR if hidden else skill.color()
 	live = true
 	mesh = _build_mesh()
 	_refresh_color()

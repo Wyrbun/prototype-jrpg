@@ -59,7 +59,9 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## Which round to start on when you press F5 (1 = the first).
 @export var start_round: int = 1
 
-@export var time_scale: float = 3.0
+## How fast icons move along the timeline (times each fighter's speed).
+## Lower = more time between turns. Walking, AP recharge and combos aren't affected.
+@export var time_scale: float = 1.8
 ## Overall battle pace between turns: slows the timeline, enemy and ally
 ## movement, and AP recharge together (1.0 = the original pace, 0.7 = 30%
 ## slower). The fighter you steer, strike rings and combo timing aren't affected.
@@ -67,10 +69,10 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## How long an enemy turn stays on screen after it acts, in seconds.
 @export var enemy_turn_seconds: float = 0.8
 ## Where the casting zone starts on the timeline (the bar is 100 long).
-@export_range(0.0, 100.0) var cast_zone_start: float = 75.0
+@export_range(0.0, 100.0) var cast_zone_start: float = 55.0
 ## Where an enemy's prepared skill is revealed. Closer to 100 means less
 ## time to see it coming.
-@export_range(0.0, 100.0) var reveal_at: float = 90.0
+@export_range(0.0, 100.0) var reveal_at: float = 80.0
 
 @export_group("AP")
 ## The most AP the party can hold at the start of the fight. Parries and
@@ -120,6 +122,11 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## Seconds a Defense/Counter stance stays up after the enemy's turn
 ## (counted while the timeline runs), so it's more likely to catch someone.
 @export var stance_linger: float = 3.0
+## While preparing an attack, an enemy tracks the party member it locked onto
+## at full turning speed, and only slows to its casting turn speed this many
+## seconds before it strikes: that's the window to get out of the way.
+@export var cast_slow_seconds: float = 1.0
+
 
 ## Where on the timeline a fighter restarts after choosing Wait (a third
 ## of the way along, so the next turn comes sooner).
@@ -631,8 +638,17 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 	if enemy.is_down:
 		return
 	if enemy.loaded_skill != Skills.NONE or enemy.stance != Skills.NONE:
-		# Preparing a skill or holding a stance: stand still, turn slowly.
-		enemy.face_toward(to_target, delta, enemy.cast_turn_speed_degrees)
+		# Preparing a skill: stand still and track the party member it locked
+		# onto at full speed, slowing down only near the end of the cast.
+		# A stance held after its turn just turns slowly.
+		var locked := target
+		if enemy.cast_target != null and not enemy.cast_target.is_down and not enemy.statuses.has("taunt"):
+			locked = enemy.cast_target
+		var to_locked := locked.global_position - enemy.global_position
+		var turn_speed := enemy.cast_turn_speed_degrees
+		if enemy.loaded_skill != Skills.NONE and _seconds_until_turn(enemy) > cast_slow_seconds:
+			turn_speed = enemy.turn_speed_degrees
+		enemy.face_toward(to_locked, delta, turn_speed)
 		return
 	var stop_distance := enemy.body_radius + target.body_radius + enemy.preferred_gap
 	var wants_closer := to_target.length() > stop_distance or not _can_see(enemy, target)
@@ -643,6 +659,12 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 	if wants_closer and facing_target:
 		enemy.global_position += enemy.flat_forward() * enemy.move_speed * delta
 		_keep_in_arena(enemy)
+
+
+## Real seconds until a fighter reaches the end of the timeline.
+func _seconds_until_turn(fighter: Combatant) -> float:
+	var rate := fighter.speed * time_scale * battle_speed
+	return maxf(TIMELINE_LENGTH - fighter.timeline_pos, 0.0) / rate if rate > 0.0 else INF
 
 
 ## Who an enemy goes after: whoever taunted it, otherwise the nearest.
@@ -764,10 +786,14 @@ func _can_see(a: Combatant, b: Combatant) -> bool:
 func _begin_cast(enemy: Combatant) -> void:
 	enemy.loaded_def = enemy.pick_skill()
 	enemy.loaded_skill = enemy.loaded_def.kind
+	enemy.cast_target = _enemy_target(enemy)  # locked on for the whole cast
 	enemy.skill_revealed = false
 	enemy.stance_time_left = 0.0
 	enemy.stance = Skills.NONE if Skills.is_offensive(enemy.loaded_skill) else enemy.loaded_skill
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
+	if enemy.attack_range:
+		# Its area shows up right away, in grey: where it will land, not what it is.
+		enemy.attack_range.show_skill(enemy.loaded_def, true)
 	print("%s is preparing %s (hidden)" % [enemy.display_name, enemy.loaded_def.skill_name])
 
 
@@ -827,6 +853,7 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.attack_range:
 		enemy.attack_range.go_dormant()
 	enemy.show_skill_text("")
+	enemy.cast_target = null
 	enemy.loaded_skill = Skills.NONE
 	enemy.skill_revealed = false
 	enemy.stance = Skills.NONE

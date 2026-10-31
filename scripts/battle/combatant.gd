@@ -97,6 +97,8 @@ var hold := false
 var hold_at := -1.0
 var cannot_fall := false
 var forced_skill: EnemySkill = null
+## Enemies only: who it locked onto when it started preparing a skill.
+var cast_target: Combatant = null
 
 var _skill_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.

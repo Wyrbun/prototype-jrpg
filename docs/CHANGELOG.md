@@ -3,6 +3,18 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Readable enemy casts
+
+- The **casting zone** (orange) now starts at 55 instead of 75, and the
+  **timeline runs 40% slower** (`time_scale` 3.0 -> 1.8), so a cast lasts
+  about 3–4.5 s instead of ~1.3 s.
+- An enemy's area **appears in grey the moment it starts casting**: you see
+  where it will land, not what it is. Its color and name are revealed at 80
+  (was 90).
+- While casting, an enemy **locks onto** the nearest party member and tracks
+  them at full turning speed, slowing down only in the last second, so
+  running behind it no longer dodges everything.
+
 ## Menu order and Enter key
 
 - The command menu is now Attack / Abilities / Wait / Items.

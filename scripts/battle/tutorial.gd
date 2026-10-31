@@ -127,7 +127,7 @@ func _golem_repeat(skill_name: String) -> void:
 	golem.forced_skill = _golem_skill(skill_name)
 	golem.hold = false
 	golem.hold_at = -1.0
-	golem.timeline_pos = minf(golem.timeline_pos, 50.0)
+	golem.timeline_pos = minf(golem.timeline_pos, battle.cast_zone_start - 10.0)
 
 
 ## The Golem prepares one skill and then stays frozen with it revealed
@@ -136,7 +136,7 @@ func _golem_show(skill_name: String) -> void:
 	battle._finish_enemy_skill(golem, false)
 	golem.forced_skill = _golem_skill(skill_name)
 	golem.hold = false
-	golem.timeline_pos = 70.0
+	golem.timeline_pos = battle.cast_zone_start - 1.0  # starts casting at once, revealed before the Knight acts
 	golem.hold_at = battle.reveal_at  # stops the moment its skill is revealed
 
 
@@ -212,7 +212,7 @@ func _build_steps() -> void:
 
 	# 4. Reading the enemy
 	_note(4, "Reading the enemy",
-		"Enemies prepare skills in the casting zone. At first you only see \"???\". Late in the zone the skill is revealed: its name, and its area on the floor in color. If you're inside a revealed Attack or Smash area, it strikes at once.\n\nAreas turn with the enemy, so its back is usually the safe side.",
+		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. If you're inside a revealed Attack or Smash area, it strikes at once.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area.",
 		func():
 			knight.hold = true
 			_golem_repeat("Attack"))

@@ -55,8 +55,10 @@ way). The pit blocks movement only.
 **The timeline.** Every fighter slides along a bar at the top of the screen at
 their own speed. Reaching the end means it's their turn. The orange stretch
 near the end is the **casting zone**: enemies there are preparing a skill.
-At first you only see "???", and the skill is revealed late, so reading it is
-part of the challenge.
+Their area appears on the floor in grey right away ("???"), and the skill's
+name and color are revealed later. While casting, an enemy turns to follow
+whoever it locked onto, and only slows down in the last second: that's when
+to slip out.
 
 **Positioning (between turns).** While the timeline runs, you steer one party
 member in real time and press **Tab** to switch between them. Enemies and the
