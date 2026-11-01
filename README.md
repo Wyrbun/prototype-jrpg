@@ -104,7 +104,8 @@ what enemies throw at you and to what you throw at them.
 **AP and risk.** AP is one shared party pool that recharges over time. Every
 Parry and Perfect hit raises the party's **max AP** for the rest of the fight,
 and a bigger max AP also recharges faster. Missing a Parry or a timed hit
-resets max AP to 100, so the better you play, the more you have to lose.
+drops AP to 0 and resets max AP to 100, so the better you play, the more you
+have to lose.
 
 ## Controls
 

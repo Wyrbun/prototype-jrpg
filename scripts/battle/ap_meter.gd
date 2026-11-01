@@ -39,6 +39,10 @@ var flow_speed := 1.0
 var ghost_cost := 0.0
 ## Someone stands where a strike would cost max AP: the top segment pulses red.
 var at_risk := false
+## Seconds of Concentrate left (AP recharges twice as fast): while above 0,
+## bright chevrons race along the fill, the frame pulses violet, and an
+## "x2" tag with the time left sits above the bar's right end.
+var boost_left := 0.0
 ## Shown when the next drop in max AP shatters segments.
 var loss_text := "MAX AP LOST"
 
@@ -279,6 +283,27 @@ func _draw() -> void:
 		draw_rect(Rect2(r0, bar.position.y, r1 - r0, bar.size.y), Color(1.0, 0.1, 0.05, 0.25 + 0.35 * pulse))
 		draw_rect(Rect2(r0, bar.position.y - 2.0, r1 - r0, bar.size.y + 4.0), Color(1.0, 0.2, 0.1, 0.6 + 0.4 * pulse), false, 2.0)
 		_text("!", Vector2((r0 + r1) / 2.0, bar.position.y - 6.0), 18, Color(1.0, 0.3, 0.2, 0.6 + 0.4 * pulse), true)
+
+	# Concentrate: chevrons racing right over the fill and a pulsing frame.
+	if boost_left > 0.0:
+		var violet := Color(0.75, 0.55, 1.0)
+		var pulse := 0.5 + 0.5 * sin(_time * 6.0)
+		var fill_right := maxf(fill_end, bar.position.x)
+		var spacing := 22.0
+		var shift := fmod(_time * 90.0, spacing)
+		var x := bar.position.x - spacing + shift
+		while x < fill_right:
+			var tip := x + 8.0
+			if x > bar.position.x and tip < fill_right:
+				var mid := bar.position.y + bar.size.y / 2.0
+				var top := bar.position.y + 5.0
+				var bottom := bar.end.y - 5.0
+				draw_polyline(PackedVector2Array([Vector2(x, top), Vector2(tip, mid), Vector2(x, bottom)]),
+						Color(1, 1, 1, 0.55), 2.5)
+			x += spacing
+		draw_rect(bar.grow(3.0 + 2.0 * pulse), Color(violet, 0.35 + 0.4 * pulse), false, 2.0)
+		var tag := "x2 AP  %ds" % ceili(boost_left)
+		_text(tag, Vector2(bar.end.x - 34.0, bar.position.y - 8.0), 15, Color(violet.lightened(0.3), 0.85 + 0.15 * pulse), true)
 
 	# Segment dividers and the outer frame.
 	for i in range(1, segments):

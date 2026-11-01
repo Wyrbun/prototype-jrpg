@@ -9,7 +9,7 @@ skill_name = "Ranged Attack"
 kind = 0
 weight = 4
 shape = 3
-radius = 6.5
+radius = 12.0
 inner_radius = 2.5
 damage = 20
 windup = 1.0
@@ -22,10 +22,11 @@ weight = 2
 shape = 2
 radius = 11.0
 width = 0.8
-damage = 46
+damage = 58
 windup = 2.0
 cannot_be_parried = true
 always_hits_target = true
+cast_speed = 0.6
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")

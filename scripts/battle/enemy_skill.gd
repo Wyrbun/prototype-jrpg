@@ -21,8 +21,8 @@ enum Shape { CONE, CIRCLE, LINE, DONUT }
 ## - HEAL_ALLIES: heals every enemy within radius (no damage); interrupted
 ##   by interrupt_hits party hits from within interrupt_range meters.
 ## - ON_MARKED: one circle (radius) on the party member the enemy locked
-##   onto. It follows them while hidden and stays put once revealed; it hits
-##   everyone inside, and can only be Parried if the target is alone in it.
+##   onto. It follows them while hidden (and after the reveal if always_hits);
+##   it hits everyone inside, so the target should stand alone.
 enum Special { NONE, ON_EACH_TARGET, LINE_TO_EACH, GROWING, HEAL_ALLIES, ON_MARKED }
 ## What happens to someone caught in two or more of the areas.
 enum Overlap { NORMAL, DOUBLE, ONE_HP }
@@ -130,6 +130,30 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## True for mechanic skills (always hit; the answer is a mechanic, not a dodge).
 func is_mechanic() -> bool:
 	return always_hits or always_hits_target or hits_everyone
+
+
+## True if the enemy keeps facing its target exactly for the whole cast:
+## set by hand (tracks_target), and always for skills that never miss their
+## target, so what you see is what hits.
+func aims_exactly() -> bool:
+	return tracks_target or always_hits_target
+
+
+## True if circles / lines placed on the party keep following their party
+## member after the reveal (unavoidable ones do; others lock in place).
+func keeps_following() -> bool:
+	return placed_on_party() and always_hits
+
+
+## Parry (E) works on it: not for skills marked cannot_be_parried, and never
+## for unavoidable mechanic skills (they just deal their damage).
+func parryable() -> bool:
+	return not cannot_be_parried and not is_mechanic()
+
+
+## Defend (Q) works on it: same rule.
+func blockable() -> bool:
+	return not cannot_be_blocked and not is_mechanic()
 
 
 func is_offensive() -> bool:

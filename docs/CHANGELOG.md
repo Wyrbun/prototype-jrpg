@@ -3,6 +3,86 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Concentrate on the AP meter, no prompt for unavoidable hits
+
+- **Concentrate shows on the AP meter:** chevrons racing along the fill, a
+  pulsing violet frame, and an "x2 AP" countdown above the bar.
+- **Unavoidable hits don't prompt any more:** no timing ring and no
+  Parry/Defend line (there was nothing to press). Everyone about to be hit
+  gets a red mark, and the hit lands after a short beat (0.45 s).
+
+## Balance pass 2 (from the second full play-test)
+
+Results before this pass: every round won first try; party HP left was
+Round 5 58%, 6 100%, 7 81%, 8 89%, 9 49% (one KO), 10 87%. The bosses' own
+attacks rarely landed: the Golem's 7 turns dealt 0 damage (Rock Stomp missed
+4 times out of 4) and the Living Armor's Combo missed 8 times out of 8, since
+the party could easily stay out of their short melee range.
+- **Stone Golem:** Rock Stomp reaches 4.5 m (was 2.6) and deals 32 (was 26),
+  Heavy Attack 5 m (was 4.2), Crush 11 m long (was 8), walks faster (3.5,
+  was 2.5).
+- **Living Armor:** Combo reaches 4.5 m (was 3), walks faster (4, was 3).
+- **Dragon Hatchling:** 960 HP (was 1080). Its fight ran 7.5 minutes;
+  Burning Spike and Breath now hit harder anyway, since unavoidable skills
+  can't be Defended any more (they were Defended 12 times that fight).
+- **Enemy AI:** a skill that can't reach anyone is picked 4x less often
+  (x0.05, was x0.2), so enemies stop wasting turns on melee nobody's in.
+
+## Unavoidable means no Parry or Defend
+
+- Unavoidable skills (Breath, Burning Spike, Dark Bolt, Curse, Fireball,
+  Rock Spikes, Power Shot) can't be Parried, Defended or Riposted: they just
+  deal their normal damage, and the strike prompt says so. Fireball no
+  longer has its "Parry only if alone" rule.
+
+## Shadowflare is dodgeable again
+
+- **Shadowflare only hits those inside its circle** (full damage), like
+  before the unavoidable pass. Rush in and deal 10% of the Living Armor's HP
+  to stop it growing, then get out before it explodes; left alone it grows
+  to 11 m and covers most of the arena. Being caught counts as an avoidable
+  hit (max AP).
+
+## Combo counter
+
+- While a combo plays, a **combo counter** on the right of the screen shows
+  the hit count (gold while every hit is Perfect), the running damage total,
+  the number of Perfects, and each hit's damage popping in (gold for a
+  Perfect). The final total stays up for a moment after the combo.
+
+## Missed timings cost all AP
+
+- Pressing J at the wrong moment in a combo, or parrying too early, now
+  drops the party's AP to 0 (on top of max AP going back to 100). Before, a
+  missed combo timing kept your AP and an early Parry halved it.
+
+## Tracking, Power Shot, Ranged Attack
+
+- **Unavoidable skills track properly:** Power Shot and Breath keep aiming
+  exactly at their target until they fire, and unavoidable circles and lines
+  (Fireball, Rock Spikes, Burning Spike, Dark Bolt, Curse) keep following
+  their party member after the reveal, so what you see is what hits.
+- **Power Shot** casts 40% slower (3.0 s in the casting zone, 1.3 s from
+  reveal to strike) so there's time to get behind a rock, and deals 58
+  instead of 46.
+- **Kobold's Ranged Attack** reaches 12 m (was 6.5): the safe spot is right
+  next to the Kobold. Allies now step into a ring's safe middle when it's
+  closer than its outer edge.
+- **Allies no longer run from a Healing Ritual** while it's still hidden
+  (they treated its grey circle as an attack); they close in to interrupt it
+  from the moment the Shaman starts casting.
+
+## Multi-hit rings
+
+- Multi-hit strikes show **one ring per hit still to come**, each closing in
+  to land on its own beat, so the rhythm of a Combo is readable up front.
+- **One Defend now guards the whole chain** (one 10 AP payment). Before,
+  the Defend wore off after the first hit and you had to press Q again
+  within half a second, paying again.
+- Checked: timing (1.0 s, then 0.55 s per hit), damage per hit, Parry on a
+  later hit stopping the rest, launch only on the last hit, max AP lost once
+  per chain, and a target going down mid-chain.
+
 ## Unavoidable mechanics, max AP for avoidable hits, strike camera
 
 - **Mechanic skills can't be dodged, only answered** (revealed with

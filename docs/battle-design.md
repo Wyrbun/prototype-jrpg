@@ -91,11 +91,13 @@ threat ranges, and chained attacks.
      prepared ("..."), fire trails and rock spikes. A circle or line that
      follows this ally while hidden is ignored until revealed (it can't be
      outrun). Circles that punish overlaps (Dark Bolt, Burning Spike) keep
-     allies a full circle apart: they spread out.
+     allies a full circle apart: they spread out. Inside a ring (donut)
+     they head for whichever edge is closer, usually the safe middle.
   3. **Stand near the edge of their attack range** from their focus enemy
      (`ally_range_share`, 80% of reach): close in if too far, back off if much
      too close, detouring around danger. Focus = an enemy casting Healing
-     Ritual (they close within its interrupt range, so your hits break it),
+     Ritual (they close within its interrupt range, so your hits break it;
+     its circle is never treated as danger, even while hidden),
      then the caster of a growing circle not yet contained, otherwise the
      nearest enemy.
 
@@ -191,8 +193,8 @@ the triangle):
 - **Heal allies:** heals enemies in a circle; `interrupt_hits` party hits
   from within `interrupt_range` break it (Healing Ritual).
 - **On marked:** one circle on the party member the enemy locked onto
-  (follows while hidden, locks on reveal). Hits everyone inside; can only be
-  Parried if the target is alone in it (Fireball, Rock Spikes).
+  (follows while hidden; unavoidable ones keep following). Hits everyone
+  inside, so the target should stand alone (Fireball, Rock Spikes).
 - Also per skill: **hits** (multi-hit, a ring per hit, a Parry stops the
   rest), **launch** (last hit throws targets), **shared damage** (100%,
   67%, 50%, 40%... for 1, 2, 3, 4 targets), **trail** (leaves the area
@@ -213,14 +215,23 @@ the triangle):
 - **Mechanic skills (UNAVOIDABLE):** they can't be dodged, only answered.
   Revealed with "UNAVOIDABLE" above the enemy and "(unavoidable)" in the
   warning line.
+  - **No Parry or Defend** (and no Riposte): they just deal their damage.
+    No timing ring and no prompt: everyone about to be hit gets a red mark,
+    and it lands after a short beat (`unavoidable_impact_seconds` 0.45).
   - `always_hits` (placed circles and lines): everyone it was placed on is
     hit wherever they stand; a rock still blocks a line (Dark Bolt, Burning
     Spike, Curse, Fireball, Rock Spikes).
   - `always_hits_target`: the locked target is hit however far it runs,
-    unless a rock blocks the enemy's view (Breath, Power Shot).
+    unless a rock blocks the enemy's view (Breath, Power Shot). The enemy
+    also keeps facing it exactly to the end, so the area you see is the one
+    that hits.
+  - Unavoidable circles and lines keep following their party member after
+    the reveal (avoidable ones lock in place), so overlaps, who stands near
+    a Fireball, and where Burning Spike leaves its fire are decided by where
+    everyone is when it lands.
   - `hits_everyone` (growing circles): the explosion hits the whole party
-    for damage scaled by its final size, at least 25% (Shadowflare: contain
-    it early).
+    for damage scaled by its final size, at least 25% (not used right now:
+    Shadowflare only hits those inside its circle).
 - **Avoidable hits cost max AP:** when a strike lands on someone who didn't
   Parry or Defend, and it could have been avoided, the party loses one
   segment (100) of bonus max AP, once per strike (`avoidable_hit_max_ap_loss`).
@@ -255,7 +266,7 @@ circle, over the marked one only), and gold
 (stack up).
 
 **Skill choice (AI):** each skill starts from its weight, then: skills that
-can't reach anyone x0.2; area hits on several people boost it a little;
+can't reach anyone x0.05; area hits on several people boost it a little;
 placed circles/lines up to x2 when the party is bunched (they punish it);
 Healing Ritual only when an ally in range is under 75% HP (more likely the
 more are hurt); Defense/Counter x1.6 with a party member close, x0.5
@@ -265,9 +276,9 @@ otherwise; the last skill used x0.35 per repeat in a row.
 
 | Skill | Kind | Area | Damage | Wind-up | Weight |
 |---|---|---|---|---|---|
-| Heavy Attack | Smash | cone 70°, 4.2 m | 46 | 1.4 s | 3 |
-| Crush | Smash | line 8 m x 1.4 m | 52 | 1.6 s | 2 |
-| Rock Stomp | Attack | circle 2.6 m | 26 | 1.0 s | 3 |
+| Heavy Attack | Smash | cone 70°, 5 m | 46 | 1.4 s | 3 |
+| Crush | Smash | line 11 m x 1.4 m | 52 | 1.6 s | 2 |
+| Rock Stomp | Attack | circle 4.5 m | 32 | 1.0 s | 3 |
 | Rock Spikes | Special | circle 2.8 m on its target, then 4 spikes (16 each) for 2 Golem turns | 26 | 1.2 s | 2 |
 
 The Golem no longer uses Defense/Counter stances (not in its roster entry).
@@ -285,13 +296,19 @@ Stances still work for any enemy that lists them.
   **staggered** (pushed back 25 on the timeline), and the party's **max AP
   rises by 10** for the rest of the fight. Pressed too early: full damage,
   the target's turn is **pushed back 30** on the timeline, the party **loses
-  half its AP**, and **max AP resets to 100**. One try per strike.
+  all its AP**, and **max AP resets to 100**. One try per strike.
 - **Defend (Q)**: any time before impact, costs 10 AP. You still take damage
   (25% vs Attack, 60% vs Smash because it breaks the guard), but it is
   **recoverable**: it comes back at that fighter's next turn, unless they're
   hit again first (a new hit locks the old damage in). Defending at low HP
   can still knock you out.
 - **No reaction**: full damage (Attack 20, Smash 35).
+- **Multi-hit strikes** (Goblin and Ogre Attack: 2 hits, Living Armor
+  Combo: 3): every hit still to come shows its own fainter ring, closing in
+  so it reaches the marker exactly when that hit lands (later hits come
+  every 0.55 x the wind-up). Each hit can be Parried in its own window; a
+  Parry stops the rest. **One Defend guards the whole chain** for a single
+  10 AP. Launch only happens on the last hit; max AP is lost once per chain.
 - Assumption: one Parry/Defend input covers **everyone** caught in the strike.
 - At 0 HP a fighter is **down** (lies on the floor, takes no turns). If the
   whole party is down, the battle ends.
@@ -306,9 +323,15 @@ Stances still work for any enemy that lists them.
   **Perfect combo hit (+5)** raises the party's max AP **for the rest of
   the fight** (up to 100 per party member plus 100: 200 solo, 500 with
   four; `max_ap_ceiling_per_member`). **Missing a Parry or a Perfect
-  resets max AP to 100**, and any AP above 100 is lost.
+  drops AP to 0 and resets max AP to 100**.
 - **AP gain scales with max AP:** the recharge is multiplied by current max AP / 100 (1.5x at 150, 2x at 200), capped at 2x (`ap_regen_max_multiplier`) even when max AP goes higher. A big bank
   refills fast, but one missed timing drops it all back to 100.
+- **Concentrate on the meter:** while the Mage's Concentrate is active,
+  bright chevrons race along the AP fill, the frame pulses violet, and an
+  "x2 AP" tag above the bar counts down the seconds left.
+- **Combo counter** (`scripts/battle/combo_counter.gd`): on the right while
+  a combo plays: hits, total damage, Perfects, and each hit's damage popping
+  in; the total stays up for 1.6 s afterwards.
 - **The AP meter** (`scripts/battle/ap_meter.gd`, drawn in code): one
   segment per 100 AP, coloured by tier (blue, teal, gold, orange, rainbow),
   with dim slots up to the max AP limit. Raising max AP sweeps the new space

@@ -81,6 +81,9 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## Max AP can't grow beyond this much per party member, plus one more
 ## share (100 x (party size + 1): 200 solo, 500 with four).
 @export var max_ap_ceiling_per_member: float = 100.0
+## Unavoidable strikes skip the Parry/Defend ring: they land after this
+## short beat.
+@export var unavoidable_impact_seconds: float = 0.45
 ## Bonus max AP lost when an enemy strike lands that could have been
 ## avoided (dodgeable skills, or a mechanic answered wrong); once per strike.
 @export var avoidable_hit_max_ap_loss: float = 100.0
@@ -180,6 +183,11 @@ class Strike:
 	var reset_timeline := false
 	var rings: Array[MeshInstance3D] = []
 	var markers: Array[MeshInstance3D] = []
+	## Multi-hit skills: one fainter ring per hit still to come, each closing
+	## in so it reaches the marker exactly when its own hit lands.
+	var future_rings: Array[MeshInstance3D] = []
+	## Wind-up of each later hit (shorter than the first).
+	var follow_windup := 0.55
 
 
 ## The round being played, kept across scene reloads (0-based; -1 = not
@@ -297,6 +305,8 @@ var _flash_time_left := 0.0
 @onready var ap_label: Label = $UI/APBar/APLabel
 ## The segmented AP meter drawn in code (replaces the plain APBar on screen).
 var ap_meter: APMeter = null
+## Hit count and damage total on the right while a combo plays.
+var combo_counter: ComboCounter = null
 @onready var controls_label: Label = $UI/ControlsLabel
 @onready var party_status: PartyStatus = $UI/PartyStatus
 @onready var enemy_status: PartyStatus = $UI/EnemyStatus
@@ -334,6 +344,8 @@ func _ready() -> void:
 	ap_meter.max_value = current_max_ap
 	ap_meter.ceiling = max_ap_ceiling()
 	ap_bar.visible = false
+	combo_counter = ComboCounter.new()
+	$UI.add_child(combo_counter)
 	# The camera keeps its angle from the scene and backs away along its
 	# own view direction (+Z is "behind" a camera in Godot).
 	_cam_pitch = -camera.global_rotation_degrees.x
@@ -719,7 +731,7 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		var turn_speed := enemy.cast_turn_speed_degrees
 		if enemy.loaded_skill != Skills.NONE and _seconds_until_turn(enemy) > cast_slow_seconds:
 			turn_speed = enemy.turn_speed_degrees
-		if enemy.loaded_def != null and enemy.loaded_def.tracks_target and enemy.loaded_skill != Skills.NONE:
+		if enemy.loaded_def != null and enemy.loaded_def.aims_exactly() and enemy.loaded_skill != Skills.NONE:
 			enemy.face_toward(to_locked, 1.0, 1000000.0)  # locked on exactly (Breath)
 		elif not enemy.get_meta("aim_locked", false):  # snapped skills hold their aim
 			enemy.face_toward(to_locked, delta, turn_speed)
@@ -785,7 +797,11 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 		if area.contains(ally.global_position, danger["margin"]):
 			var from_area := ally.global_position - area.global_position
 			from_area.y = 0.0
-			away += from_area.normalized() if from_area.length() > 0.05 else Vector3.RIGHT
+			var out := from_area.normalized() if from_area.length() > 0.05 else Vector3.RIGHT
+			if area.shape == EnemySkill.Shape.DONUT \
+					and from_area.length() - area.inner_radius < area.radius - from_area.length():
+				out = -out  # a ring: its safe middle is closer than its outer edge
+			away += out
 	if away != Vector3.ZERO:
 		ally.step(away, delta)
 		_keep_in_arena(ally)
@@ -818,13 +834,15 @@ func _ally_dangers(ally: Combatant) -> Array[Dictionary]:
 		if not _is_danger(enemy):
 			continue
 		var def := enemy.loaded_def
+		if def.special == EnemySkill.Special.HEAL_ALLIES:
+			continue  # a healing ritual can't hurt anyone: go and break it instead
 		if enemy.skill_revealed and def.shared_damage and _stack_target(enemy) != null:
 			continue  # stacking in it is the answer, not running
 		for area in _enemy_areas(enemy):
 			var margin := base
-			if area.has_meta("follow") and not enemy.skill_revealed:
+			if area.has_meta("follow") and (not enemy.skill_revealed or def.keeps_following()):
 				if area.get_meta("follow") == ally:
-					continue  # it follows this ally: moving can't escape it yet
+					continue  # it follows this ally: moving can't escape it
 				if def.special == EnemySkill.Special.ON_EACH_TARGET and def.overlap != EnemySkill.Overlap.NORMAL:
 					margin += area.radius  # keep my own circle from overlapping this one
 			list.append({"area": area, "margin": margin})
@@ -1059,7 +1077,7 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 		_push_out(enemy, reset_timeline)
 		return
 	if enemy.loaded_def.is_offensive():
-		if enemy.loaded_def.tracks_target and enemy.cast_target != null and not enemy.cast_target.is_down:
+		if enemy.loaded_def.aims_exactly() and enemy.cast_target != null and not enemy.cast_target.is_down:
 			enemy.face_toward(enemy.cast_target.global_position - enemy.global_position, 1.0, 1000000.0)
 		var mods := _strike_targets(enemy)
 		if mods.is_empty():
@@ -1226,8 +1244,8 @@ func _update_cast_areas() -> void:
 		var def := enemy.loaded_def
 		if def == null or enemy.is_down:
 			continue
-		if def.placed_on_party() and not enemy.skill_revealed:
-			_place_party_areas(enemy, true)
+		if def.placed_on_party() and (not enemy.skill_revealed or def.keeps_following()):
+			_place_party_areas(enemy, not enemy.skill_revealed)  # unavoidable ones follow to the end
 		elif def.special == EnemySkill.Special.GROWING:
 			if not enemy.contained and enemy.cast_damage_taken >= ceili(enemy.max_hp * def.contain_share):
 				enemy.set_meta("contained_radius", _cast_radius(enemy))
@@ -1668,7 +1686,7 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 						if _skill_reaches(enemy, skill, member):
 							reached += 1
 					if not _skill_reaches(enemy, skill, target) and reached == 0:
-						score *= 0.2
+						score *= 0.05  # can't reach anyone: almost never worth preparing
 					elif not skill.shared_damage:
 						score *= 1.0 + 0.25 * maxi(reached - 1, 0)
 		if skill == enemy.last_skill:
@@ -1741,9 +1759,19 @@ func _begin_strike(enemy: Combatant, mods: Dictionary, reset_timeline: bool, win
 	s.targets = targets
 	s.hits_left = (s.def.hits - 1) if hits_left < 0 else hits_left
 	s.windup = s.def.windup if windup < 0.0 else windup
+	if s.def.is_mechanic():
+		s.windup = minf(s.windup, unavoidable_impact_seconds)  # nothing to react to: a short beat, then it lands
 	s.time_left = s.windup
 	s.reset_timeline = reset_timeline
+	s.follow_windup = s.def.windup * 0.55
 	for target in targets:
+		if s.def.is_mechanic():
+			# Unavoidable: no timing ring to react to, just a red mark on
+			# everyone about to be hit.
+			var mark := _make_ring(target.body_radius + 0.3, 0.12, Color(1.0, 0.2, 0.15, 0.85))
+			target.add_child(mark)
+			s.markers.append(mark)
+			continue
 		# A fixed white marker shows where the ring will land; the ring
 		# shrinks onto it and turns gold when it's time to parry.
 		var ring_radius := target.body_radius + 0.3
@@ -1753,6 +1781,12 @@ func _begin_strike(enemy: Combatant, mods: Dictionary, reset_timeline: bool, win
 		target.add_child(ring)
 		s.markers.append(marker)
 		s.rings.append(ring)
+		for k in range(1, s.hits_left + 1):
+			var later := _make_ring(ring_radius, 0.07, Color(1, 1, 1, 0.45))
+			later.set_meta("hit", k)
+			later.visible = false
+			target.add_child(later)
+			s.future_rings.append(later)
 	_strike = s
 	print("%s's %s strikes at %s" % [enemy.display_name, s.def.skill_name, _names(targets)])
 
@@ -1775,19 +1809,28 @@ func _update_strike(delta: float) -> void:
 		var scale_factor := 1.0 + 2.0 * progress
 		ring.scale = Vector3(scale_factor, 1.0, scale_factor)
 		(ring.material_override as StandardMaterial3D).albedo_color = color
+	# Later hits: each ring shrinks at the speed of its own wind-up, so it
+	# lands on the marker exactly when that hit does (rings appear from the
+	# outside as they get close).
+	for ring in _strike.future_rings:
+		var k: int = ring.get_meta("hit")
+		var time_to_hit := maxf(_strike.time_left, 0.0) + k * _strike.follow_windup
+		var scale_factor := 1.0 + 2.0 * time_to_hit / _strike.follow_windup
+		ring.visible = scale_factor <= 5.5
+		ring.scale = Vector3(scale_factor, 1.0, scale_factor)
+		var later_color := Color(0.35, 0.65, 1.0) if _strike.reaction == Reaction.DEFEND else Color.WHITE
+		later_color.a = 0.5 if k == 1 else 0.3
+		(ring.material_override as StandardMaterial3D).albedo_color = later_color
 	if _strike.time_left <= 0.0:
 		_resolve_strike()
 
 
 ## E: a Parry. Only one try per strike.
 func _try_parry() -> void:
-	if _strike.reaction != Reaction.NONE:
-		return
-	if _strike.def.cannot_be_parried:
+	if _strike.reaction != Reaction.NONE or _strike.def.is_mechanic():
+		return  # unavoidable hits don't ask for a reaction
+	if not _strike.def.parryable():
 		_flash("%s can't be parried!" % _strike.def.skill_name)
-		return
-	if not _marked_alone(_strike):
-		_flash("%s can only be parried by someone alone in it" % _strike.def.skill_name)
 		return
 	if not _strike_targets_can("parry"):
 		_flash("%s can't parry" % _names(_strike.targets))
@@ -1800,9 +1843,9 @@ func _try_parry() -> void:
 
 ## Q: Defend. Costs AP, can't be combined with a parry attempt.
 func _try_defend() -> void:
-	if _strike.reaction != Reaction.NONE:
+	if _strike.reaction != Reaction.NONE or _strike.def.is_mechanic():
 		return
-	if _strike.def.cannot_be_blocked:
+	if not _strike.def.blockable():
 		_flash("%s can't be blocked!" % _strike.def.skill_name)
 		return
 	if not _strike_targets_can("block"):
@@ -1818,7 +1861,7 @@ func _try_defend() -> void:
 func _resolve_strike() -> void:
 	var s := _strike
 	_strike = null
-	for node in s.rings + s.markers:
+	for node in s.rings + s.markers + s.future_rings:
 		node.queue_free()
 
 	var skill_name := s.def.skill_name
@@ -1838,11 +1881,11 @@ func _resolve_strike() -> void:
 		var mod: Dictionary = s.mods.get(target, {})
 		var damage := ceili(base_damage * float(mod.get("mult", 1.0)))
 		var one_hp: bool = mod.get("one_hp", false)
-		if target.riposte_left > 0.0:
+		if target.riposte_left > 0.0 and s.def.parryable():
 			_riposte(target, s.enemy, lines)
 			continue
-		var can_parry := target.can_parry and not s.def.cannot_be_parried and _marked_alone(s)
-		var can_block: bool = target.can_block and not s.def.cannot_be_blocked and not mod.get("unblockable", false)
+		var can_parry := target.can_parry and s.def.parryable()
+		var can_block: bool = target.can_block and s.def.blockable() and not mod.get("unblockable", false)
 		if s.reaction == Reaction.PARRY and can_parry:
 			parried = true
 			if playtest:
@@ -1902,8 +1945,8 @@ func _resolve_strike() -> void:
 		lines.append("%s is staggered" % s.enemy.display_name)
 		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
 	if parry_missed:
-		ap *= 0.5
-		lines.append("Parry too early! Turn delayed, AP halved")
+		ap = 0.0
+		lines.append("Parry too early! Turn delayed, AP lost")
 		var reset_note := _reset_max_ap()
 		if reset_note != "":
 			lines.append(reset_note)
@@ -1930,7 +1973,9 @@ func _resolve_strike() -> void:
 		if not next_mods.is_empty() and not _standing(party).is_empty():
 			_flash("\n".join(lines))
 			_check_party()
-			_begin_strike(s.enemy, next_mods, s.reset_timeline, s.def.windup * 0.55, s.hits_left - 1)
+			_begin_strike(s.enemy, next_mods, s.reset_timeline, s.follow_windup, s.hits_left - 1)
+			if s.reaction == Reaction.DEFEND:
+				_strike.reaction = Reaction.DEFEND  # one Defend (one AP payment) guards the whole chain
 			return
 	_leave_hazards(s.enemy)
 	_finish_enemy_skill(s.enemy, s.reset_timeline)
@@ -2015,12 +2060,6 @@ func _save_playtest(result: String) -> void:
 	var path: String = playtest.save(result, stats, party, enemies)
 	if path != "":
 		print("Play-test report: %s" % path)
-
-
-## Fireball-like skills (one circle on a marked target) can only be Parried
-## when only one person is caught in them.
-func _marked_alone(s: Strike) -> bool:
-	return s.def.special != EnemySkill.Special.ON_MARKED or s.targets.size() <= 1
 
 
 ## Handles knocked-out fighters: hands control back if needed, and ends
@@ -2323,6 +2362,8 @@ func _execute_combo() -> void:
 	_exec_attacker = controlled
 	_ap_before_combo = ap
 	ap -= battle_menu.combo_cost()
+	if combo_counter:
+		combo_counter.begin(controlled.display_name)
 	_exec_attacker.statuses.erase("arcane_cost")  # Arcane Barrier's cost lasts until the next attack
 	_count("combos")
 	_count("combos_" + _exec_attacker.class_id)
@@ -2384,6 +2425,8 @@ func _update_combo(delta: float) -> void:
 			multiplier *= 1.0 + perfect_damage_bonus
 		_exec_attacker.play_lunge()
 		var keep_going := _land_hit(_exec_attacker, entry["move"], multiplier, _exec_hits_done == 0)
+		if combo_counter:
+			combo_counter.hit(perfect)
 		_exec_hits_done += 1
 		if perfect:
 			_popup(_exec_attacker, "PERFECT!", Color(1.0, 0.85, 0.2))
@@ -2399,6 +2442,8 @@ func _update_combo(delta: float) -> void:
 		else:
 			battle_menu.executing_slot = _plan.size()  # playhead to the end
 			_exec_outro = 0.4
+			if combo_counter:
+				combo_counter.finish()
 
 
 ## J during the combo: inside the next hit's timing box = Perfect;
@@ -2420,7 +2465,9 @@ func _judge_timing() -> void:
 		_exec_timings[hit] = Timing.MISS
 		battle_menu.slot_results[_exec_slot][hit] = Timing.MISS
 		_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
-		_flash("Missed the timing! The chain ends. " + _reset_max_ap())
+		var reset_note := _reset_max_ap()
+		ap = 0.0  # a missed timing costs all the party's AP
+		_flash("Missed the timing! The chain ends, AP lost. " + reset_note)
 		_stop_combo()
 
 
@@ -2469,6 +2516,8 @@ func _reset_max_ap() -> String:
 ## Ends the combo early: the playhead freezes where it is.
 func _stop_combo() -> void:
 	_exec_outro = 0.7
+	if combo_counter:
+		combo_counter.finish()
 
 
 ## One hit of a move lands: works out everyone it reaches (by the move's
@@ -2601,6 +2650,8 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 	var dealt := target.take_damage(damage, false)
 	if playtest:
 		playtest.deal(attacker, dealt)
+	if combo_counter and _menu_mode == BattleMenu.Mode.EXECUTING and attacker == _exec_attacker:
+		combo_counter.damage(dealt)
 	var is_smash: bool = move["kind"] == Skills.Kind.SMASH
 	_popup(target, str(damage), Color(1.0, 0.7, 0.3) if is_smash else Color.WHITE)
 
@@ -3124,7 +3175,8 @@ func _update_ui(delta: float) -> void:
 		ap_meter.value = ap
 		ap_meter.max_value = current_max_ap
 		ap_meter.ceiling = max_ap_ceiling()
-		ap_meter.flow_speed = _ap_gain_multiplier()
+		ap_meter.flow_speed = _ap_gain_multiplier() * (2.0 if _concentrate_left > 0.0 else 1.0)
+		ap_meter.boost_left = _concentrate_left
 		ap_meter.ghost_cost = battle_menu.combo_cost() if _menu_mode == BattleMenu.Mode.COMBO and _party_turn() else 0.0
 		ap_meter.at_risk = _max_ap_at_risk()
 
@@ -3142,15 +3194,15 @@ func _strike_prompt() -> String:
 			return "Too early!"
 		Reaction.DEFEND:
 			return "Defending..."
-	var parry_hint := "E: can't Parry this" if _strike.def.cannot_be_parried else "E: Parry when the ring turns gold"
-	if not _marked_alone(_strike):
-		parry_hint = "E: can't Parry: %s isn't alone in it" % _strike.enemy.cast_target.display_name \
-				if _strike.enemy.cast_target != null else "E: can't Parry this"
-	var defend_hint := "Q: can't Defend this" if _strike.def.cannot_be_blocked else "Q: Defend (%d AP)" % defend_cost
+	var parry_hint := "E: Parry when the ring turns gold" if _strike.def.parryable() else "E: can't Parry this"
+	var defend_hint := "Q: Defend (%d AP)" % defend_cost if _strike.def.blockable() else "Q: can't Defend this"
 	if not _strike_targets_can("parry"):
 		parry_hint = "E: %s can't parry" % _names(_strike.targets)
 	if not _strike_targets_can("block"):
 		defend_hint = "Q: %s can't block" % _names(_strike.targets)
+	if _strike.def.is_mechanic():
+		# No prompt: there's nothing to press.
+		return _flash_message if _flash_time_left > 0.0 else ""
 	var prompt := parry_hint + "     " + defend_hint
 	if _flash_time_left > 0.0:
 		prompt = _flash_message + "\n" + prompt
