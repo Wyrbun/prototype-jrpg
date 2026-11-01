@@ -99,6 +99,16 @@ var cannot_fall := false
 var forced_skill: EnemySkill = null
 ## Enemies only: who it locked onto when it started preparing a skill.
 var cast_target: Combatant = null
+## Enemies only: areas placed on the party for the skill being prepared
+## (circles on each member, lines to each member).
+var extra_areas: Array[AttackRange] = []
+## Enemies only: damage taken since the current cast began (Shadowflare),
+## close-range hits taken during it (Healing Ritual), whether a growing
+## area was contained, and the last skill used (to avoid repeating it).
+var cast_damage_taken := 0
+var interrupt_count := 0
+var contained := false
+var last_skill: EnemySkill = null
 
 var _skill_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
@@ -218,6 +228,8 @@ func take_damage(amount: int, recoverable_hit: bool) -> int:
 	if cannot_fall:
 		lost = mini(lost, hp - 1)
 	hp -= lost
+	if team == Team.ENEMY and loaded_def != null:
+		cast_damage_taken += lost
 	if hp <= 0:
 		_go_down()
 	elif recoverable_hit:

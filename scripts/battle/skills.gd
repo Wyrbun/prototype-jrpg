@@ -12,7 +12,9 @@ class_name Skills
 ##   Defense beats Attack (blocks it)
 ##   Counter beats Attack and Smash, but only if timed right
 
-enum Kind { ATTACK, SMASH, DEFENSE, COUNTER }
+## SPECIAL: enemy skills outside the triangle (Fireball-like spells, curses,
+## rituals). They don't interrupt or get interrupted by the triangle rules.
+enum Kind { ATTACK, SMASH, DEFENSE, COUNTER, SPECIAL }
 
 ## Means "no skill loaded".
 const NONE := -1
@@ -32,6 +34,8 @@ static func info(kind: int) -> Dictionary:
 			return {"name": "Defense", "color": Color(0.3, 0.6, 1.0), "offensive": false, "radius": 1.9, "angle": 360.0, "damage": 0, "windup": 0.0}
 		Kind.COUNTER:
 			return {"name": "Counter", "color": Color(0.75, 0.4, 1.0), "offensive": false, "radius": 2.2, "angle": 360.0, "damage": 0, "windup": 0.0}
+		Kind.SPECIAL:
+			return {"name": "Special", "color": Color(1.0, 0.35, 0.75), "offensive": true, "radius": 3.0, "angle": 360.0, "damage": 20, "windup": 1.4}
 	return {"name": "", "color": Color.WHITE, "offensive": false, "radius": 0.0, "angle": 0.0, "damage": 0, "windup": 0.0}
 
 

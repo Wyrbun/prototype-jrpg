@@ -3,6 +3,24 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Enemy AI pass
+
+- **Full kits** for the three enemies that had a single skill:
+  - Dragon Hatchling: Breath (shared damage), Fire Wave (leaves a fire
+    trail for 3 turns), Burning Spike (circles on everyone; overlaps drop to
+    1 HP).
+  - Living Armor: Combo (3 hits, last one launches), Dark Bolt (circles on
+    everyone; overlaps take double), Shadowflare (grows unless contained by
+    damage).
+  - Orc Shaman: Attack, Healing Ritual (heals allies; 3 close hits interrupt
+    it), Curse (lines to everyone; overlaps take double, unblockable).
+- **Telegraphs:** red spheres over heads mean spread out; inward arrows mean
+  stack up.
+- **Smarter skill choice** for every enemy: skips skills that can't reach
+  anyone, uses spread punishers when the party is bunched, heals only when
+  allies are hurt, raises Defense/Counter when someone is close, and avoids
+  repeating itself.
+
 ## Strikes follow the timeline, shorter casting zone
 
 - Enemies no longer strike early when someone stands in their revealed

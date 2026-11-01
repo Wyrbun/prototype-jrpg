@@ -159,6 +159,10 @@ class Strike:
 	var enemy: Combatant
 	var skill: int
 	var def: EnemySkill
+	## Per target: {"mult": damage multiplier, "unblockable": bool, "one_hp": bool}.
+	var mods := {}
+	## Hits still to come after this one (multi-hit skills).
+	var hits_left := 0
 	var targets: Array[Combatant] = []
 	var windup: float = 1.0
 	var time_left: float = 1.0
@@ -221,6 +225,12 @@ var _pending_skill: Dictionary = {}
 var _target_choices: Array[Combatant] = []
 var _target_index := 0
 var _target_marker: MeshInstance3D = null
+## Lingering hazards (fire trails): {"area", "owner", "turns", "dps", "acc"}.
+var _hazards: Array[Dictionary] = []
+## Telegraph arrows being animated: {"node", "base", "dir"}.
+var _telegraph_arrows: Array[Dictionary] = []
+var _telegraph_time := 0.0
+
 ## True while picking which enemy a combo will hit (TARGET mode for Attack).
 var _choosing_attack_target := false
 ## The enemy the combo will hit, locked when the combo bar opens.
@@ -394,6 +404,7 @@ func _process(delta: float) -> void:
 			for member in party:
 				member.riposte_left = maxf(member.riposte_left - world_delta, 0.0)
 			_free_roam(delta, world_delta)
+			_tick_hazards(world_delta)
 			_tick_stances(world_delta)
 			_advance_timeline(world_delta)
 		elif _turn_intro_left > 0.0:
@@ -405,6 +416,8 @@ func _process(delta: float) -> void:
 		elif _party_turn() and _menu_mode == BattleMenu.Mode.TARGET:
 			_update_target_marker(delta)
 		# On a party turn the fighter is locked in place until a command is chosen.
+	_update_cast_areas()
+	_animate_telegraphs(delta)
 	# Checked again: the strike above may have just knocked out the last fighter.
 	if not _game_over:
 		_update_attack_ranges()
@@ -504,6 +517,11 @@ func _start_turn(fighter: Combatant) -> void:
 			ended.append("%s's %s" % [c.display_name, String(status_name).replace("_", " ")])
 	if not ended.is_empty():
 		_flash("Wore off: " + ", ".join(ended))
+	for hazard in _hazards.duplicate():
+		if hazard["owner"] == fighter:
+			hazard["turns"] = int(hazard["turns"]) - 1
+			if hazard["turns"] <= 0:
+				_remove_hazard(hazard)
 
 	if fighter.team == Combatant.Team.PARTY:
 		if _steer_before_turn == null:
@@ -689,11 +707,11 @@ func _enemy_target(enemy: Combatant) -> Combatant:
 func _ally_step(ally: Combatant, delta: float) -> void:
 	var margin := ally.body_radius + ally_danger_margin
 	var away := Vector3.ZERO
-	for enemy in enemies:
-		if _is_danger(enemy) and enemy.attack_range.contains(ally.global_position, margin):
-			var from_enemy := ally.global_position - enemy.global_position
-			from_enemy.y = 0.0
-			away += from_enemy.normalized()
+	for area in _danger_areas():
+		if area.contains(ally.global_position, margin):
+			var from_area := ally.global_position - area.global_position
+			from_area.y = 0.0
+			away += from_area.normalized() if from_area.length() > 0.05 else Vector3.RIGHT
 	if away != Vector3.ZERO:
 		ally.step(away, delta)
 		_keep_in_arena(ally)
@@ -735,16 +753,43 @@ func _safe_step(fighter: Combatant, direction: Vector3, delta: float) -> bool:
 ## An enemy area worth avoiding: a revealed Attack/Smash, or anything still
 ## being prepared (allies can't know a hidden skill is harmless).
 func _is_danger(enemy: Combatant) -> bool:
-	if enemy.attack_range == null or enemy.is_down or enemy.loaded_skill == Skills.NONE:
+	if enemy.attack_range == null or enemy.is_down or enemy.loaded_def == null:
 		return false
-	return not enemy.skill_revealed or Skills.is_offensive(enemy.loaded_skill)
+	return not enemy.skill_revealed or enemy.loaded_def.is_offensive()
 
 
 func _in_danger(point: Vector3, extra_radius: float) -> bool:
-	for enemy in enemies:
-		if _is_danger(enemy) and enemy.attack_range.contains(point, extra_radius):
+	for area in _danger_areas():
+		if area.contains(point, extra_radius):
 			return true
 	return false
+
+
+## Every area an AI ally should stay out of: enemy areas being prepared or
+## revealed as offensive, placed circles and lines, and fire trails.
+func _danger_areas() -> Array[AttackRange]:
+	var areas: Array[AttackRange] = []
+	for enemy in enemies:
+		if _is_danger(enemy):
+			areas.append_array(_enemy_areas(enemy))
+	for hazard in _hazards:
+		areas.append(hazard["area"])
+	return areas
+
+
+## The areas a prepared skill will hit: the enemy's own area, or the circles
+## and lines it placed on the party.
+func _enemy_areas(enemy: Combatant) -> Array[AttackRange]:
+	var areas: Array[AttackRange] = []
+	if enemy.loaded_def != null and enemy.loaded_def.placed_on_party():
+		areas.append_array(enemy.extra_areas)
+	elif enemy.attack_range != null:
+		areas.append(enemy.attack_range)
+	return areas
+
+
+func _loaded_offensive(enemy: Combatant) -> bool:
+	return enemy.loaded_def != null and enemy.loaded_def.is_offensive()
 
 
 ## Pushes apart any two fighters standing inside each other.
@@ -789,16 +834,22 @@ func _can_see(a: Combatant, b: Combatant) -> bool:
 ## you only see that it's preparing something, not what.
 ## Defense and Counter take effect right away (still hidden).
 func _begin_cast(enemy: Combatant) -> void:
-	enemy.loaded_def = enemy.pick_skill()
+	enemy.loaded_def = _choose_enemy_skill(enemy)
 	enemy.loaded_skill = enemy.loaded_def.kind
+	var streak: int = enemy.get_meta("repeat_streak", 0)
+	enemy.set_meta("repeat_streak", streak + 1 if enemy.loaded_def == enemy.last_skill else 1)
+	enemy.last_skill = enemy.loaded_def
 	enemy.cast_target = _enemy_target(enemy)  # locked on for the whole cast
 	enemy.skill_revealed = false
 	enemy.stance_time_left = 0.0
-	enemy.stance = Skills.NONE if Skills.is_offensive(enemy.loaded_skill) else enemy.loaded_skill
+	var kind := enemy.loaded_def.kind
+	enemy.stance = kind if kind == Skills.Kind.DEFENSE or kind == Skills.Kind.COUNTER else Skills.NONE
+	enemy.cast_damage_taken = 0
+	enemy.interrupt_count = 0
+	enemy.contained = false
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
-	if enemy.attack_range:
-		# Its area shows up right away, in grey: where it will land, not what it is.
-		enemy.attack_range.show_skill(enemy.loaded_def, true)
+	# Its area shows up right away, in grey: where it will land, not what it is.
+	_build_cast_areas(enemy)
 	print("%s is preparing %s (hidden)" % [enemy.display_name, enemy.loaded_def.skill_name])
 
 
@@ -808,10 +859,16 @@ func _reveal_skill(enemy: Combatant) -> void:
 	enemy.skill_revealed = true
 	var def := enemy.loaded_def
 	var text := def.skill_name.to_upper()
-	if enemy.attack_range:
-		enemy.attack_range.show_skill(def)
-	if not def.is_offensive():
+	if def.placed_on_party():
+		for area in enemy.extra_areas:
+			area.show_skill(def, false, area.radius)  # colored, and locked where it is now
+	elif enemy.attack_range:
+		enemy.attack_range.show_skill(def, false, _cast_radius(enemy))
+	if def.kind == Skills.Kind.DEFENSE or def.kind == Skills.Kind.COUNTER:
 		text += " STANCE"
+	if enemy.contained:
+		text += " (CONTAINED)"
+	_add_telegraphs(enemy)
 	enemy.show_skill_text(text, def.color())
 	print("%s reveals %s" % [enemy.display_name, def.skill_name])
 
@@ -825,23 +882,18 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
+	if enemy.loaded_def.special == EnemySkill.Special.HEAL_ALLIES:
+		_heal_allies(enemy)
+		_finish_enemy_skill(enemy, reset_timeline)
+		return
 	if enemy.loaded_def.is_offensive():
-		var targets: Array[Combatant] = []
-		var shielded := false
-		for member in _standing(party):
-			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
-				if _can_see(enemy, member):
-					targets.append(member)
-				else:
-					shielded = true  # in the area, but a rock was in the way
-		if shielded:
-			_count("rock_saves")
-		if targets.is_empty():
+		var mods := _strike_targets(enemy)
+		if mods.is_empty():
 			_count("misses")
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
 			_finish_enemy_skill(enemy, reset_timeline)
 		else:
-			_begin_strike(enemy, targets, reset_timeline)
+			_begin_strike(enemy, mods, reset_timeline)
 		return
 
 	# Defense/Counter: the stance lingers a few seconds after the turn.
@@ -857,6 +909,7 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.attack_range:
 		enemy.attack_range.go_dormant()
+	_clear_cast_extras(enemy)
 	enemy.show_skill_text("")
 	enemy.cast_target = null
 	enemy.loaded_skill = Skills.NONE
@@ -892,10 +945,17 @@ func _update_attack_ranges() -> void:
 			continue
 		var targets: PackedStringArray = []
 		if _is_live_threat(enemy):
-			for member in _standing(party):
-				if enemy.attack_range.contains(member.global_position, member.body_radius) and _can_see(enemy, member):
-					targets.append(member.display_name)
-		enemy.attack_range.set_alert(not targets.is_empty())
+			for area in _enemy_areas(enemy):
+				var inside := false
+				for member in _standing(party):
+					if area.contains(member.global_position, member.body_radius) \
+							and (enemy.loaded_def.placed_on_party() or _can_see(enemy, member)):
+						inside = true
+						if not targets.has(member.display_name):
+							targets.append(member.display_name)
+				area.set_alert(inside)
+		else:
+			enemy.attack_range.set_alert(false)
 		if targets.is_empty():
 			continue
 		# Strikes always land when the enemy's icon reaches the end of the bar;
@@ -908,25 +968,411 @@ func _update_attack_ranges() -> void:
 ## True if a point is inside any enemy's live Attack/Smash area.
 func _in_any_attack_range(point: Vector3, extra_radius: float) -> bool:
 	for enemy in enemies:
-		if _is_live_threat(enemy) and enemy.attack_range.contains(point, extra_radius):
-			return true
+		if _is_live_threat(enemy):
+			for area in _enemy_areas(enemy):
+				if area.contains(point, extra_radius):
+					return true
 	return false
 
 
 ## An enemy whose revealed Attack or Smash area can hurt you right now.
 func _is_live_threat(enemy: Combatant) -> bool:
-	return enemy.attack_range != null and enemy.skill_revealed and Skills.is_offensive(enemy.loaded_skill)
+	return enemy.attack_range != null and enemy.skill_revealed and _loaded_offensive(enemy)
+
+
+# --- Special enemy skills ----------------------------------------------------
+
+## Shows a new cast's area(s) in grey: the enemy's own area, or one circle /
+## line per party member for skills placed on the party.
+func _build_cast_areas(enemy: Combatant) -> void:
+	_clear_cast_extras(enemy)
+	var def := enemy.loaded_def
+	if def.placed_on_party():
+		for member in _standing(party):
+			var area := AttackRange.new()
+			add_child(area)
+			area.set_meta("follow", member)
+			enemy.extra_areas.append(area)
+		_place_party_areas(enemy, true)
+	elif enemy.attack_range:
+		enemy.attack_range.show_skill(def, true, _cast_radius(enemy))
+
+
+## Moves placed areas onto their party members (circles) or aims them at
+## them (lines). Only while the skill is still hidden; once revealed they stay.
+func _place_party_areas(enemy: Combatant, hidden: bool) -> void:
+	var def := enemy.loaded_def
+	for area in enemy.extra_areas:
+		var member: Combatant = area.get_meta("follow")
+		if member == null or not is_instance_valid(member):
+			continue
+		if def.special == EnemySkill.Special.ON_EACH_TARGET:
+			area.global_position = Vector3(member.global_position.x, 0.03, member.global_position.z)
+			area.show_skill(def, hidden)
+		else:
+			var from := Vector3(enemy.global_position.x, 0.03, enemy.global_position.z)
+			var to := Vector3(member.global_position.x, 0.03, member.global_position.z)
+			area.global_position = from
+			if from.distance_to(to) > 0.05:
+				area.look_at(to, Vector3.UP)
+			area.show_skill(def, hidden, from.distance_to(to) + 1.0)
+
+
+## How big the prepared skill's own area is right now (growing circles
+## grow over the cast, unless contained).
+func _cast_radius(enemy: Combatant) -> float:
+	var def := enemy.loaded_def
+	if def == null or def.special != EnemySkill.Special.GROWING:
+		return -1.0
+	if enemy.contained:
+		return enemy.get_meta("contained_radius", def.radius)
+	var progress := clampf((enemy.timeline_pos - cast_zone_start) / (TIMELINE_LENGTH - cast_zone_start), 0.0, 1.0)
+	return lerpf(def.radius, def.max_radius, progress)
+
+
+## Every frame: placed areas follow the party until revealed, and growing
+## circles grow (or get contained by damage dealt to the caster).
+func _update_cast_areas() -> void:
+	for enemy in enemies:
+		var def := enemy.loaded_def
+		if def == null or enemy.is_down:
+			continue
+		if def.placed_on_party() and not enemy.skill_revealed:
+			_place_party_areas(enemy, true)
+		elif def.special == EnemySkill.Special.GROWING:
+			if not enemy.contained and enemy.cast_damage_taken >= ceili(enemy.max_hp * def.contain_share):
+				enemy.set_meta("contained_radius", _cast_radius(enemy))
+				enemy.contained = true
+				_popup(enemy, "CONTAINED", Color(0.6, 0.9, 1.0))
+				_flash("%s's %s is contained: it stops growing" % [enemy.display_name, def.skill_name])
+				if enemy.skill_revealed:
+					enemy.show_skill_text(def.skill_name.to_upper() + " (CONTAINED)", def.color())
+			var radius := _cast_radius(enemy)
+			if enemy.attack_range and absf(enemy.attack_range.radius - radius) > 0.05:
+				enemy.attack_range.show_skill(def, not enemy.skill_revealed, radius)
+
+
+func _clear_cast_extras(enemy: Combatant) -> void:
+	for area in enemy.extra_areas:
+		if is_instance_valid(area):
+			area.queue_free()
+	enemy.extra_areas.clear()
+	_clear_telegraphs(enemy)
+
+
+## Who a prepared skill hits, and how: {party member: {"mult", "unblockable", "one_hp"}}.
+func _strike_targets(enemy: Combatant) -> Dictionary:
+	var def := enemy.loaded_def
+	var result := {}
+	if def.placed_on_party():
+		for member in _standing(party):
+			var count := 0
+			for area in enemy.extra_areas:
+				if not area.contains(member.global_position, member.body_radius):
+					continue
+				if def.special == EnemySkill.Special.LINE_TO_EACH and not _can_see(enemy, member):
+					continue  # a rock blocks the line
+				count += 1
+			if count == 0:
+				continue
+			var mod := {"mult": 1.0, "unblockable": false, "one_hp": false}
+			if count >= 2:
+				if def.overlap == EnemySkill.Overlap.DOUBLE:
+					mod["mult"] = 2.0
+				elif def.overlap == EnemySkill.Overlap.ONE_HP:
+					mod["one_hp"] = true
+				if def.overlap_unblockable:
+					mod["unblockable"] = true
+			result[member] = mod
+	else:
+		var shielded := false
+		for member in _standing(party):
+			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
+				if _can_see(enemy, member):
+					result[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
+				else:
+					shielded = true  # in the area, but a rock was in the way
+		if shielded:
+			_count("rock_saves")
+	if def.shared_damage and result.size() > 1:
+		# Stacking up spreads the damage: 100%, 67%, 50%, 40%...
+		var share := 1.0 / (1.0 + 0.5 * (result.size() - 1))
+		for mod in result.values():
+			mod["mult"] = float(mod["mult"]) * share
+	return result
+
+
+## Healing Ritual: every enemy within the circle (the caster too) heals.
+func _heal_allies(caster: Combatant) -> void:
+	var def := caster.loaded_def
+	var healed: PackedStringArray = []
+	for ally in _standing(enemies):
+		var distance := ally.global_position.distance_to(caster.global_position) - ally.body_radius
+		if ally == caster or distance <= def.radius:
+			var amount := ally.heal(ceili(ally.max_hp * def.heal_share))
+			if amount > 0:
+				_popup(ally, "+%d" % amount, Color(0.45, 0.95, 0.5))
+				healed.append("%s +%d" % [ally.display_name, amount])
+	if healed.is_empty():
+		_flash("%s's %s: nobody needed healing" % [caster.display_name, def.skill_name])
+	else:
+		_flash("%s's %s heals: %s" % [caster.display_name, def.skill_name, ", ".join(healed)])
+
+
+## Fire Wave: its area keeps burning for a few of the caster's turns.
+func _spawn_trail(enemy: Combatant) -> void:
+	if enemy.attack_range == null:
+		return
+	var area := AttackRange.new()
+	add_child(area)
+	area.global_transform = enemy.attack_range.global_transform
+	area.show_hazard(enemy.loaded_def, Color(1.0, 0.45, 0.1))
+	_hazards.append({"area": area, "owner": enemy, "turns": enemy.loaded_def.trail_turns,
+			"dps": enemy.loaded_def.trail_damage_per_second, "acc": {}, "name": enemy.loaded_def.skill_name})
+	_flash("The ground keeps burning!")
+
+
+## Anyone standing in a fire trail keeps losing HP (in small chunks).
+func _tick_hazards(world_delta: float) -> void:
+	for hazard in _hazards:
+		var area: AttackRange = hazard["area"]
+		var acc: Dictionary = hazard["acc"]
+		for member in _standing(party):
+			if not area.contains(member.global_position, member.body_radius * 0.5):
+				continue
+			acc[member] = float(acc.get(member, 0.0)) + float(hazard["dps"]) * world_delta
+			if acc[member] >= 4.0:
+				var chunk := floori(acc[member])
+				acc[member] -= chunk
+				var taken := member.take_damage(chunk, false)
+				_popup(member, str(taken), Color(1.0, 0.55, 0.2))
+				if member.is_down:
+					_flash("%s burns down in the fire!" % member.display_name)
+					_check_party()
+
+
+func _remove_hazard(hazard: Dictionary) -> void:
+	var area: AttackRange = hazard["area"]
+	if is_instance_valid(area):
+		area.queue_free()
+	_hazards.erase(hazard)
+
+
+# --- Telegraphs -------------------------------------------------------------
+
+## Revealed skills that need a specific answer say so on the field:
+## - spread out (circles or lines placed on everyone): a red sphere bobs
+##   above each party member's head;
+## - stack up (damage shared between those hit): arrows around the area's
+##   edge point inward.
+func _add_telegraphs(enemy: Combatant) -> void:
+	_clear_telegraphs(enemy)
+	var def := enemy.loaded_def
+	var nodes: Array[Node3D] = []
+	if def.placed_on_party() and def.overlap != EnemySkill.Overlap.NORMAL:
+		for member in _standing(party):
+			var sphere := MeshInstance3D.new()
+			var mesh := SphereMesh.new()
+			mesh.radius = 0.2
+			mesh.height = 0.4
+			sphere.mesh = mesh
+			var material := StandardMaterial3D.new()
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			material.albedo_color = Color(1.0, 0.15, 0.1)
+			sphere.material_override = material
+			member.add_child(sphere)
+			sphere.position = Vector3(0, 2.85, 0)
+			sphere.set_meta("bob", true)
+			nodes.append(sphere)
+	elif def.shared_damage and enemy.attack_range:
+		var area := enemy.attack_range
+		var count := 7
+		var half := deg_to_rad(area.angle_degrees) / 2.0
+		var center := Vector3(0, 0.06, -area.radius * 0.45) if area.angle_degrees < 360.0 else Vector3(0, 0.06, 0)
+		for i in count:
+			var t := (i + 0.5) / count
+			var a := -half + 2.0 * half * t if area.angle_degrees < 360.0 else TAU * t
+			var edge := Vector3(sin(a), 0.0, -cos(a)) * area.radius * 0.95
+			edge.y = 0.06
+			var inward := (center - edge)
+			inward.y = 0.0
+			inward = inward.normalized()
+			var arrow := _make_arrow()
+			area.add_child(arrow)
+			arrow.position = edge
+			arrow.look_at(area.to_global(edge + inward), Vector3.UP)
+			_telegraph_arrows.append({"node": arrow, "base": edge, "dir": inward})
+			nodes.append(arrow)
+	enemy.set_meta("telegraphs", nodes)
+
+
+func _clear_telegraphs(enemy: Combatant) -> void:
+	for node in enemy.get_meta("telegraphs", []):
+		if is_instance_valid(node):
+			for entry in _telegraph_arrows.duplicate():
+				if entry["node"] == node:
+					_telegraph_arrows.erase(entry)
+			node.queue_free()
+	enemy.set_meta("telegraphs", [])
+
+
+## A flat gold chevron pointing forward (-Z), lying on the floor.
+func _make_arrow() -> MeshInstance3D:
+	var v := PackedVector3Array([
+		Vector3(0, 0, -0.45), Vector3(0.38, 0, 0.1), Vector3(0.18, 0, 0.1),
+		Vector3(0, 0, -0.45), Vector3(0.18, 0, 0.1), Vector3(0, 0, -0.15),
+		Vector3(0, 0, -0.45), Vector3(-0.18, 0, 0.1), Vector3(-0.38, 0, 0.1),
+		Vector3(0, 0, -0.45), Vector3(0, 0, -0.15), Vector3(-0.18, 0, 0.1),
+	])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var node := MeshInstance3D.new()
+	node.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.albedo_color = Color(1.0, 0.9, 0.4, 0.9)
+	node.material_override = material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
+
+
+## Arrows slide inward and fade, over and over; spheres bob up and down.
+func _animate_telegraphs(delta: float) -> void:
+	_telegraph_time += delta
+	var cycle := fmod(_telegraph_time * 1.3, 1.0)
+	for entry in _telegraph_arrows:
+		var arrow: MeshInstance3D = entry["node"]
+		if not is_instance_valid(arrow):
+			continue
+		arrow.position = entry["base"] + (entry["dir"] as Vector3) * cycle * 0.9
+		(arrow.material_override as StandardMaterial3D).albedo_color.a = 0.95 * (1.0 - cycle * 0.8)
+	for enemy in enemies:
+		for node in enemy.get_meta("telegraphs", []):
+			if is_instance_valid(node) and node.has_meta("bob"):
+				node.position.y = 2.85 + sin(_telegraph_time * 5.0) * 0.08
+
+
+# --- Enemy skill choice -----------------------------------------------------
+
+## Picks the skill to prepare. Each skill starts from its weight, then the
+## situation adjusts it: skills that can't reach anyone are unlikely, area
+## skills placed on the party like a bunched-up party, healing needs hurt
+## allies, Defense / Counter like someone standing close, and the skill used
+## last time is less likely, so enemies mix their kit up.
+func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
+	if enemy.forced_skill != null:
+		return enemy.forced_skill
+	var pool: Array[EnemySkill] = enemy.skills if not enemy.skills.is_empty() else Combatant._basic_skills()
+	var target := _enemy_target(enemy)
+	var members := _standing(party)
+	var scores: Array[float] = []
+	var total := 0.0
+	for skill in pool:
+		var score := float(skill.weight)
+		match skill.special:
+			EnemySkill.Special.HEAL_ALLIES:
+				var hurt := 0
+				for ally in _standing(enemies):
+					if ally.hp < ally.max_hp * 0.75 and ally.global_position.distance_to(enemy.global_position) <= skill.radius + ally.body_radius:
+						hurt += 1
+				score = 0.0 if hurt == 0 else score * (1.0 + 0.5 * hurt)
+			EnemySkill.Special.ON_EACH_TARGET:
+				score *= 1.0 + 0.35 * mini(_close_pairs(members, skill.radius * 2.0), 3)
+			EnemySkill.Special.LINE_TO_EACH:
+				score *= 1.0 + 0.35 * mini(_lined_up_pairs(enemy, members), 3)
+			EnemySkill.Special.GROWING:
+				pass
+			_:
+				if skill.kind == Skills.Kind.DEFENSE or skill.kind == Skills.Kind.COUNTER:
+					var close := false
+					for member in members:
+						if enemy.gap_to(member) <= 1.5:
+							close = true
+					score *= 1.6 if close else 0.5
+				elif target != null:
+					var reached := 0
+					for member in members:
+						if _skill_reaches(enemy, skill, member):
+							reached += 1
+					if not _skill_reaches(enemy, skill, target) and reached == 0:
+						score *= 0.2
+					elif not skill.shared_damage:
+						score *= 1.0 + 0.25 * maxi(reached - 1, 0)
+		if skill == enemy.last_skill:
+			# Repeats get less likely the longer the streak runs.
+			score *= pow(0.35, enemy.get_meta("repeat_streak", 1))
+		scores.append(score)
+		total += score
+	if total <= 0.0:
+		return pool[randi() % pool.size()]
+	var roll := randf() * total
+	for i in pool.size():
+		roll -= scores[i]
+		if roll <= 0.0:
+			return pool[i]
+	return pool[pool.size() - 1]
+
+
+## Roughly whether a skill aimed at this member could reach them (the enemy
+## turns toward its target while casting, so only distance matters).
+func _skill_reaches(enemy: Combatant, skill: EnemySkill, member: Combatant) -> bool:
+	var offset := member.global_position - enemy.global_position
+	offset.y = 0.0
+	var d := offset.length()
+	match skill.shape:
+		EnemySkill.Shape.DONUT:
+			return d >= skill.inner_radius - member.body_radius and d <= skill.radius + member.body_radius
+		EnemySkill.Shape.LINE:
+			return d <= skill.radius
+	var reach := skill.max_radius if skill.special == EnemySkill.Special.GROWING else skill.radius
+	return d <= reach + member.body_radius * 0.5
+
+
+## Pairs of party members standing within `distance` of each other.
+func _close_pairs(members: Array[Combatant], distance: float) -> int:
+	var pairs := 0
+	for i in members.size():
+		for j in range(i + 1, members.size()):
+			if members[i].global_position.distance_to(members[j].global_position) < distance:
+				pairs += 1
+	return pairs
+
+
+## Pairs of party members in nearly the same direction from the enemy.
+func _lined_up_pairs(enemy: Combatant, members: Array[Combatant]) -> int:
+	var pairs := 0
+	for i in members.size():
+		for j in range(i + 1, members.size()):
+			var a := members[i].global_position - enemy.global_position
+			var b := members[j].global_position - enemy.global_position
+			a.y = 0.0
+			b.y = 0.0
+			if a.length() > 0.1 and b.length() > 0.1 and rad_to_deg(a.angle_to(b)) < 15.0:
+				pairs += 1
+	return pairs
 
 
 # --- Strikes, Parry and Defend --------------------------------------------
 
-func _begin_strike(enemy: Combatant, targets: Array[Combatant], reset_timeline: bool) -> void:
+## mods: who is hit and how (see Strike.mods). windup < 0 uses the skill's.
+func _begin_strike(enemy: Combatant, mods: Dictionary, reset_timeline: bool, windup: float = -1.0,
+		hits_left: int = -1) -> void:
 	var s := Strike.new()
 	s.enemy = enemy
 	s.skill = enemy.loaded_skill
 	s.def = enemy.loaded_def
+	s.mods = mods
+	var targets: Array[Combatant] = []
+	for target in mods:
+		targets.append(target)
 	s.targets = targets
-	s.windup = s.def.windup
+	s.hits_left = (s.def.hits - 1) if hits_left < 0 else hits_left
+	s.windup = s.def.windup if windup < 0.0 else windup
 	s.time_left = s.windup
 	s.reset_timeline = reset_timeline
 	for target in targets:
@@ -1005,23 +1451,41 @@ func _resolve_strike() -> void:
 		node.queue_free()
 
 	var skill_name := s.def.skill_name
-	var damage := s.def.damage
+	var base_damage := s.def.damage
 	var lines: PackedStringArray = []
 	var parried := false
 	var parry_missed := false
+	var final_hit := s.hits_left <= 0
+	var thrown: Array[Combatant] = []
+	if s.def.hits > 1:
+		lines.append("%s %d/%d" % [skill_name, s.def.hits - s.hits_left, s.def.hits])
 
 	# One Parry/Defend input covers everyone hit, but only those whose class
 	# can parry/block get the benefit; the rest take the full hit.
 	for target in s.targets:
+		var mod: Dictionary = s.mods.get(target, {})
+		var damage := ceili(base_damage * float(mod.get("mult", 1.0)))
+		var one_hp: bool = mod.get("one_hp", false)
 		if target.riposte_left > 0.0:
 			_riposte(target, s.enemy, lines)
 			continue
 		var can_parry := target.can_parry and not s.def.cannot_be_parried
-		var can_block := target.can_block and not s.def.cannot_be_blocked
+		var can_block: bool = target.can_block and not s.def.cannot_be_blocked and not mod.get("unblockable", false)
 		if s.reaction == Reaction.PARRY and can_parry:
 			parried = true
 			_popup(target, "PARRY!", Color(1.0, 0.85, 0.2))
 			lines.append("%s parried %s's %s!" % [target.display_name, s.enemy.display_name, skill_name])
+			continue
+		if one_hp:
+			# Caught where the circles overlap: down to 1 HP (Arcane Barrier still saves).
+			if target.statuses.has("arcane_barrier"):
+				target.statuses.erase("arcane_barrier")
+				lines.append("%s's barrier absorbs it" % target.display_name)
+			else:
+				target.recoverable = 0
+				target.hp = mini(target.hp, 1)
+				_popup(target, "1 HP!", Color(1.0, 0.3, 0.2))
+				lines.append("%s is caught in the overlap: down to 1 HP!" % target.display_name)
 		elif s.reaction == Reaction.DEFEND and can_block:
 			_count("defends")
 			var share := defend_share_vs_smash if s.skill == Skills.Kind.SMASH else defend_share_vs_attack
@@ -1035,8 +1499,19 @@ func _resolve_strike() -> void:
 			if s.reaction == Reaction.PARRY_MISSED and can_parry:
 				parry_missed = true
 				_push_back(target, parry_miss_push)
-			lines.append("%s's %s hits %s for %d!%s" % [s.enemy.display_name, skill_name, target.display_name, taken,
-					_absorb_note(damage, taken)])
+			var extra := ""
+			if float(mod.get("mult", 1.0)) > 1.0:
+				extra = " (overlap: double damage)"
+			elif float(mod.get("mult", 1.0)) < 1.0:
+				extra = " (shared)"
+			lines.append("%s's %s hits %s for %d!%s%s" % [s.enemy.display_name, skill_name, target.display_name, taken,
+					extra, _absorb_note(damage, taken)])
+		if final_hit and s.def.launch > 0.0 and not target.is_down:
+			thrown.append(target)
+
+	for target in thrown:
+		_knock_away(target, s.enemy.global_position, s.def.launch)
+		_popup(target, "LAUNCHED", Color(1.0, 0.6, 0.3))
 
 	if parried:
 		_count("parries")
@@ -1054,6 +1529,19 @@ func _resolve_strike() -> void:
 		if target.is_down:
 			lines.append("%s is down!" % target.display_name)
 
+	# Multi-hit skills: the next hit follows quickly, unless it was parried.
+	if s.hits_left > 0 and not parried and not s.enemy.is_down:
+		var next_mods := {}
+		for target in s.targets:
+			if not target.is_down:
+				next_mods[target] = s.mods.get(target, {})
+		if not next_mods.is_empty() and not _standing(party).is_empty():
+			_flash("\n".join(lines))
+			_check_party()
+			_begin_strike(s.enemy, next_mods, s.reset_timeline, s.def.windup * 0.55, s.hits_left - 1)
+			return
+	if s.def.trail_turns > 0:
+		_spawn_trail(s.enemy)
 	_finish_enemy_skill(s.enemy, s.reset_timeline)
 	_flash("\n".join(lines))
 	print(" / ".join(lines))
@@ -1119,6 +1607,9 @@ func _check_enemies() -> void:
 		if enemy.is_down and enemy.attack_range and enemy.attack_range.visible:
 			_finish_enemy_skill(enemy, false)
 			enemy.attack_range.visible = false
+			for hazard in _hazards.duplicate():
+				if hazard["owner"] == enemy:
+					_remove_hazard(hazard)
 	if _standing(enemies).is_empty():
 		_game_over = true
 		_result_text = "Tutorial complete!" if tutorial_mode else "Victory!"
@@ -1600,8 +2091,18 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 	var is_smash: bool = move["kind"] == Skills.Kind.SMASH
 	_popup(target, str(damage), Color(1.0, 0.7, 0.3) if is_smash else Color.WHITE)
 
-	if move["stun"] and not target.is_down and target.loaded_skill != Skills.NONE \
-			and Skills.is_offensive(target.loaded_skill):
+	var ritual := target.loaded_def
+	if ritual != null and ritual.special == EnemySkill.Special.HEAL_ALLIES and not target.is_down \
+			and attacker.gap_to(target) <= ritual.interrupt_range:
+		# Close-range hits break a healing ritual.
+		target.interrupt_count += 1
+		if target.interrupt_count >= ritual.interrupt_hits:
+			_cancel_enemy_skill(target)
+			_count("interrupts")
+			note = "%s interrupted!" % ritual.skill_name
+		else:
+			_popup(target, "%d / %d" % [target.interrupt_count, ritual.interrupt_hits], Color(0.5, 1.0, 0.6))
+	if move["stun"] and not target.is_down and _loaded_offensive(target):
 		# Stunning Arrow: an enemy about to strike loses its turn.
 		_finish_enemy_skill(target, false)
 		target.timeline_pos = 0.0

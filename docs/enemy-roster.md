@@ -26,10 +26,10 @@ enemy damage 1.3x after playtesting).
 | Kobold Archer | 175 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
 | Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line) | Fireball; Wind Slash stopping at the first hit |
 | Ogre Warrior | 450 | Attack (short cone), Shield Bash (line, can't be parried), Sword Spin (donut, can't be parried) | 2-hit Attack; Shout; Shield Bash snapping/stopping; Spin following Shout |
-| Orc Shaman | 250 | Attack (long line) | Healing Ritual; Curse |
+| Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (a line to each party member; in 2+ lines: double damage, can't be blocked) | |
 | Stone Golem | 800 | Heavy Attack, Crush, Rock Stomp | Rock Spikes |
-| Living Armor | 750 | Combo (as one hit, cone) | 3 hits with launch; Dark Bolt; Shadowflare |
-| Dragon Hatchling | 900 | Breath (massive cone) | damage split by group; Fire Wave; Burning Spike |
+| Living Armor | 750 | Combo (3 hits; the last throws you 5 m; a Parry stops it), Dark Bolt (a circle on each party member; overlaps take double damage), Shadowflare (grows from 2 to 9 m over the cast; dealing 10% of its HP during the cast contains it) | |
+| Dragon Hatchling | 900 | Breath (massive cone; damage shrinks the more people it hits: stack up), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (a circle on each party member; anyone in an overlap drops to 1 HP) | |
 
 ## Normal enemies
 
@@ -103,16 +103,16 @@ enemy damage 1.3x after playtesting).
 | Defense / Counter stances | Goblin, Kobold | have (Goblin's Defend needs partial reduction) |
 | **Line** (rectangle) shape | Goblin, Kobold, Arcanist, Ogre, Shaman, Golem, Dragon | have |
 | **Donut** shape | Kobold, Ogre | have |
-| **Multi-hit enemy attacks** (one ring per hit) | Goblin, Ogre, Living Armor | new |
+| **Multi-hit enemy attacks** (one ring per hit) | Goblin, Ogre, Living Armor | have (Living Armor uses it) |
 | **Cannot be parried / cannot be blocked** flags | Goblin, Kobold, Ogre, Shaman | have |
-| **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | new |
-| **One shape per party member** + **overlap rules** | Shaman, Living Armor, Dragon | new |
+| **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | have (on every member: Dark Bolt, Burning Spike) |
+| **One shape per party member** + **overlap rules** | Shaman, Living Armor, Dragon | have |
 | **Stops at first hit** / **snaps to a target** | Arcanist, Ogre | new |
-| **Forced movement** (push out, launch) | Ogre, Living Armor | new |
+| **Forced movement** (push out, launch) | Ogre, Living Armor | have (launch) |
 | **Combo skills** (one skill triggers another) | Ogre (Shout then Sword Spin) | new |
-| **Interruptible casts** (hit count or damage threshold) | Shaman, Living Armor | new; overlaps with the stagger milestone |
-| **Lingering hazards** that last several turns | Golem, Dragon | new |
+| **Interruptible casts** (hit count or damage threshold) | Shaman, Living Armor | have |
+| **Lingering hazards** that last several turns | Golem, Dragon | have (fire trail) |
 | **Terrain** that blocks attacks | Kobold | have (rocks block sight and attacks) |
-| **Damage scaling by group size** | Dragon | new |
+| **Damage scaling by group size** | Dragon | have |
 | **Multi-enemy fights** | rounds 2-5, 8, 9, Special | have |
-| **Healing enemies** | Shaman | new |
+| **Healing enemies** | Shaman | have |

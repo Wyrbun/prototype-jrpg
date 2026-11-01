@@ -10,6 +10,19 @@ extends Resource
 ## The area's shape on the floor. A half-circle is a Cone with a 180 angle;
 ## a circle around the enemy is a Cone with a 360 angle (or Circle).
 enum Shape { CONE, CIRCLE, LINE, DONUT }
+## How the skill works beyond "one area in front of the enemy":
+## - ON_EACH_TARGET: a circle (radius) dropped on every party member.
+##   It follows them while hidden and stays put once revealed.
+## - LINE_TO_EACH: a line (width) from the enemy to every party member,
+##   aimed while hidden and locked once revealed.
+## - GROWING: a circle around the enemy that grows from radius to
+##   max_radius over the cast, unless the party contains it by dealing
+##   contain_share of the enemy's max HP during the cast.
+## - HEAL_ALLIES: heals every enemy within radius (no damage); interrupted
+##   by interrupt_hits party hits from within interrupt_range meters.
+enum Special { NONE, ON_EACH_TARGET, LINE_TO_EACH, GROWING, HEAL_ALLIES }
+## What happens to someone caught in two or more of the areas.
+enum Overlap { NORMAL, DOUBLE, ONE_HP }
 
 ## Shown above the enemy and on the timeline once revealed.
 @export var skill_name: String = "Attack"
@@ -38,16 +51,47 @@ enum Shape { CONE, CIRCLE, LINE, DONUT }
 @export var windup: float = 1.0
 ## Parry (E) does nothing against this skill.
 @export var cannot_be_parried: bool = false
-## Defend (Q) does nothing against this skill (it also ignores Defense).
+## Defend (Q) does nothing against this skill.
 @export var cannot_be_blocked: bool = false
+## Strikes several times in a row (one ring per hit); a Parry stops the rest.
+@export_range(1, 5) var hits: int = 1
+## The last hit throws its targets this many meters away (0 = no throw).
+@export var launch: float = 0.0
+## Damage shrinks when several are hit together: 100%, 67%, 50%, 40%...
+@export var shared_damage: bool = false
+## Leaves its area burning for this many of the enemy's turns (0 = none);
+## anyone standing in it loses trail_damage_per_second.
+@export var trail_turns: int = 0
+@export var trail_damage_per_second: float = 0.0
+
+@export_group("Special")
+@export var special: Special = Special.NONE
+## ON_EACH_TARGET / LINE_TO_EACH: the rule for anyone in 2+ areas.
+@export var overlap: Overlap = Overlap.NORMAL
+## ON_EACH_TARGET / LINE_TO_EACH: overlaps also can't be blocked.
+@export var overlap_unblockable: bool = false
+## GROWING: the size it grows to, and the damage (share of max HP) that stops it.
+@export var max_radius: float = 8.0
+@export_range(0.0, 1.0) var contain_share: float = 0.1
+## HEAL_ALLIES: share of each ally's max HP healed.
+@export_range(0.0, 1.0) var heal_share: float = 0.2
+@export var interrupt_hits: int = 3
+@export var interrupt_range: float = 1.5
 
 
 func is_offensive() -> bool:
-	return Skills.is_offensive(kind)
+	return special != Special.HEAL_ALLIES and Skills.is_offensive(kind)
 
 
 func color() -> Color:
+	if special == Special.HEAL_ALLIES:
+		return Color(0.4, 0.95, 0.5)
 	return Skills.info(kind)["color"]
+
+
+## True if the skill puts its areas on the party, not in front of the enemy.
+func placed_on_party() -> bool:
+	return special == Special.ON_EACH_TARGET or special == Special.LINE_TO_EACH
 
 
 ## A skill built in code, for enemies that have no skills set in the scene.

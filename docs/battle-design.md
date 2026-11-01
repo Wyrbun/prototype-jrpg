@@ -151,6 +151,35 @@ Every enemy has a **Skills** list (Inspector, Combat group). Each entry is an
 
 An enemy with an empty list uses the basic triangle set from `skills.gd`.
 
+**Special skills** (EnemySkill "Special" group; kind SPECIAL sits outside
+the triangle):
+- **On each target:** a circle dropped on every party member (follows them
+  while hidden, locks on reveal). Overlap rule: double damage (Dark Bolt) or
+  drop to 1 HP (Burning Spike).
+- **Line to each:** a line from the enemy to every party member, aimed while
+  hidden. Overlaps: double damage and can't be blocked (Curse). Rocks block
+  lines.
+- **Growing:** a circle around the enemy growing over the cast; dealing
+  `contain_share` of its max HP during the cast stops it (Shadowflare).
+- **Heal allies:** heals enemies in a circle; `interrupt_hits` party hits
+  from within `interrupt_range` break it (Healing Ritual).
+- Also per skill: **hits** (multi-hit, a ring per hit, a Parry stops the
+  rest), **launch** (last hit throws targets), **shared damage** (100%,
+  67%, 50%, 40%... for 1, 2, 3, 4 targets), **trail** (leaves the area
+  burning for N of the enemy's turns, damage per second).
+
+**Telegraphs** on reveal: a **red sphere** over every party member's head
+for spread skills (placed circles/lines with an overlap rule), and gold
+**arrows sliding inward** around the area for shared-damage skills
+(stack up).
+
+**Skill choice (AI):** each skill starts from its weight, then: skills that
+can't reach anyone x0.2; area hits on several people boost it a little;
+placed circles/lines up to x2 when the party is bunched (they punish it);
+Healing Ritual only when an ally in range is under 75% HP (more likely the
+more are hurt); Defense/Counter x1.6 with a party member close, x0.5
+otherwise; the last skill used x0.35 per repeat in a row.
+
 **Stone Golem** (800 HP), following the roster:
 
 | Skill | Kind | Area | Damage | Wind-up | Weight |

@@ -7,12 +7,38 @@
 script = ExtResource("2_skill")
 skill_name = "Attack"
 kind = 0
-weight = 1
+weight = 2
 shape = 2
 radius = 7.0
 width = 1.0
 damage = 21
 windup = 1.0
+
+[sub_resource type="Resource" id="Skill_2"]
+script = ExtResource("2_skill")
+skill_name = "Healing Ritual"
+kind = 4
+weight = 2
+shape = 1
+radius = 9.0
+special = 4
+heal_share = 0.15
+interrupt_hits = 3
+interrupt_range = 1.5
+
+[sub_resource type="Resource" id="Skill_3"]
+script = ExtResource("2_skill")
+skill_name = "Curse"
+kind = 4
+weight = 2
+shape = 2
+radius = 7.0
+width = 1.0
+damage = 21
+windup = 1.2
+special = 2
+overlap = 1
+overlap_unblockable = true
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.0, 1.3, 1.0)
@@ -28,7 +54,7 @@ move_speed = 3.0
 turn_speed_degrees = 120.0
 preferred_gap = 3.5
 body_radius = 0.65
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)

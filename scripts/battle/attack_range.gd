@@ -50,10 +50,17 @@ func _ready() -> void:
 ## Reshapes the area for a loaded skill and makes it live.
 ## hidden = true draws the shape in grey: you can see where it will land, not
 ## what it is (the skill is still "???").
-func show_skill(skill: EnemySkill, hidden: bool = false) -> void:
+## radius_override replaces the skill's radius (growing circles, lines
+## stretched to reach a target).
+func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float = -1.0) -> void:
 	shape = skill.shape
-	radius = skill.radius
-	angle_degrees = 360.0 if skill.shape == EnemySkill.Shape.CIRCLE else skill.angle
+	if skill.special == EnemySkill.Special.ON_EACH_TARGET or skill.special == EnemySkill.Special.GROWING \
+			or skill.special == EnemySkill.Special.HEAL_ALLIES:
+		shape = EnemySkill.Shape.CIRCLE
+	elif skill.special == EnemySkill.Special.LINE_TO_EACH:
+		shape = EnemySkill.Shape.LINE
+	radius = skill.radius if radius_override < 0.0 else radius_override
+	angle_degrees = 360.0 if shape == EnemySkill.Shape.CIRCLE else skill.angle
 	width = skill.width
 	inner_radius = skill.inner_radius
 	_live_color = HIDDEN_COLOR if hidden else skill.color()
@@ -96,6 +103,13 @@ func contains(point: Vector3, extra_radius: float = 0.0) -> bool:
 	if distance < 0.001 or angle_degrees >= 360.0:
 		return true
 	return rad_to_deg(forward.angle_to(to_point)) <= angle_degrees / 2.0
+
+
+## A lingering hazard (a fire trail): always live, in its own color.
+func show_hazard(skill: EnemySkill, color: Color) -> void:
+	show_skill(skill)
+	_live_color = color
+	_refresh_color()
 
 
 ## Makes a live area glow brighter while someone is standing in it.

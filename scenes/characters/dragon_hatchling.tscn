@@ -7,12 +7,38 @@
 script = ExtResource("2_skill")
 skill_name = "Breath"
 kind = 0
-weight = 1
+weight = 3
 shape = 0
 radius = 7.0
 angle = 100.0
-damage = 36
+damage = 46
 windup = 1.4
+shared_damage = true
+
+[sub_resource type="Resource" id="Skill_2"]
+script = ExtResource("2_skill")
+skill_name = "Fire Wave"
+kind = 1
+weight = 2
+shape = 2
+radius = 14.0
+width = 2.4
+damage = 36
+windup = 1.5
+trail_turns = 3
+trail_damage_per_second = 10.0
+
+[sub_resource type="Resource" id="Skill_3"]
+script = ExtResource("2_skill")
+skill_name = "Burning Spike"
+kind = 4
+weight = 2
+shape = 1
+radius = 2.2
+damage = 26
+windup = 1.6
+special = 1
+overlap = 2
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(2.0, 1.5, 2.4)
@@ -27,7 +53,7 @@ speed = 9.0
 move_speed = 2.2
 turn_speed_degrees = 70.0
 body_radius = 1.2
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
