@@ -3,6 +3,24 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Full kits for the rest of the roster
+
+- **Goblin Fighter:** Attack is 2 hits (13 each). Defend no longer blocks
+  everything: 40% of a hit gets through (piercing and breaking moves still
+  ignore it).
+- **Bandit Arcanist:** Wind Slash stops at the first one it hits. New
+  **Fireball**: a circle on its target (red sphere over their head) that
+  hits everyone inside, and can only be Parried if the target is alone.
+- **Ogre Warrior:** Attack is 2 hits (18 each). **Shield Bash** snaps to face
+  its target when revealed, then holds that aim (step out of the line), and
+  stops at the first one hit. New **Shout** pushes everyone near it out,
+  then **Sword Spin** comes at once and hits everyone pushed. Sword Spin is
+  no longer used on its own.
+- **Stone Golem:** new **Rock Spikes**: a circle on its target, then 4 spikes
+  that hurt anyone walking into them (16) for 2 Golem turns.
+- Kobold Archer was already complete.
+- Fire trails (and spikes) now stay behind even when the skill misses.
+
 ## Enemy AI pass
 
 - **Full kits** for the three enemies that had a single skill:

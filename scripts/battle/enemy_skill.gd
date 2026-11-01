@@ -20,7 +20,10 @@ enum Shape { CONE, CIRCLE, LINE, DONUT }
 ##   contain_share of the enemy's max HP during the cast.
 ## - HEAL_ALLIES: heals every enemy within radius (no damage); interrupted
 ##   by interrupt_hits party hits from within interrupt_range meters.
-enum Special { NONE, ON_EACH_TARGET, LINE_TO_EACH, GROWING, HEAL_ALLIES }
+## - ON_MARKED: one circle (radius) on the party member the enemy locked
+##   onto. It follows them while hidden and stays put once revealed; it hits
+##   everyone inside, and can only be Parried if the target is alone in it.
+enum Special { NONE, ON_EACH_TARGET, LINE_TO_EACH, GROWING, HEAL_ALLIES, ON_MARKED }
 ## What happens to someone caught in two or more of the areas.
 enum Overlap { NORMAL, DOUBLE, ONE_HP }
 
@@ -63,6 +66,31 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## anyone standing in it loses trail_damage_per_second.
 @export var trail_turns: int = 0
 @export var trail_damage_per_second: float = 0.0
+## Only the party member closest to the enemy is hit (Lines: the first one
+## in the way).
+@export var stops_at_first_hit: bool = false
+## When revealed, the enemy turns at once to face its target, then stays
+## locked in that direction until it strikes.
+@export var snaps_to_target: bool = false
+
+@export_group("Stance")
+## Defense stances: share of a hit's damage that still gets through
+## (0 = blocks it completely). Piercing and breaking moves ignore the stance.
+@export_range(0.0, 1.0) var let_through: float = 0.0
+
+@export_group("Push and follow-up")
+## Pushes everyone inside the area out past its edge (no damage of its own
+## unless damage is set above 0).
+@export var push_out: bool = false
+## A skill used right after this one, with no new cast. Everyone this skill
+## caught is hit by it wherever they end up.
+@export var follow_up: EnemySkill = null
+
+@export_group("Spikes")
+## Leaves this many spikes inside the area; anyone walking into one takes
+## spike_damage. They last trail_turns of the enemy's turns.
+@export var spikes: int = 0
+@export var spike_damage: int = 15
 
 @export_group("Special")
 @export var special: Special = Special.NONE
@@ -91,7 +119,8 @@ func color() -> Color:
 
 ## True if the skill puts its areas on the party, not in front of the enemy.
 func placed_on_party() -> bool:
-	return special == Special.ON_EACH_TARGET or special == Special.LINE_TO_EACH
+	return special == Special.ON_EACH_TARGET or special == Special.LINE_TO_EACH \
+			or special == Special.ON_MARKED
 
 
 ## A skill built in code, for enemies that have no skills set in the scene.

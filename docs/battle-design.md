@@ -163,13 +163,32 @@ the triangle):
   `contain_share` of its max HP during the cast stops it (Shadowflare).
 - **Heal allies:** heals enemies in a circle; `interrupt_hits` party hits
   from within `interrupt_range` break it (Healing Ritual).
+- **On marked:** one circle on the party member the enemy locked onto
+  (follows while hidden, locks on reveal). Hits everyone inside; can only be
+  Parried if the target is alone in it (Fireball, Rock Spikes).
 - Also per skill: **hits** (multi-hit, a ring per hit, a Parry stops the
   rest), **launch** (last hit throws targets), **shared damage** (100%,
   67%, 50%, 40%... for 1, 2, 3, 4 targets), **trail** (leaves the area
   burning for N of the enemy's turns, damage per second).
+- **stops_at_first_hit:** only the party member closest to the enemy is hit;
+  they shield whoever is behind (Wind Slash, Shield Bash).
+- **snaps_to_target:** on reveal the enemy turns at once to face its target,
+  then holds that aim until it strikes, so you can step out of the line
+  (Shield Bash).
+- **let_through** (Defense stances): share of a hit that still gets through
+  instead of a full block (Goblin's Defend lets 40% through).
+- **push_out + follow_up:** pushes everyone inside out past the edge, then
+  the follow-up skill strikes at once, with no new cast; everyone pushed is
+  hit wherever they landed, plus anyone in the follow-up's own area (Shout,
+  then Sword Spin).
+- **spikes:** leaves that many spikes in the area; walking into one costs
+  `spike_damage` (once per step in; standing there when they rise is safe).
+  They last `trail_turns` of the enemy's turns. Spikes and fire trails stay
+  even if the skill missed (Rock Spikes).
 
 **Telegraphs** on reveal: a **red sphere** over every party member's head
-for spread skills (placed circles/lines with an overlap rule), and gold
+for spread skills (placed circles/lines with an overlap rule; for a marked
+circle, over the marked one only), and gold
 **arrows sliding inward** around the area for shared-damage skills
 (stack up).
 
@@ -187,7 +206,7 @@ otherwise; the last skill used x0.35 per repeat in a row.
 | Heavy Attack | Smash | cone 70°, 4.2 m | 46 | 1.4 s | 3 |
 | Crush | Smash | line 8 m x 1.4 m | 52 | 1.6 s | 2 |
 | Rock Stomp | Attack | circle 2.6 m | 26 | 1.0 s | 3 |
-| Rock Spikes | Special | targeted hazard | | | later |
+| Rock Spikes | Special | circle 2.8 m on its target, then 4 spikes (16 each) for 2 Golem turns | 26 | 1.2 s | 2 |
 
 The Golem no longer uses Defense/Counter stances (not in its roster entry).
 Stances still work for any enemy that lists them.

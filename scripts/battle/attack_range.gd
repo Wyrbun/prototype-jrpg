@@ -55,7 +55,7 @@ func _ready() -> void:
 func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float = -1.0) -> void:
 	shape = skill.shape
 	if skill.special == EnemySkill.Special.ON_EACH_TARGET or skill.special == EnemySkill.Special.GROWING \
-			or skill.special == EnemySkill.Special.HEAL_ALLIES:
+			or skill.special == EnemySkill.Special.HEAL_ALLIES or skill.special == EnemySkill.Special.ON_MARKED:
 		shape = EnemySkill.Shape.CIRCLE
 	elif skill.special == EnemySkill.Special.LINE_TO_EACH:
 		shape = EnemySkill.Shape.LINE

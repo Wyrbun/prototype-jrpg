@@ -22,12 +22,12 @@ enemy damage 1.3x after playtesting).
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
-| Goblin Fighter | 225 | Attack (short line), Smash (wide cone, can't be blocked), Defend | 2-hit Attack; Defend as partial reduction |
+| Goblin Fighter | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
 | Kobold Archer | 175 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
-| Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line) | Fireball; Wind Slash stopping at the first hit |
-| Ogre Warrior | 450 | Attack (short cone), Shield Bash (line, can't be parried), Sword Spin (donut, can't be parried) | 2-hit Attack; Shout; Shield Bash snapping/stopping; Spin following Shout |
+| Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit), Fireball (circle on its target; hits everyone inside; Parry only if the target is alone) | |
+| Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out) followed at once by Sword Spin (donut 3.5-6 m; hits everyone Shout pushed; can't be parried) | |
 | Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (a line to each party member; in 2+ lines: double damage, can't be blocked) | |
-| Stone Golem | 800 | Heavy Attack, Crush, Rock Stomp | Rock Spikes |
+| Stone Golem | 800 | Heavy Attack, Crush, Rock Stomp, Rock Spikes (circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns) | |
 | Living Armor | 750 | Combo (3 hits; the last throws you 5 m; a Parry stops it), Dark Bolt (a circle on each party member; overlaps take double damage), Shadowflare (grows from 2 to 9 m over the cast; dealing 10% of its HP during the cast contains it) | |
 | Dragon Hatchling | 900 | Breath (massive cone; damage shrinks the more people it hits: stack up), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (a circle on each party member; anyone in an overlap drops to 1 HP) | |
 
@@ -100,18 +100,18 @@ enemy damage 1.3x after playtesting).
 | Cone, circle around self, half-circle (180° cone) | Golem, Arcanist, most enemies | have |
 | **Enemy template** (skills edited in the Inspector) | all | have |
 | Hidden intent, casting zone, Parry / Defend | all | have |
-| Defense / Counter stances | Goblin, Kobold | have (Goblin's Defend needs partial reduction) |
+| Defense / Counter stances | Goblin, Kobold | have (partial guard: let_through) |
 | **Line** (rectangle) shape | Goblin, Kobold, Arcanist, Ogre, Shaman, Golem, Dragon | have |
 | **Donut** shape | Kobold, Ogre | have |
 | **Multi-hit enemy attacks** (one ring per hit) | Goblin, Ogre, Living Armor | have (Living Armor uses it) |
 | **Cannot be parried / cannot be blocked** flags | Goblin, Kobold, Ogre, Shaman | have |
-| **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | have (on every member: Dark Bolt, Burning Spike) |
+| **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | have (on one: Fireball, Rock Spikes; on every member: Dark Bolt, Burning Spike) |
 | **One shape per party member** + **overlap rules** | Shaman, Living Armor, Dragon | have |
-| **Stops at first hit** / **snaps to a target** | Arcanist, Ogre | new |
-| **Forced movement** (push out, launch) | Ogre, Living Armor | have (launch) |
-| **Combo skills** (one skill triggers another) | Ogre (Shout then Sword Spin) | new |
+| **Stops at first hit** / **snaps to a target** | Arcanist, Ogre | have |
+| **Forced movement** (push out, launch) | Ogre, Living Armor | have |
+| **Combo skills** (one skill triggers another) | Ogre (Shout then Sword Spin) | have (follow_up) |
 | **Interruptible casts** (hit count or damage threshold) | Shaman, Living Armor | have |
-| **Lingering hazards** that last several turns | Golem, Dragon | have (fire trail) |
+| **Lingering hazards** that last several turns | Golem, Dragon | have (fire trail, rock spikes) |
 | **Terrain** that blocks attacks | Kobold | have (rocks block sight and attacks) |
 | **Damage scaling by group size** | Dragon | have |
 | **Multi-enemy fights** | rounds 2-5, 8, 9, Special | have |

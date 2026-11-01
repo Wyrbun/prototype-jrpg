@@ -671,7 +671,8 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		var turn_speed := enemy.cast_turn_speed_degrees
 		if enemy.loaded_skill != Skills.NONE and _seconds_until_turn(enemy) > cast_slow_seconds:
 			turn_speed = enemy.turn_speed_degrees
-		enemy.face_toward(to_locked, delta, turn_speed)
+		if not enemy.get_meta("aim_locked", false):  # snapped skills hold their aim
+			enemy.face_toward(to_locked, delta, turn_speed)
 		return
 	var stop_distance := enemy.body_radius + target.body_radius + enemy.preferred_gap
 	var wants_closer := to_target.length() > stop_distance or not _can_see(enemy, target)
@@ -864,8 +865,14 @@ func _reveal_skill(enemy: Combatant) -> void:
 			area.show_skill(def, false, area.radius)  # colored, and locked where it is now
 	elif enemy.attack_range:
 		enemy.attack_range.show_skill(def, false, _cast_radius(enemy))
+	if def.snaps_to_target and enemy.cast_target != null and not enemy.cast_target.is_down:
+		# Turns at once to face its target, then holds that aim: step aside!
+		enemy.face_toward(enemy.cast_target.global_position - enemy.global_position, 1.0, 1000000.0)
+		enemy.set_meta("aim_locked", true)
 	if def.kind == Skills.Kind.DEFENSE or def.kind == Skills.Kind.COUNTER:
 		text += " STANCE"
+	if def.follow_up != null:
+		text += "  >  " + def.follow_up.skill_name.to_upper()
 	if enemy.contained:
 		text += " (CONTAINED)"
 	_add_telegraphs(enemy)
@@ -886,11 +893,15 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 		_heal_allies(enemy)
 		_finish_enemy_skill(enemy, reset_timeline)
 		return
+	if enemy.loaded_def.push_out:
+		_push_out(enemy, reset_timeline)
+		return
 	if enemy.loaded_def.is_offensive():
 		var mods := _strike_targets(enemy)
 		if mods.is_empty():
 			_count("misses")
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
+			_leave_hazards(enemy)
 			_finish_enemy_skill(enemy, reset_timeline)
 		else:
 			_begin_strike(enemy, mods, reset_timeline)
@@ -912,6 +923,7 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	_clear_cast_extras(enemy)
 	enemy.show_skill_text("")
 	enemy.cast_target = null
+	enemy.set_meta("aim_locked", false)
 	enemy.loaded_skill = Skills.NONE
 	enemy.skill_revealed = false
 	enemy.stance = Skills.NONE
@@ -961,7 +973,8 @@ func _update_attack_ranges() -> void:
 		# Strikes always land when the enemy's icon reaches the end of the bar;
 		# until then the area just glows and warns who's standing in it.
 		var skill_name := enemy.loaded_def.skill_name
-		warnings.append("%s's %s will hit: %s" % [enemy.display_name, skill_name, ", ".join(targets)])
+		var verb := "will push back" if enemy.loaded_def.push_out else "will hit"
+		warnings.append("%s's %s %s: %s" % [enemy.display_name, skill_name, verb, ", ".join(targets)])
 	warning_label.text = "\n".join(warnings)
 
 
@@ -988,7 +1001,13 @@ func _build_cast_areas(enemy: Combatant) -> void:
 	_clear_cast_extras(enemy)
 	var def := enemy.loaded_def
 	if def.placed_on_party():
-		for member in _standing(party):
+		var marked: Array[Combatant] = []
+		if def.special == EnemySkill.Special.ON_MARKED:
+			if enemy.cast_target != null:
+				marked.append(enemy.cast_target)
+		else:
+			marked = _standing(party)
+		for member in marked:
 			var area := AttackRange.new()
 			add_child(area)
 			area.set_meta("follow", member)
@@ -1006,7 +1025,7 @@ func _place_party_areas(enemy: Combatant, hidden: bool) -> void:
 		var member: Combatant = area.get_meta("follow")
 		if member == null or not is_instance_valid(member):
 			continue
-		if def.special == EnemySkill.Special.ON_EACH_TARGET:
+		if def.special == EnemySkill.Special.ON_EACH_TARGET or def.special == EnemySkill.Special.ON_MARKED:
 			area.global_position = Vector3(member.global_position.x, 0.03, member.global_position.z)
 			area.show_skill(def, hidden)
 		else:
@@ -1094,6 +1113,13 @@ func _strike_targets(enemy: Combatant) -> Dictionary:
 					shielded = true  # in the area, but a rock was in the way
 		if shielded:
 			_count("rock_saves")
+		if def.stops_at_first_hit and result.size() > 1:
+			# Only the first one in the way is hit; they shield the rest.
+			var first: Combatant = null
+			for member in result:
+				if first == null or enemy.gap_to(member) < enemy.gap_to(first):
+					first = member
+			result = {first: result[first]}
 	if def.shared_damage and result.size() > 1:
 		# Stacking up spreads the damage: 100%, 67%, 50%, 40%...
 		var share := 1.0 / (1.0 + 0.5 * (result.size() - 1))
@@ -1132,11 +1158,114 @@ func _spawn_trail(enemy: Combatant) -> void:
 	_flash("The ground keeps burning!")
 
 
-## Anyone standing in a fire trail keeps losing HP (in small chunks).
+## Rock Spikes: spikes rise inside the skill's circle and hurt anyone who
+## walks into one, for a few of the caster's turns.
+func _spawn_spikes(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	var center := enemy.global_position
+	if not enemy.extra_areas.is_empty() and is_instance_valid(enemy.extra_areas[0]):
+		center = enemy.extra_areas[0].global_position
+	var spike_def := EnemySkill.make(def.skill_name, Skills.Kind.SPECIAL, EnemySkill.Shape.CIRCLE, 0.5, 360.0, 0, 0.0, 0)
+	var turn := randf() * TAU
+	for i in def.spikes:
+		var a := turn + TAU * i / def.spikes
+		var spot := center + Vector3(sin(a), 0.0, cos(a)) * def.radius * 0.55
+		spot.y = 0.04
+		var area := AttackRange.new()
+		add_child(area)
+		area.global_position = spot
+		area.show_hazard(spike_def, Color(0.75, 0.6, 0.45))
+		var spike := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.0
+		mesh.bottom_radius = 0.32
+		mesh.height = 1.0
+		spike.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(0.5, 0.45, 0.4)
+		spike.material_override = material
+		area.add_child(spike)
+		spike.position = Vector3(0, 0.5, 0)
+		# Whoever is already standing there isn't hurt until they walk back in.
+		var inside := {}
+		for member in _standing(party):
+			inside[member] = area.contains(member.global_position, member.body_radius * 0.6)
+		_hazards.append({"area": area, "owner": enemy, "turns": def.trail_turns, "dps": 0.0, "acc": {},
+				"name": def.skill_name, "touch": def.spike_damage, "inside": inside})
+	_flash("Rock spikes burst from the ground!")
+
+
+## Fire trails and spikes stay behind whether the skill hit anyone or not.
+func _leave_hazards(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	if def == null:
+		return
+	if def.spikes > 0:
+		_spawn_spikes(enemy)
+	elif def.trail_turns > 0:
+		_spawn_trail(enemy)
+
+
+## Shout: everyone inside is pushed out past the edge, then the follow-up
+## (Sword Spin) comes at once and hits everyone who was pushed, wherever
+## they landed, plus anyone else standing in its own area.
+func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
+	var def := enemy.loaded_def
+	var caught: Array[Combatant] = []
+	for member in _standing(party):
+		if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
+			caught.append(member)
+	for member in caught:
+		var offset := member.global_position - enemy.global_position
+		offset.y = 0.0
+		var needed := def.radius + member.body_radius + 0.4 - offset.length()
+		if needed > 0.0:
+			_knock_away(member, enemy.global_position, needed)
+		_popup(member, "PUSHED", Color(1.0, 0.6, 0.3))
+	if caught.is_empty():
+		_flash("%s's %s: nobody was close" % [enemy.display_name, def.skill_name])
+	else:
+		_flash("%s's %s pushes back %s!" % [enemy.display_name, def.skill_name, _names(caught)])
+	var next := def.follow_up
+	if next == null or enemy.attack_range == null:
+		_finish_enemy_skill(enemy, reset_timeline)
+		return
+	_clear_telegraphs(enemy)
+	enemy.loaded_def = next
+	enemy.loaded_skill = next.kind
+	enemy.skill_revealed = true
+	enemy.attack_range.show_skill(next)
+	enemy.show_skill_text(next.skill_name.to_upper(), next.color())
+	var mods := _strike_targets(enemy)
+	for member in caught:
+		if not member.is_down:
+			mods[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
+	if mods.is_empty():
+		_count("misses")
+		_flash("%s's %s misses!" % [enemy.display_name, next.skill_name])
+		_finish_enemy_skill(enemy, reset_timeline)
+	else:
+		_begin_strike(enemy, mods, reset_timeline)
+
+
+## Anyone standing in a fire trail keeps losing HP (in small chunks);
+## anyone walking into a spike takes its damage once per step in.
 func _tick_hazards(world_delta: float) -> void:
 	for hazard in _hazards:
 		var area: AttackRange = hazard["area"]
 		var acc: Dictionary = hazard["acc"]
+		if hazard.has("touch"):
+			var inside: Dictionary = hazard["inside"]
+			for member in _standing(party):
+				var now := area.contains(member.global_position, member.body_radius * 0.6)
+				if now and not inside.get(member, false):
+					var taken := member.take_damage(int(hazard["touch"]), false)
+					_popup(member, str(taken), Color(0.85, 0.7, 0.5))
+					_flash("%s walks into a rock spike!" % member.display_name)
+					if member.is_down:
+						_check_party()
+				inside[member] = now
+			continue
 		for member in _standing(party):
 			if not area.contains(member.global_position, member.body_radius * 0.5):
 				continue
@@ -1169,8 +1298,14 @@ func _add_telegraphs(enemy: Combatant) -> void:
 	_clear_telegraphs(enemy)
 	var def := enemy.loaded_def
 	var nodes: Array[Node3D] = []
-	if def.placed_on_party() and def.overlap != EnemySkill.Overlap.NORMAL:
-		for member in _standing(party):
+	var marked: Array[Combatant] = []
+	if def.special == EnemySkill.Special.ON_MARKED:
+		if enemy.cast_target != null and not enemy.cast_target.is_down:
+			marked.append(enemy.cast_target)  # keep away from the marked one
+	elif def.placed_on_party() and def.overlap != EnemySkill.Overlap.NORMAL:
+		marked = _standing(party)
+	if not marked.is_empty():
+		for member in marked:
 			var sphere := MeshInstance3D.new()
 			var mesh := SphereMesh.new()
 			mesh.radius = 0.2
@@ -1285,6 +1420,13 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 				score *= 1.0 + 0.35 * mini(_close_pairs(members, skill.radius * 2.0), 3)
 			EnemySkill.Special.LINE_TO_EACH:
 				score *= 1.0 + 0.35 * mini(_lined_up_pairs(enemy, members), 3)
+			EnemySkill.Special.ON_MARKED:
+				# Better when others stand near its target.
+				var near := 0
+				for member in members:
+					if target != null and member != target and member.global_position.distance_to(target.global_position) < skill.radius + member.body_radius:
+						near += 1
+				score *= 1.0 + 0.5 * mini(near, 3)
 			EnemySkill.Special.GROWING:
 				pass
 			_:
@@ -1418,6 +1560,9 @@ func _try_parry() -> void:
 	if _strike.def.cannot_be_parried:
 		_flash("%s can't be parried!" % _strike.def.skill_name)
 		return
+	if not _marked_alone(_strike):
+		_flash("%s can only be parried by someone alone in it" % _strike.def.skill_name)
+		return
 	if not _strike_targets_can("parry"):
 		_flash("%s can't parry" % _names(_strike.targets))
 		return
@@ -1469,7 +1614,7 @@ func _resolve_strike() -> void:
 		if target.riposte_left > 0.0:
 			_riposte(target, s.enemy, lines)
 			continue
-		var can_parry := target.can_parry and not s.def.cannot_be_parried
+		var can_parry := target.can_parry and not s.def.cannot_be_parried and _marked_alone(s)
 		var can_block: bool = target.can_block and not s.def.cannot_be_blocked and not mod.get("unblockable", false)
 		if s.reaction == Reaction.PARRY and can_parry:
 			parried = true
@@ -1540,14 +1685,19 @@ func _resolve_strike() -> void:
 			_check_party()
 			_begin_strike(s.enemy, next_mods, s.reset_timeline, s.def.windup * 0.55, s.hits_left - 1)
 			return
-	if s.def.trail_turns > 0:
-		_spawn_trail(s.enemy)
+	_leave_hazards(s.enemy)
 	_finish_enemy_skill(s.enemy, s.reset_timeline)
 	_flash("\n".join(lines))
 	print(" / ".join(lines))
 	_check_party()
 	_check_enemies()
 	strike_finished.emit()
+
+
+## Fireball-like skills (one circle on a marked target) can only be Parried
+## when only one person is caught in them.
+func _marked_alone(s: Strike) -> bool:
+	return s.def.special != EnemySkill.Special.ON_MARKED or s.targets.size() <= 1
 
 
 ## Handles knocked-out fighters: hands control back if needed, and ends
@@ -2078,9 +2228,15 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 				note = "Pierce!"
 				_count("guard_breaks")
 			_:
-				_popup(target, "BLOCKED", Skills.info(Skills.Kind.DEFENSE)["color"])
-				_flash("%s's Defense blocks the %s. Piercing or breaking moves get through!" % [target.display_name, move_name])
-				return true
+				var guard := target.loaded_def
+				if guard != null and guard.let_through > 0.0:
+					# A partial guard: the hit lands, softened.
+					multiplier *= guard.let_through
+					note = "Guarded: %d%% gets through" % roundi(guard.let_through * 100.0)
+				else:
+					_popup(target, "BLOCKED", Skills.info(Skills.Kind.DEFENSE)["color"])
+					_flash("%s's Defense blocks the %s. Piercing or breaking moves get through!" % [target.display_name, move_name])
+					return true
 	elif target.loaded_skill == Skills.Kind.SMASH and move["kind"] == Skills.Kind.ATTACK:
 		note = "Smash interrupted!"
 		_count("interrupts")
@@ -2574,6 +2730,9 @@ func _strike_prompt() -> String:
 		Reaction.DEFEND:
 			return "Defending..."
 	var parry_hint := "E: can't Parry this" if _strike.def.cannot_be_parried else "E: Parry when the ring turns gold"
+	if not _marked_alone(_strike):
+		parry_hint = "E: can't Parry: %s isn't alone in it" % _strike.enemy.cast_target.display_name \
+				if _strike.enemy.cast_target != null else "E: can't Parry this"
 	var defend_hint := "Q: can't Defend this" if _strike.def.cannot_be_blocked else "Q: Defend (%d AP)" % defend_cost
 	if not _strike_targets_can("parry"):
 		parry_hint = "E: %s can't parry" % _names(_strike.targets)

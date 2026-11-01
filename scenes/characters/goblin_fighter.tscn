@@ -11,8 +11,9 @@ weight = 4
 shape = 2
 radius = 2.4
 width = 1.0
-damage = 21
+damage = 13
 windup = 0.9
+hits = 2
 
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
@@ -33,6 +34,7 @@ kind = 2
 weight = 2
 shape = 1
 radius = 1.4
+let_through = 0.4
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(0.9, 1.0, 0.9)

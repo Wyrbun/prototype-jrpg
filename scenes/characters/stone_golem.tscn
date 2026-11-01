@@ -36,6 +36,21 @@ angle = 360.0
 damage = 26
 windup = 1.0
 
+[sub_resource type="Resource" id="Skill_4"]
+script = ExtResource("2_skill")
+skill_name = "Rock Spikes"
+kind = 4
+weight = 2
+shape = 1
+radius = 2.8
+angle = 360.0
+damage = 26
+windup = 1.2
+trail_turns = 2
+special = 5
+spikes = 4
+spike_damage = 16
+
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.6, 1.6, 1.6)
 
@@ -49,7 +64,7 @@ speed = 9.0
 move_speed = 2.5
 turn_speed_degrees = 90.0
 body_radius = 0.95
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
