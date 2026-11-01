@@ -91,7 +91,7 @@ Not every class can do both (see below).
 | Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Double Slash, Smash (breaks Defense) | Light Heal, Brace, Shield Bash, Taunt |
 | Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow, Gale Shot | Jump, Riposte, True Sight, Agility |
 | Mage | 100 | 90 | Parry only | Energy Blast, Firebolt, Tempest, Meteor Strike | Arcane Barrier, Concentrate, Teleport |
-| Cleric | 130 | 60 | Block only | Bash, Divine Barrier, Holy Light | Healing, Shielding, Haste, Full Cure |
+| Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Divine Barrier, Holy Light | Healing, Shielding, Haste, Full Cure |
 
 A class's **AP** is the most it can spend in one turn, on a combo or a skill;
 the AP itself comes from the shared party pool. Effects that last "3 turns"

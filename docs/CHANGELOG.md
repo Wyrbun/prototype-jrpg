@@ -3,6 +3,81 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Unavoidable mechanics, max AP for avoidable hits, strike camera
+
+- **Mechanic skills can't be dodged, only answered** (revealed with
+  UNAVOIDABLE): Breath always hits its target (stack up), Burning Spike and
+  Dark Bolt hit everyone (spread out), Curse hits everyone unless a rock
+  blocks the line, Fireball and Rock Spikes always hit the marked one,
+  Power Shot always hits its target unless a rock is in the way, and
+  Shadowflare hits the whole party for damage scaled by how big it grew.
+- **Avoidable hits cost max AP:** a dodgeable strike, or a mechanic answered
+  wrong, that lands without a Parry or Defend costs one 100-AP segment of
+  bonus max AP (once per strike). The segment at risk pulses red on the
+  meter while anyone stands where it would happen. Fire and spikes don't
+  count. Reports get an "Avoidable hits" column.
+- **Bosses resist interrupts:** three Attack-type hits (or one breaking move)
+  to stop a boss's Smash. The Golem was being locked down by single hits.
+- **Camera:** when a strike catches someone off screen, the camera eases out
+  until everyone hit is in view, then back.
+
+## Bash and ally pushing
+
+- **Bash has diminishing returns:** each Bash in a row still adds a hit, but
+  every hit is 25% weaker per earlier Bash. Six Bashes deal 7.1x attack
+  instead of 16.8x, while still giving 21 timed hits for Perfects and max AP.
+- **Allies no longer shove the character you're steering** when they bump
+  into you (they step aside instead).
+
+## AP meter
+
+- The plain AP bar is now a **segmented meter**: one segment per 100 AP,
+  each tier in its own colour (blue, teal, gold, orange, rainbow), with dim
+  slots showing how far max AP can still grow.
+- **Feedback:** a flash and "+5" when max AP grows; the extra segments
+  shatter with a red flash when a missed timing resets it; a dark "ghost"
+  shows what the combo you're building will spend; the turn-start +30
+  lights up as it fills; the fill flows faster as recharge speeds up.
+- **Tier effects:** a passing shine from 200 max AP, a pulsing glow from
+  300, embers from 400, and a cycling rainbow with a bigger gold number at
+  the top.
+
+## Balance pass 1 (from the first full play-test)
+
+All ten rounds were cleared on the first try. Solo bosses were the weak
+spot: they got 4-5 turns to the party's 20-24 and dealt 13-26 damage in
+total (Rounds 6, 7, 10).
+- **Bosses act about twice as often:** speed 20 (was 9-10), but half speed
+  while casting (new `cast_zone_speed`), so reveals stay as readable as
+  before. +20% HP: Stone Golem 960, Living Armor 900, Dragon 1080.
+- **Breath tracks its target exactly** for the whole cast (new
+  `tracks_target`): turning away at the last second no longer dodges it.
+- **AP recharge boost capped at 2x** (`ap_regen_max_multiplier`), so max AP
+  up to 500 means longer combos, not 5x recharge.
+
+## Play-test feedback round
+
+- **Attack greyed out** for the Mage (and anyone) when no attack that can
+  reach an enemy is affordable. Meteor Strike reaches anyone, so Attack used
+  to stay lit even at low AP.
+- **Shout, then Sword Spin 2 s later:** the pushed are marked with orange
+  spheres and always hit; anyone else has time to run into Sword Spin's
+  safe middle. (Was: Sword Spin struck at once.)
+- **Max AP limit** is 100 per party member plus 100 (200 solo, 500 with
+  four). (Was: 200.)
+- **+30 AP** at the start of each party turn, on top of what's there.
+  (Was: topped up to 30.)
+- **Dark Bolt** always hits everyone, for 18; spreading out avoids the
+  double damage. (Was: 26, and stepping out of your circle dodged it.)
+- **Shadowflare** casts 40% slower and can grow to 11 m. (Was: 9 m.)
+- **Defeated enemies** sink away after 2 seconds, and knocked-out bodies no
+  longer block anyone.
+- **Breath** casts 40% slower (about 4 s through the casting zone instead
+  of 2.4, 1.8 s from reveal to strike instead of 1.1), so the party has
+  time to stack up.
+- **Burning Spike** leaves each circle burning where it landed for 3 Dragon
+  turns (8 HP/s), so where you drop them matters.
+
 ## Smarter allies, play-test reports
 
 - **Allies understand the enemy mechanics:** they stack on the target of a

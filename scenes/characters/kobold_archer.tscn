@@ -25,6 +25,7 @@ width = 0.8
 damage = 46
 windup = 2.0
 cannot_be_parried = true
+always_hits_target = true
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")

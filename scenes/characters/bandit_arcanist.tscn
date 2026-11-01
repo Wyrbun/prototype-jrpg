@@ -37,6 +37,7 @@ angle = 360.0
 damage = 33
 windup = 1.2
 special = 5
+always_hits = true
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(0.8, 1.1, 0.8)

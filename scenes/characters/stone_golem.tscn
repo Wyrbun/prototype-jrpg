@@ -48,6 +48,7 @@ damage = 26
 windup = 1.2
 trail_turns = 2
 special = 5
+always_hits = true
 spikes = 4
 spike_damage = 16
 
@@ -59,8 +60,10 @@ albedo_color = Color(0.55, 0.5, 0.45, 1)
 
 [node name="StoneGolem" instance=ExtResource("1_base")]
 display_name = "Stone Golem"
-max_hp = 800
-speed = 9.0
+max_hp = 960
+speed = 20.0
+cast_zone_speed = 0.5
+interrupt_resist = 3
 move_speed = 2.5
 turn_speed_degrees = 90.0
 body_radius = 0.95

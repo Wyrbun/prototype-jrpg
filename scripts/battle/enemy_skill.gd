@@ -66,9 +66,27 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## anyone standing in it loses trail_damage_per_second.
 @export var trail_turns: int = 0
 @export var trail_damage_per_second: float = 0.0
+## Mechanic skills: they can't be dodged, only answered. Revealed with
+## "UNAVOIDABLE"; taking one only costs max AP if you failed its answer.
+## Circles/lines placed on the party (ON_EACH_TARGET, LINE_TO_EACH,
+## ON_MARKED): everyone it was placed on is hit wherever they stand (a rock
+## still blocks a line). Spreading out only avoids the overlap rule.
+@export var always_hits: bool = false
+## The enemy's locked target is always hit, however far it runs, unless a
+## rock blocks the enemy's view of it (Breath, Power Shot).
+@export var always_hits_target: bool = false
+## GROWING: the explosion hits the whole party, for damage scaled by how big
+## the circle got (contain it early for low damage).
+@export var hits_everyone: bool = false
+## While this skill is being cast, the enemy moves along the timeline at
+## this share of its speed (below 1 = a slower cast, more time to react).
+@export_range(0.2, 2.0) var cast_speed: float = 1.0
 ## Only the party member closest to the enemy is hit (Lines: the first one
 ## in the way).
 @export var stops_at_first_hit: bool = false
+## The enemy keeps facing its target exactly for the whole cast, right up
+## to the strike (no slow-down at the end): turning away can't dodge it.
+@export var tracks_target: bool = false
 ## When revealed, the enemy turns at once to face its target, then stays
 ## locked in that direction until it strikes.
 @export var snaps_to_target: bool = false
@@ -82,9 +100,11 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## Pushes everyone inside the area out past its edge (no damage of its own
 ## unless damage is set above 0).
 @export var push_out: bool = false
-## A skill used right after this one, with no new cast. Everyone this skill
-## caught is hit by it wherever they end up.
+## A skill used right after this one, revealed at once, striking
+## follow_up_delay seconds later (time you can move in). Everyone this skill
+## caught is hit by it wherever they end up; anyone else can still dodge it.
 @export var follow_up: EnemySkill = null
+@export var follow_up_delay: float = 2.0
 
 @export_group("Spikes")
 ## Leaves this many spikes inside the area; anyone walking into one takes
@@ -105,6 +125,11 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export_range(0.0, 1.0) var heal_share: float = 0.2
 @export var interrupt_hits: int = 3
 @export var interrupt_range: float = 1.5
+
+
+## True for mechanic skills (always hit; the answer is a mechanic, not a dodge).
+func is_mechanic() -> bool:
+	return always_hits or always_hits_target or hits_everyone
 
 
 func is_offensive() -> bool:

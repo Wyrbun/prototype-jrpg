@@ -23,10 +23,11 @@ kind = 4
 weight = 2
 shape = 1
 radius = 2.4
-damage = 26
+damage = 18
 windup = 1.4
 special = 1
 overlap = 1
+always_hits = true
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")
@@ -38,8 +39,10 @@ radius = 2.0
 damage = 52
 windup = 1.8
 special = 3
-max_radius = 9.0
+max_radius = 11.0
 contain_share = 0.1
+cast_speed = 0.6
+hits_everyone = true
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.2, 2.0, 1.0)
@@ -49,8 +52,10 @@ albedo_color = Color(0.25, 0.25, 0.32, 1)
 
 [node name="LivingArmor" instance=ExtResource("1_base")]
 display_name = "Living Armor"
-max_hp = 750
-speed = 10.0
+max_hp = 900
+speed = 20.0
+cast_zone_speed = 0.5
+interrupt_resist = 3
 move_speed = 3.0
 turn_speed_degrees = 120.0
 body_radius = 0.8

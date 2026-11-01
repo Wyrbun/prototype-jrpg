@@ -60,7 +60,7 @@ func turn(fighter: Combatant) -> void:
 func _skill(enemy: Combatant, skill_name: String) -> Dictionary:
 	var key := "%s: %s" % [enemy.display_name, skill_name]
 	if not skills.has(key):
-		skills[key] = {"casts": 0, "misses": 0, "hits": 0, "damage": 0, "parried": 0, "defended": 0}
+		skills[key] = {"casts": 0, "misses": 0, "hits": 0, "damage": 0, "parried": 0, "defended": 0, "avoidable": 0}
 	return skills[key]
 
 
@@ -70,6 +70,11 @@ func cast(enemy: Combatant, skill_name: String) -> void:
 
 func miss(enemy: Combatant, skill_name: String) -> void:
 	_skill(enemy, skill_name)["misses"] += 1
+
+
+## A strike of this skill landed on someone who could have avoided it.
+func avoidable(enemy: Combatant, skill_name: String) -> void:
+	_skill(enemy, skill_name)["avoidable"] += 1
 
 
 func parried(enemy: Combatant, skill_name: String) -> void:
@@ -145,13 +150,13 @@ func save(result: String, stats: Dictionary, members: Array[Combatant], foes: Ar
 	lines.append("")
 	lines.append("## Enemy skills")
 	lines.append("")
-	lines.append("| Skill | Used | Missed | People hit | Damage | Parried | Defended |")
-	lines.append("|---|---|---|---|---|---|---|")
+	lines.append("| Skill | Used | Missed | People hit | Damage | Parried | Defended | Avoidable hits |")
+	lines.append("|---|---|---|---|---|---|---|---|")
 	var keys := skills.keys()
 	keys.sort_custom(func(a, b): return int(skills[a]["damage"]) > int(skills[b]["damage"]))
 	for key in keys:
 		var s: Dictionary = skills[key]
-		lines.append("| %s | %d | %d | %d | %d | %d | %d |" % [key, s["casts"], s["misses"], s["hits"], s["damage"], s["parried"], s["defended"]])
+		lines.append("| %s | %d | %d | %d | %d | %d | %d | %d |" % [key, s["casts"], s["misses"], s["hits"], s["damage"], s["parried"], s["defended"], s["avoidable"]])
 	lines.append("")
 	lines.append("## Where the party's damage came from")
 	lines.append("")

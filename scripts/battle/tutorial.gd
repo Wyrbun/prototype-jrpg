@@ -292,7 +292,7 @@ func _build_steps() -> void:
 
 	# 8. Max AP
 	_note(8, "Max AP",
-		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 200, and a bigger max also recharges faster.\n\nMiss a timed hit or a Parry and max AP drops back to 100. Skipping timed hits slowly drains the bonus too.")
+		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and a bigger max also recharges faster.\n\nMiss a timed hit or a Parry and max AP drops back to 100. Skipping timed hits slowly drains the bonus too.")
 	_goal(8, "Max AP",
 		"Land Perfect hits or Parry the Golem's strikes. It's attacking again.",
 		"Raise max AP above 100",

@@ -20,6 +20,8 @@ class_name Moves
 ##   knockback meters each enemy hit is pushed away
 ##   stun      cancels the target's turn if it's preparing an attack
 ##   escalating Bash: each new Bash in the chain has one more hit
+##   escalate_falloff  escalating only: each hit is this much weaker per
+##             earlier Bash in the chain (0.75: 0.8, then 0.6, 0.45...)
 ##   barrier   share of max HP given as a barrier to allies near the user
 ##             (barrier_radius meters), once per move
 ##
@@ -74,7 +76,7 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		"cleric":
 			list = [
-				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "+1 hit per Bash in the chain", {"escalating": true}),
+				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "+1 hit per Bash in the chain, each weaker", {"escalating": true, "escalate_falloff": 0.75}),
 				_attack("Divine Barrier", 25, [1.0], 0.9, 0.16, GOLD, "Barrier (10% HP) to allies near you",
 						{"barrier": 0.10, "barrier_radius": 4.0}),
 				_attack("Holy Light", 30, [1.4], 1.0, 0.16, Color(1.0, 0.95, 0.7), "Long range, breaks Defense",

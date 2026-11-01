@@ -14,6 +14,9 @@ angle = 100.0
 damage = 46
 windup = 1.4
 shared_damage = true
+cast_speed = 0.6
+tracks_target = true
+always_hits_target = true
 
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
@@ -37,8 +40,11 @@ shape = 1
 radius = 2.2
 damage = 26
 windup = 1.6
+trail_turns = 3
+trail_damage_per_second = 8.0
 special = 1
 overlap = 2
+always_hits = true
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(2.0, 1.5, 2.4)
@@ -48,8 +54,10 @@ albedo_color = Color(0.8, 0.35, 0.15, 1)
 
 [node name="DragonHatchling" instance=ExtResource("1_base")]
 display_name = "Dragon Hatchling"
-max_hp = 900
-speed = 9.0
+max_hp = 1080
+speed = 20.0
+cast_zone_speed = 0.5
+interrupt_resist = 3
 move_speed = 2.2
 turn_speed_degrees = 70.0
 body_radius = 1.2

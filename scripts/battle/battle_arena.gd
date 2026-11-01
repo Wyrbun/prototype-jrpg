@@ -78,8 +78,12 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## The most AP the party can hold at the start of the fight. Parries and
 ## Perfects raise it; missing one resets it back to this.
 @export var max_ap: float = 100.0
-## Max AP can't grow beyond this.
-@export var max_ap_ceiling: float = 200.0
+## Max AP can't grow beyond this much per party member, plus one more
+## share (100 x (party size + 1): 200 solo, 500 with four).
+@export var max_ap_ceiling_per_member: float = 100.0
+## Bonus max AP lost when an enemy strike lands that could have been
+## avoided (dodgeable skills, or a mechanic answered wrong); once per strike.
+@export var avoidable_hit_max_ap_loss: float = 100.0
 ## Max AP gained per successful Parry / per Perfect combo hit.
 @export var parry_max_ap_gain: float = 10.0
 @export var perfect_max_ap_gain: float = 5.0
@@ -91,6 +95,8 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## AP gained per second while the timeline is running (between turns).
 ## Moving is free and earns nothing, so this is the main AP source.
 @export var ap_regen_per_second: float = 6.0
+## Recharge speeds up with max AP (x1.5 at 150...), but never beyond this.
+@export var ap_regen_max_multiplier: float = 2.0
 
 @export_group("Reactions")
 ## How long before impact a Parry still counts, in seconds.
@@ -108,8 +114,7 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 @export_range(0.0, 1.0) var defend_share_vs_smash: float = 0.6
 
 @export_group("Attacks")
-## When a party turn starts, AP is topped up to at least this much
-## (enough for three Slashes).
+## AP added when a party member's turn starts, on top of what's there.
 @export var turn_start_ap: float = 30.0
 ## Seconds of "READY" lead-in before the combo's first move starts.
 @export var combo_lead_in: float = 1.0
@@ -152,6 +157,9 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## When a turn comes up, the camera pans to that fighter before the turn
 ## begins (and back afterwards). Longer distances take longer, up to this.
 @export var turn_pan_max_seconds: float = 0.8
+## When an enemy strike catches someone off screen, the camera eases out
+## (and over) so everyone hit is in view, up to this distance.
+@export var strike_frame_max_distance: float = 34.0
 
 
 ## One enemy skill on its way to landing.
@@ -268,6 +276,11 @@ var _steer_before_turn: Combatant = null
 var _pan_start := Vector3.ZERO
 var _pan_duration := 0.0
 var _pan_time := 0.0
+## 0..1: how far the camera has eased into framing a strike's targets.
+var _strike_view := 0.0
+var _strike_framing := false
+var _strike_focus := Vector3.ZERO
+var _strike_distance := 12.0
 ## Seconds left before the active fighter's turn actually begins (the camera
 ## is panning over to them).
 var _turn_intro_left := 0.0
@@ -282,6 +295,8 @@ var _flash_time_left := 0.0
 @onready var warning_label: Label = $UI/WarningLabel
 @onready var ap_bar: ProgressBar = $UI/APBar
 @onready var ap_label: Label = $UI/APBar/APLabel
+## The segmented AP meter drawn in code (replaces the plain APBar on screen).
+var ap_meter: APMeter = null
 @onready var controls_label: Label = $UI/ControlsLabel
 @onready var party_status: PartyStatus = $UI/PartyStatus
 @onready var enemy_status: PartyStatus = $UI/EnemyStatus
@@ -307,6 +322,18 @@ func _ready() -> void:
 	controlled.set_highlighted(true)
 	ap = starting_ap
 	current_max_ap = max_ap
+	ap_meter = APMeter.new()
+	$UI.add_child(ap_meter)
+	ap_meter.anchor_left = 0.0
+	ap_meter.anchor_right = 1.0
+	ap_meter.anchor_top = 1.0
+	ap_meter.anchor_bottom = 1.0
+	ap_meter.offset_top = -120.0
+	ap_meter.offset_bottom = -58.0
+	ap_meter.value = ap
+	ap_meter.max_value = current_max_ap
+	ap_meter.ceiling = max_ap_ceiling()
+	ap_bar.visible = false
 	# The camera keeps its angle from the scene and backs away along its
 	# own view direction (+Z is "behind" a camera in Godot).
 	_cam_pitch = -camera.global_rotation_degrees.x
@@ -486,7 +513,7 @@ func _advance_timeline(seconds: float) -> void:
 		if c == active or c.is_down or c.hold:
 			continue
 		var before := c.timeline_pos
-		c.timeline_pos += c.speed * time_scale * seconds
+		c.timeline_pos += c.speed * time_scale * seconds * _cast_speed(c)
 
 		if c.team == Combatant.Team.ENEMY:
 			if before < cast_zone_start and c.timeline_pos >= cast_zone_start:
@@ -559,7 +586,10 @@ func _begin_active_turn() -> void:
 		if recovered > 0:
 			_flash("%s recovers %d HP" % [fighter.display_name, recovered])
 		# Every turn starts with enough AP for a few attacks.
-		ap = minf(maxf(ap, turn_start_ap), current_max_ap)
+		var before := ap
+		ap = minf(ap + turn_start_ap, current_max_ap)
+		if ap_meter:
+			ap_meter.gain(ap - before)
 		_open_commands()
 	else:
 		_run_enemy_turn(fighter)
@@ -603,6 +633,11 @@ func _end_turn() -> void:
 
 ## Back to the start of the bar, minus any pending penalty.
 func _send_to_start(fighter: Combatant) -> void:
+	if fighter.has_meta("follow_up_at"):
+		# A follow-up (Sword Spin) waits near the end of the bar instead.
+		fighter.timeline_pos = fighter.get_meta("follow_up_at")
+		fighter.remove_meta("follow_up_at")
+		return
 	fighter.timeline_pos = -fighter.timeline_penalty
 	fighter.timeline_penalty = 0.0
 
@@ -684,7 +719,9 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		var turn_speed := enemy.cast_turn_speed_degrees
 		if enemy.loaded_skill != Skills.NONE and _seconds_until_turn(enemy) > cast_slow_seconds:
 			turn_speed = enemy.turn_speed_degrees
-		if not enemy.get_meta("aim_locked", false):  # snapped skills hold their aim
+		if enemy.loaded_def != null and enemy.loaded_def.tracks_target and enemy.loaded_skill != Skills.NONE:
+			enemy.face_toward(to_locked, 1.0, 1000000.0)  # locked on exactly (Breath)
+		elif not enemy.get_meta("aim_locked", false):  # snapped skills hold their aim
 			enemy.face_toward(to_locked, delta, turn_speed)
 		return
 	var stop_distance := enemy.body_radius + target.body_radius + enemy.preferred_gap
@@ -698,9 +735,17 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		_keep_in_arena(enemy)
 
 
+## Slow casts (Shadowflare, Breath) and fast bosses (cast_zone_speed) move
+## through the casting zone at a share of the enemy's speed.
+func _cast_speed(fighter: Combatant) -> float:
+	if fighter.loaded_def != null and fighter.loaded_skill != Skills.NONE and fighter.timeline_pos >= cast_zone_start:
+		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed
+	return 1.0
+
+
 ## Real seconds until a fighter reaches the end of the timeline.
 func _seconds_until_turn(fighter: Combatant) -> float:
-	var rate := fighter.speed * time_scale * battle_speed
+	var rate := fighter.speed * time_scale * battle_speed * _cast_speed(fighter)
 	return maxf(TIMELINE_LENGTH - fighter.timeline_pos, 0.0) / rate if rate > 0.0 else INF
 
 
@@ -906,6 +951,8 @@ func _resolve_overlaps() -> void:
 		for j in range(i + 1, combatants.size()):
 			var a := combatants[i]
 			var b := combatants[j]
+			if a.is_down or b.is_down:
+				continue  # knocked-out bodies don't block anyone
 			var offset := b.global_position - a.global_position
 			offset.y = 0.0
 			var min_distance := a.body_radius + b.body_radius
@@ -917,6 +964,10 @@ func _resolve_overlaps() -> void:
 			if a.team == Combatant.Team.ENEMY and b.team == Combatant.Team.PARTY:
 				b.global_position += push_dir * overlap
 			elif b.team == Combatant.Team.ENEMY and a.team == Combatant.Team.PARTY:
+				a.global_position -= push_dir * overlap
+			elif a == controlled:
+				b.global_position += push_dir * overlap  # allies never shove the one you steer
+			elif b == controlled:
 				a.global_position -= push_dir * overlap
 			else:
 				a.global_position -= push_dir * overlap / 2.0
@@ -953,6 +1004,7 @@ func _begin_cast(enemy: Combatant) -> void:
 	enemy.stance = kind if kind == Skills.Kind.DEFENSE or kind == Skills.Kind.COUNTER else Skills.NONE
 	enemy.cast_damage_taken = 0
 	enemy.interrupt_count = 0
+	enemy.set_meta("smash_hits", 0)
 	enemy.contained = false
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
 	# Its area shows up right away, in grey: where it will land, not what it is.
@@ -977,6 +1029,8 @@ func _reveal_skill(enemy: Combatant) -> void:
 		enemy.set_meta("aim_locked", true)
 	if def.kind == Skills.Kind.DEFENSE or def.kind == Skills.Kind.COUNTER:
 		text += " STANCE"
+	if def.is_mechanic():
+		text += "  -  UNAVOIDABLE"
 	if def.follow_up != null:
 		text += "  >  " + def.follow_up.skill_name.to_upper()
 	if enemy.contained:
@@ -1005,6 +1059,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 		_push_out(enemy, reset_timeline)
 		return
 	if enemy.loaded_def.is_offensive():
+		if enemy.loaded_def.tracks_target and enemy.cast_target != null and not enemy.cast_target.is_down:
+			enemy.face_toward(enemy.cast_target.global_position - enemy.global_position, 1.0, 1000000.0)
 		var mods := _strike_targets(enemy)
 		if mods.is_empty():
 			_count("misses")
@@ -1034,6 +1090,8 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.show_skill_text("")
 	enemy.cast_target = null
 	enemy.set_meta("aim_locked", false)
+	enemy.set_meta("forced_targets", [])
+	enemy.set_meta("ap_penalty_done", false)
 	enemy.loaded_skill = Skills.NONE
 	enemy.skill_revealed = false
 	enemy.stance = Skills.NONE
@@ -1083,6 +1141,8 @@ func _update_attack_ranges() -> void:
 		# Strikes always land when the enemy's icon reaches the end of the bar;
 		# until then the area just glows and warns who's standing in it.
 		var skill_name := enemy.loaded_def.skill_name
+		if enemy.loaded_def.is_mechanic():
+			skill_name += " (unavoidable)"
 		var verb := "will push back" if enemy.loaded_def.push_out else "will hit"
 		warnings.append("%s's %s %s: %s" % [enemy.display_name, skill_name, verb, ", ".join(targets)])
 	warning_label.text = "\n".join(warnings)
@@ -1191,7 +1251,8 @@ func _clear_cast_extras(enemy: Combatant) -> void:
 
 
 ## Who a prepared skill hits, and how: {party member: {"mult", "unblockable", "one_hp"}}.
-func _strike_targets(enemy: Combatant) -> Dictionary:
+## preview: just looking (the warning pulse), so nothing is counted.
+func _strike_targets(enemy: Combatant, preview: bool = false) -> Dictionary:
 	var def := enemy.loaded_def
 	var result := {}
 	if def.placed_on_party():
@@ -1203,6 +1264,12 @@ func _strike_targets(enemy: Combatant) -> Dictionary:
 				if def.special == EnemySkill.Special.LINE_TO_EACH and not _can_see(enemy, member):
 					continue  # a rock blocks the line
 				count += 1
+			if def.always_hits and count == 0:
+				for area in enemy.extra_areas:
+					if area.get_meta("follow", null) == member:
+						if def.special == EnemySkill.Special.LINE_TO_EACH and not _can_see(enemy, member):
+							continue  # hiding behind a rock still blocks a line
+						count = 1  # its own circle / line finds it wherever it stands
 			if count == 0:
 				continue
 			var mod := {"mult": 1.0, "unblockable": false, "one_hp": false}
@@ -1222,8 +1289,19 @@ func _strike_targets(enemy: Combatant) -> Dictionary:
 					result[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
 				else:
 					shielded = true  # in the area, but a rock was in the way
-		if shielded:
+		if shielded and not preview:
 			_count("rock_saves")
+		if def.hits_everyone:
+			# The whole party is caught; damage depends on how big it grew.
+			var size_share := clampf(_cast_radius(enemy) / maxf(def.max_radius, 0.1), 0.25, 1.0) \
+					if def.special == EnemySkill.Special.GROWING else 1.0
+			result = {}
+			for member in _standing(party):
+				result[member] = {"mult": size_share, "unblockable": false, "one_hp": false}
+		var locked := enemy.cast_target
+		if def.always_hits_target and locked != null and not locked.is_down and not result.has(locked) \
+				and _can_see(enemy, locked):
+			result[locked] = {"mult": 1.0, "unblockable": false, "one_hp": false}  # it never loses its target
 		if def.stops_at_first_hit and result.size() > 1:
 			# Only the first one in the way is hit; they shield the rest.
 			var first: Combatant = null
@@ -1231,6 +1309,9 @@ func _strike_targets(enemy: Combatant) -> Dictionary:
 				if first == null or enemy.gap_to(member) < enemy.gap_to(first):
 					first = member
 			result = {first: result[first]}
+	for member in enemy.get_meta("forced_targets", []):
+		if is_instance_valid(member) and not member.is_down and not result.has(member):
+			result[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}  # caught by Shout
 	if def.shared_damage and result.size() > 1:
 		# Stacking up spreads the damage: 100%, 67%, 50%, 40%...
 		var share := 1.0 / (1.0 + 0.5 * (result.size() - 1))
@@ -1256,17 +1337,26 @@ func _heal_allies(caster: Combatant) -> void:
 		_flash("%s's %s heals: %s" % [caster.display_name, def.skill_name, ", ".join(healed)])
 
 
-## Fire Wave: its area keeps burning for a few of the caster's turns.
+## Fire Wave / Burning Spike: the skill's area keeps burning for a few of
+## the caster's turns (each placed circle burns on its own).
 func _spawn_trail(enemy: Combatant) -> void:
-	if enemy.attack_range == null:
-		return
-	var area := AttackRange.new()
-	add_child(area)
-	area.global_transform = enemy.attack_range.global_transform
-	area.show_hazard(enemy.loaded_def, Color(1.0, 0.45, 0.1))
-	_hazards.append({"area": area, "owner": enemy, "turns": enemy.loaded_def.trail_turns,
-			"dps": enemy.loaded_def.trail_damage_per_second, "acc": {}, "name": enemy.loaded_def.skill_name})
-	_flash("The ground keeps burning!")
+	var def := enemy.loaded_def
+	var sources: Array[AttackRange] = []
+	if def.placed_on_party():
+		for placed in enemy.extra_areas:
+			if is_instance_valid(placed):
+				sources.append(placed)
+	elif enemy.attack_range != null:
+		sources.append(enemy.attack_range)
+	for source in sources:
+		var area := AttackRange.new()
+		add_child(area)
+		area.global_transform = source.global_transform
+		area.show_hazard(def, Color(1.0, 0.45, 0.1))
+		_hazards.append({"area": area, "owner": enemy, "turns": def.trail_turns,
+				"dps": def.trail_damage_per_second, "acc": {}, "name": def.skill_name})
+	if not sources.is_empty():
+		_flash("The ground keeps burning!")
 
 
 ## Rock Spikes: spikes rise inside the skill's circle and hurt anyone who
@@ -1341,27 +1431,47 @@ func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
 	if next == null or enemy.attack_range == null:
 		_finish_enemy_skill(enemy, reset_timeline)
 		return
+	# The follow-up is revealed now and strikes follow_up_delay seconds later:
+	# whoever was pushed is marked and will be hit wherever they go; anyone
+	# else has that long to get out (into Sword Spin's safe middle).
 	_clear_telegraphs(enemy)
 	enemy.loaded_def = next
 	enemy.loaded_skill = next.kind
 	enemy.skill_revealed = true
+	enemy.last_skill = def
 	enemy.attack_range.show_skill(next)
 	enemy.show_skill_text(next.skill_name.to_upper(), next.color())
-	var mods := _strike_targets(enemy)
+	var marked: Array = []
 	for member in caught:
 		if not member.is_down:
-			mods[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
-	if mods.is_empty():
-		_count("misses")
-		if playtest:
-			playtest.cast(enemy, next.skill_name)
-			playtest.miss(enemy, next.skill_name)
-		_flash("%s's %s misses!" % [enemy.display_name, next.skill_name])
-		_finish_enemy_skill(enemy, reset_timeline)
-	else:
-		if playtest:
-			playtest.cast(enemy, next.skill_name)
-		_begin_strike(enemy, mods, reset_timeline)
+			marked.append(member)
+	enemy.set_meta("forced_targets", marked)
+	_mark_forced(enemy, marked)
+	var rate := enemy.speed * time_scale * battle_speed
+	# (never back before the casting zone, or it would start a new cast)
+	enemy.set_meta("follow_up_at", maxf(TIMELINE_LENGTH - def.follow_up_delay * rate, cast_zone_start + 0.01))
+	if reset_timeline:
+		_send_to_start(enemy)  # on its own turn, _end_turn does this
+
+
+## Orange spheres over everyone a follow-up will hit no matter what.
+func _mark_forced(enemy: Combatant, marked: Array) -> void:
+	var nodes: Array[Node3D] = []
+	for member in marked:
+		var sphere := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radius = 0.2
+		mesh.height = 0.4
+		sphere.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color(1.0, 0.6, 0.1)
+		sphere.material_override = material
+		member.add_child(sphere)
+		sphere.position = Vector3(0, 2.85, 0)
+		sphere.set_meta("bob", true)
+		nodes.append(sphere)
+	enemy.set_meta("telegraphs", nodes)
 
 
 ## Anyone standing in a fire trail keeps losing HP (in small chunks);
@@ -1718,6 +1828,7 @@ func _resolve_strike() -> void:
 	var parry_missed := false
 	var final_hit := s.hits_left <= 0
 	var thrown: Array[Combatant] = []
+	var avoidable: Array[Combatant] = []  # took a hit they could have avoided
 	if s.def.hits > 1:
 		lines.append("%s %d/%d" % [skill_name, s.def.hits - s.hits_left, s.def.hits])
 
@@ -1749,6 +1860,8 @@ func _resolve_strike() -> void:
 				if playtest and target.hp > 1:
 					playtest.hurt(target, target.hp - 1, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 				target.hp = mini(target.hp, 1)
+				if _avoidable_hit(s.enemy, s.def, s.mods, target, s.targets):
+					avoidable.append(target)
 				_popup(target, "1 HP!", Color(1.0, 0.3, 0.2))
 				lines.append("%s is caught in the overlap: down to 1 HP!" % target.display_name)
 		elif s.reaction == Reaction.DEFEND and can_block:
@@ -1763,6 +1876,8 @@ func _resolve_strike() -> void:
 		else:
 			var taken := _hurt(target, damage, false, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 			_popup(target, str(taken), Color(1.0, 0.4, 0.3))
+			if _avoidable_hit(s.enemy, s.def, s.mods, target, s.targets):
+				avoidable.append(target)
 			if s.reaction == Reaction.PARRY_MISSED and can_parry:
 				parry_missed = true
 				_count("parries_too_early")
@@ -1793,6 +1908,15 @@ func _resolve_strike() -> void:
 		if reset_note != "":
 			lines.append(reset_note)
 
+	if not avoidable.is_empty() and not parry_missed and not s.enemy.get_meta("ap_penalty_done", false):
+		# Once per strike (a 3-hit Combo costs one segment, not three).
+		s.enemy.set_meta("ap_penalty_done", true)
+		var note := _lose_max_ap_for_hit(avoidable)
+		if note != "":
+			lines.append(note)
+		if playtest:
+			playtest.avoidable(s.enemy, skill_name)
+
 	for target in s.targets:
 		if target.is_down:
 			lines.append("%s is down!" % target.display_name)
@@ -1815,6 +1939,57 @@ func _resolve_strike() -> void:
 	_check_party()
 	_check_enemies()
 	strike_finished.emit()
+
+
+## Would taking this hit (no Parry, no Defend) have been avoidable?
+## Dodgeable skills: always. Mechanic skills: only if the answer was missed
+## (caught in an overlap, not stacked, not alone, not contained).
+func _avoidable_hit(enemy: Combatant, def: EnemySkill, mods: Dictionary, target: Combatant, targets: Array) -> bool:
+	if not def.is_mechanic():
+		return true
+	var mod: Dictionary = mods.get(target, {})
+	if float(mod.get("mult", 1.0)) > 1.0 or mod.get("one_hp", false):
+		return true  # overlap
+	if def.shared_damage and targets.size() == 1 and _standing(party).size() > 1:
+		return true  # took a stack mechanic alone
+	if def.special == EnemySkill.Special.ON_MARKED and targets.size() > 1:
+		return true  # the marked one wasn't alone
+	if def.hits_everyone and not enemy.contained:
+		return true  # never contained
+	return false
+
+
+## An avoidable hit landed: one segment (100) of bonus max AP cracks off.
+## Returns a message ("" if there was no bonus to lose).
+func _lose_max_ap_for_hit(who: Array) -> String:
+	_count("avoidable_hits")
+	if current_max_ap <= max_ap:
+		return ""
+	var before := current_max_ap
+	if ap_meter:
+		ap_meter.loss_text = "AVOIDABLE HIT"
+	current_max_ap = maxf(current_max_ap - avoidable_hit_max_ap_loss, max_ap)
+	ap = minf(ap, current_max_ap)
+	var names: PackedStringArray = []
+	for member in who:
+		names.append(member.display_name)
+	return "Avoidable hit on %s: max AP -%d (now %d)" % [", ".join(names), roundi(before - current_max_ap), int(current_max_ap)]
+
+
+## True while someone stands where a revealed strike would cost max AP
+## (the meter's top segment pulses red as a warning).
+func _max_ap_at_risk() -> bool:
+	if current_max_ap <= max_ap:
+		return false
+	for enemy in enemies:
+		if enemy.is_down or not _is_live_threat(enemy):
+			continue
+		var mods := _strike_targets(enemy, true)
+		var targets := mods.keys()
+		for target in targets:
+			if _avoidable_hit(enemy, enemy.loaded_def, mods, target, targets):
+				return true
+	return false
 
 
 ## A party member loses HP, recorded for the play-test report.
@@ -1927,7 +2102,17 @@ func _open_commands() -> void:
 	var can_attack := _attack_target() != null
 	battle_menu.command_index = 0 if can_attack else 2  # start on Wait if out of reach
 	battle_menu.command_enabled[0] = can_attack
-	battle_menu.command_notes[0] = "" if can_attack else "no enemy in reach"
+	var note := ""
+	if not can_attack:
+		# Something in reach but every attack that reaches it costs too much
+		# (Meteor Strike reaches anyone, but costs 90 AP)?
+		var reachable := false
+		for enemy in _standing(enemies):
+			for move in Moves.attacks(controlled.class_id):
+				if _can_target(controlled, enemy, move):
+					reachable = true
+		note = "not enough AP" if reachable else "no enemy in reach"
+	battle_menu.command_notes[0] = note
 
 
 ## Keys while a menu is open. W/S move the cursor, J confirms, K goes back,
@@ -2026,7 +2211,7 @@ func _choose_attack_target() -> void:
 	var first := _attack_target()
 	var choices: Array[Combatant] = []
 	for enemy in _standing(enemies):
-		for move in Moves.attacks(controlled.class_id):
+		for move in Moves.attacks(controlled.class_id).filter(_affordable):
 			if _can_target(controlled, enemy, move):
 				choices.append(enemy)
 				break
@@ -2099,9 +2284,13 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 		for entry in _plan:
 			if entry["name"] == move["name"]:
 				count += 1
+		# Each Bash in a row has one more hit, but every hit of it is weaker
+		# (escalate_falloff per earlier Bash): more timed hits, so more
+		# Perfects and max AP, without the damage running away.
+		var per_hit: float = float(move["hits"][0]) * pow(float(move.get("escalate_falloff", 1.0)), count - 1)
 		hits = []
 		for i in count:
-			hits.append(move["hits"][0])
+			hits.append(per_hit)
 		duration = 0.3 + 0.22 * count
 		if count > 3:
 			# From the fourth Bash on, the hits land at random moments.
@@ -2235,13 +2424,18 @@ func _judge_timing() -> void:
 		_stop_combo()
 
 
+## The highest max AP can grow to: 100 per party member, plus 100.
+func max_ap_ceiling() -> float:
+	return max_ap_ceiling_per_member * (party.size() + 1)
+
+
 ## Raises the party's max AP for the rest of the fight. Returns a message.
 func _grow_max_ap(amount: float, at: Combatant) -> String:
 	var before := current_max_ap
-	current_max_ap = minf(current_max_ap + amount, max_ap_ceiling)
+	current_max_ap = minf(current_max_ap + amount, max_ap_ceiling())
 	var gained := current_max_ap - before
 	if gained <= 0.0:
-		return "Max AP is already at its limit (%d)" % int(max_ap_ceiling)
+		return "Max AP is already at its limit (%d)" % int(max_ap_ceiling())
 	_popup(at, "+%d MAX AP" % roundi(gained), Color(0.45, 0.85, 1.0))
 	return "Max AP +%d (now %d)" % [roundi(gained), int(current_max_ap)]
 
@@ -2249,7 +2443,7 @@ func _grow_max_ap(amount: float, at: Combatant) -> String:
 ## AP gain scales with how far max AP has grown: 1.0 at the starting cap,
 ## 1.5 at 150, 2.0 at 200.
 func _ap_gain_multiplier() -> float:
-	return current_max_ap / max_ap
+	return minf(current_max_ap / max_ap, ap_regen_max_multiplier)
 
 
 ## A skipped timed hit: lose a little of the extra max AP (not below max_ap).
@@ -2296,7 +2490,7 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 		return false
 	if _combo_target.is_down:
 		# The target fell: carry on against the nearest enemy still in reach.
-		_combo_target = _attack_target()
+		_combo_target = _attack_target(false)
 		if _combo_target == null:
 			return false
 		_flash("%s turns to %s" % [attacker.display_name, _combo_target.display_name])
@@ -2389,10 +2583,19 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 					_popup(target, "BLOCKED", Skills.info(Skills.Kind.DEFENSE)["color"])
 					_flash("%s's Defense blocks the %s. Piercing or breaking moves get through!" % [target.display_name, move_name])
 					return true
-	elif target.loaded_skill == Skills.Kind.SMASH and move["kind"] == Skills.Kind.ATTACK:
-		note = "Smash interrupted!"
-		_count("interrupts")
-		_cancel_enemy_skill(target)
+	elif target.loaded_skill == Skills.Kind.SMASH and (move["kind"] == Skills.Kind.ATTACK \
+			or (move["effect"] == Moves.Effect.BREAK and target.interrupt_resist > 1)):
+		# Bosses shrug off single hits: it takes interrupt_resist Attack-type
+		# hits (or one breaking move) to stop their Smash.
+		var needed := 1 if move["effect"] == Moves.Effect.BREAK else target.interrupt_resist
+		var hits: int = target.get_meta("smash_hits", 0) + 1
+		target.set_meta("smash_hits", hits)
+		if hits >= needed:
+			note = "Smash interrupted!"
+			_count("interrupts")
+			_cancel_enemy_skill(target)
+		else:
+			_popup(target, "%d / %d" % [hits, needed], Color(1.0, 0.75, 0.4))
 
 	var damage := ceili(attacker.attack_power * multiplier)
 	var dealt := target.take_damage(damage, false)
@@ -2463,8 +2666,12 @@ func _can_target(fighter: Combatant, enemy: Combatant, move: Dictionary) -> bool
 ## The enemy the controlled fighter's attacks go after: the nearest one in
 ## its normal reach, or else the nearest one a long-range attack (Holy Light,
 ## Meteor Strike) can reach.
-func _attack_target() -> Combatant:
-	var attacks := Moves.attacks(controlled.class_id)
+## check_cost: only count attacks the party can pay for right now (off
+## mid-combo, when the moves are already paid).
+func _attack_target(check_cost: bool = true) -> Combatant:
+	var attacks: Array[Dictionary] = Moves.attacks(controlled.class_id)
+	if check_cost:
+		attacks = attacks.filter(_affordable)
 	var normal: Array[Dictionary] = attacks.filter(func(m): return float(m["reach"]) < 0.0)
 	for pool in [normal, attacks]:
 		var best: Combatant = null
@@ -2481,6 +2688,13 @@ func _attack_target() -> Combatant:
 		if best != null:
 			return best
 	return null
+
+
+## True if the controlled fighter could put this attack on the bar now
+## (its cost fits both the party's AP and the class's combo bar).
+func _affordable(move: Dictionary) -> bool:
+	var cost := float(move["cost"]) * (2.0 if controlled.statuses.has("arcane_cost") else 1.0)
+	return cost <= minf(ap, controlled.combo_limit)
 
 
 # --- Skills (Abilities) ----------------------------------------------------
@@ -2754,7 +2968,40 @@ func _update_camera(delta: float) -> void:
 		# This "1 - exp(...)" form makes the smoothing feel the same at any frame rate.
 		var weight := 1.0 - exp(-camera_follow_speed * delta)
 		_cam_focus = _cam_focus.lerp(_camera_focus(), weight)
+	# Strikes that catch someone off screen: ease out so they're all in view.
+	if _strike != null and not _strike_framing:
+		_start_strike_framing()
+	elif _strike == null:
+		_strike_framing = false
+	_strike_view = move_toward(_strike_view, 1.0 if _strike_framing else 0.0, delta * 3.0)
 	_place_camera()
+
+
+## Decides whether the current strike needs the camera to pull out, and
+## where to: the middle of the enemy and everyone it hits, far enough back
+## to fit them all.
+func _start_strike_framing() -> void:
+	var points: Array[Vector3] = [_strike.enemy.global_position]
+	for target in _strike.targets:
+		points.append(target.global_position)
+	var all_seen := true
+	for point in points:
+		for height in [0.2, 1.6]:
+			if not camera.is_position_in_frustum(point + Vector3(0, height, 0)):
+				all_seen = false
+	if all_seen:
+		return
+	var center := Vector3.ZERO
+	for point in points:
+		center += point
+	center /= points.size()
+	var spread := 0.0
+	for point in points:
+		spread = maxf(spread, Vector2(point.x - center.x, point.z - center.z).length())
+	var half_fov := deg_to_rad(camera.fov) * 0.5
+	_strike_focus = center
+	_strike_distance = clampf((spread + 2.5) / tan(half_fov) * 1.1, _cam_distance, strike_frame_max_distance)
+	_strike_framing = true
 
 
 ## Starts a smooth pan from the current view to the camera's new subject.
@@ -2769,8 +3016,11 @@ func _begin_pan() -> float:
 
 func _place_camera() -> void:
 	camera.global_rotation_degrees = Vector3(-_cam_pitch, _cam_yaw, 0.0)
-	_camera_offset = camera.global_basis.z * _cam_distance
-	camera.global_position = _cam_focus + _camera_offset
+	var t := _strike_view * _strike_view * (3.0 - 2.0 * _strike_view)  # smooth in and out
+	var focus := _cam_focus.lerp(_strike_focus, t)
+	var distance := lerpf(_cam_distance, _strike_distance, t)
+	_camera_offset = camera.global_basis.z * distance
+	camera.global_position = focus + _camera_offset
 
 
 ## Mouse: hold the right button and drag to rotate and tilt, wheel to zoom.
@@ -2870,6 +3120,13 @@ func _update_ui(delta: float) -> void:
 	ap_bar.max_value = current_max_ap
 	ap_bar.value = ap
 	ap_label.text = "Party AP  %d / %d" % [floori(ap), int(current_max_ap)]
+	if ap_meter:
+		ap_meter.value = ap
+		ap_meter.max_value = current_max_ap
+		ap_meter.ceiling = max_ap_ceiling()
+		ap_meter.flow_speed = _ap_gain_multiplier()
+		ap_meter.ghost_cost = battle_menu.combo_cost() if _menu_mode == BattleMenu.Mode.COMBO and _party_turn() else 0.0
+		ap_meter.at_risk = _max_ap_at_risk()
 
 	if _flash_time_left > 0.0:
 		_flash_time_left -= delta

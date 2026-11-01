@@ -18,18 +18,19 @@ be built.
 
 Each enemy is a scene in `scenes/characters/` with the skills that existing
 building blocks allow. Numbers are first guesses (enemy HP was raised 2.5x and
-enemy damage 1.3x after playtesting).
+enemy damage 1.3x after playtesting; after the first full play-test the three
+bosses got +20% HP and twice the speed, casting at half speed).
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
 | Goblin Fighter | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
-| Kobold Archer | 175 | Ranged Attack (donut), Power Shot (long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
-| Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit), Fireball (circle on its target; hits everyone inside; Parry only if the target is alone) | |
-| Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out) followed at once by Sword Spin (donut 3.5-6 m; hits everyone Shout pushed; can't be parried) | |
-| Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (a line to each party member; in 2+ lines: double damage, can't be blocked) | |
-| Stone Golem | 800 | Heavy Attack, Crush, Rock Stomp, Rock Spikes (circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns) | |
-| Living Armor | 750 | Combo (3 hits; the last throws you 5 m; a Parry stops it), Dark Bolt (a circle on each party member; overlaps take double damage), Shadowflare (grows from 2 to 9 m over the cast; dealing 10% of its HP during the cast contains it) | |
-| Dragon Hatchling | 900 | Breath (massive cone; damage shrinks the more people it hits: stack up), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (a circle on each party member; anyone in an overlap drops to 1 HP) | |
+| Kobold Archer | 175 | Ranged Attack (donut), Power Shot (unavoidable on its target unless a rock blocks; long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
+| Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit), Fireball (unavoidable: circle on its target; hits everyone inside; Parry only if the target is alone) | |
+| Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out), then Sword Spin 2 s later (donut 3.5-6 m; always hits everyone Shout pushed, others can dodge into the middle; can't be parried) | |
+| Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (unavoidable: a line to each party member, rocks block; in 2+ lines: double damage, can't be blocked) | |
+| Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns) | |
+| Living Armor | 900 | Combo (3 hits; the last throws you 5 m; a Parry stops it), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (unavoidable: hits the whole party, damage scaled by its size; grows from 2 to 11 m over a slow cast; dealing 10% of its HP during the cast contains it) | |
+| Dragon Hatchling | 1080 | Breath (unavoidable on its target, tracks it exactly; massive cone; damage shrinks the more people it hits: stack up; slow cast, 60% speed), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (unavoidable: a circle on each party member; anyone in an overlap drops to 1 HP; each circle keeps burning for 3 Dragon turns, 8 HP/s) | |
 
 ## Normal enemies
 

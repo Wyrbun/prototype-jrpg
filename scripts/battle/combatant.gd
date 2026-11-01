@@ -14,6 +14,12 @@ enum Team { PARTY, ENEMY }
 ## How fast this character's icon moves along the timeline.
 ## Higher speed means more turns.
 @export var speed: float = 10.0
+## Enemies: share of their speed while preparing a skill in the casting zone.
+## Fast bosses use 0.5 so they act often but casts stay readable.
+@export_range(0.2, 1.0) var cast_zone_speed: float = 1.0
+## Enemies: Attack-type hits needed to interrupt a Smash it's preparing
+## (bosses: 3). Breaking moves interrupt at once.
+@export var interrupt_resist: int = 1
 
 @export_group("Combat")
 ## Party only: which class's attacks and skills this fighter uses
@@ -316,6 +322,12 @@ func _go_down() -> void:
 		body.rotation_degrees.x = 90.0
 		body.position.y = 0.4
 	set_highlighted(false)
+	if team == Team.ENEMY:
+		# Defeated enemies sink away after a moment (they no longer block anyone).
+		var fade := create_tween()
+		fade.tween_interval(2.0)
+		fade.tween_property(self, "scale", Vector3(0.01, 0.01, 0.01), 0.5)
+		fade.tween_callback(func(): visible = false)
 
 
 ## Distance between this fighter's edge and another's (0 = touching).

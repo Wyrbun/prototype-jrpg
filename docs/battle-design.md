@@ -196,7 +196,8 @@ the triangle):
 - Also per skill: **hits** (multi-hit, a ring per hit, a Parry stops the
   rest), **launch** (last hit throws targets), **shared damage** (100%,
   67%, 50%, 40%... for 1, 2, 3, 4 targets), **trail** (leaves the area
-  burning for N of the enemy's turns, damage per second).
+  burning for N of the enemy's turns, damage per second; for circles placed
+  on the party, each circle burns where it landed: Burning Spike).
 - **stops_at_first_hit:** only the party member closest to the enemy is hit;
   they shield whoever is behind (Wind Slash, Shield Bash).
 - **snaps_to_target:** on reveal the enemy turns at once to face its target,
@@ -204,10 +205,44 @@ the triangle):
   (Shield Bash).
 - **let_through** (Defense stances): share of a hit that still gets through
   instead of a full block (Goblin's Defend lets 40% through).
-- **push_out + follow_up:** pushes everyone inside out past the edge, then
-  the follow-up skill strikes at once, with no new cast; everyone pushed is
-  hit wherever they landed, plus anyone in the follow-up's own area (Shout,
-  then Sword Spin).
+- **push_out + follow_up:** pushes everyone inside out past the edge. The
+  follow-up is revealed at once and strikes `follow_up_delay` seconds later
+  (2 s: the enemy waits near the end of the bar). Everyone pushed gets an
+  orange sphere and is hit wherever they go; anyone else can still dodge it
+  (Shout, then Sword Spin: run into its safe middle).
+- **Mechanic skills (UNAVOIDABLE):** they can't be dodged, only answered.
+  Revealed with "UNAVOIDABLE" above the enemy and "(unavoidable)" in the
+  warning line.
+  - `always_hits` (placed circles and lines): everyone it was placed on is
+    hit wherever they stand; a rock still blocks a line (Dark Bolt, Burning
+    Spike, Curse, Fireball, Rock Spikes).
+  - `always_hits_target`: the locked target is hit however far it runs,
+    unless a rock blocks the enemy's view (Breath, Power Shot).
+  - `hits_everyone` (growing circles): the explosion hits the whole party
+    for damage scaled by its final size, at least 25% (Shadowflare: contain
+    it early).
+- **Avoidable hits cost max AP:** when a strike lands on someone who didn't
+  Parry or Defend, and it could have been avoided, the party loses one
+  segment (100) of bonus max AP, once per strike (`avoidable_hit_max_ap_loss`).
+  Dodgeable skills always count; mechanic skills only when the answer was
+  missed: caught in an overlap, taking a stack skill alone, not alone under a
+  marked circle, or a growing circle never contained. Fire and spikes don't
+  count. While anyone stands where a revealed strike would cost max AP, that
+  segment of the meter pulses red with a "!". Reports count them per skill.
+- **Bosses resist interrupts** (`interrupt_resist` 3): it takes three
+  Attack-type hits to stop a boss's Smash (a counter pops up), or one
+  breaking move. Normal enemies still lose a Smash to one Attack hit.
+- **Camera framing:** when a strike catches anyone off screen, the camera
+  eases out and over until the enemy and everyone hit are in view
+  (`strike_frame_max_distance` 34 m), then eases back.
+- **Bosses** (Stone Golem, Living Armor, Dragon Hatchling) have speed 20,
+  about twice a party member's, so a solo boss acts roughly once every 2-3
+  party turns instead of every 5. Their `cast_zone_speed` 0.5 (Combatant,
+  Combat group) halves their speed inside the casting zone, so casts and
+  reveals stay as readable as a normal enemy's.
+- **cast_speed:** while casting this skill the enemy moves along the bar at
+  this share of its speed (Shadowflare 0.6: more time to contain it;
+  Breath 0.6: more time to stack up).
 - **spikes:** leaves that many spikes in the area; walking into one costs
   `spike_damage` (once per step in; standing there when they rise is safe).
   They last `trail_turns` of the enemy's turns. Spikes and fire trails stay
@@ -226,7 +261,7 @@ Healing Ritual only when an ally in range is under 75% HP (more likely the
 more are hurt); Defense/Counter x1.6 with a party member close, x0.5
 otherwise; the last skill used x0.35 per repeat in a row.
 
-**Stone Golem** (800 HP), following the roster:
+**Stone Golem** (960 HP, speed 20, casts at half speed), following the roster:
 
 | Skill | Kind | Area | Damage | Wind-up | Weight |
 |---|---|---|---|---|---|
@@ -269,17 +304,26 @@ Stances still work for any enemy that lists them.
 - **Attacks spend AP** (milestone 6). Swapping and Defend cost AP too.
 - **Max AP grows with skill:** every successful **Parry (+10)** or
   **Perfect combo hit (+5)** raises the party's max AP **for the rest of
-  the fight** (up to `max_ap_ceiling`, 200). **Missing a Parry or a Perfect
+  the fight** (up to 100 per party member plus 100: 200 solo, 500 with
+  four; `max_ap_ceiling_per_member`). **Missing a Parry or a Perfect
   resets max AP to 100**, and any AP above 100 is lost.
-- **AP gain scales with max AP:** the recharge is multiplied by current max AP / 100 (1.5x at 150, 2x at 200). A big bank
+- **AP gain scales with max AP:** the recharge is multiplied by current max AP / 100 (1.5x at 150, 2x at 200), capped at 2x (`ap_regen_max_multiplier`) even when max AP goes higher. A big bank
   refills fast, but one missed timing drops it all back to 100.
+- **The AP meter** (`scripts/battle/ap_meter.gd`, drawn in code): one
+  segment per 100 AP, coloured by tier (blue, teal, gold, orange, rainbow),
+  with dim slots up to the max AP limit. Raising max AP sweeps the new space
+  open with a flash and a "+5"; a reset shatters the extra segments with a
+  red flash and "MAX AP LOST". While building a combo its cost shows as a
+  dark ghost section; the turn-start +30 lights up as it fills. The fill
+  flows faster with the recharge rate. Tier effects: a passing shine (2),
+  a pulsing glow (3), embers (4), a cycling rainbow and a big gold number (5).
 - **Skipping a timed hit** (no J on a hit's box) costs **5 of the extra max
   AP** (`skipped_hit_max_ap_loss`), never going below 100. Opting out is
   safe but slowly drains the bonus.
 
 Numbers (BattleArena node): `max_ap` 100 (starting cap), `starting_ap` 50,
 `ap_regen_per_second` 6, `parry_max_ap_gain` 10, `perfect_max_ap_gain` 5,
-`skipped_hit_max_ap_loss` 5, `max_ap_ceiling` 200. Enemies turn slowly toward
+`skipped_hit_max_ap_loss` 5, `max_ap_ceiling_per_member` 100, `turn_start_ap` 30. Enemies turn slowly toward
 the nearest party member and only walk when roughly facing them; their base
 area is a 120-degree cone in front, so the back is the safe side.
 
@@ -339,7 +383,13 @@ down, which can:
   punishes the attacker (33 damage) and stops the combo; **Defense** blocks
   basic attacks, piercing moves ignore it, breaking moves break it; an
   **Attack-type hit on an enemy preparing Smash** interrupts it.
-- At the start of each party turn **AP is topped up to 30**.
+- At the start of each party turn the party **gains 30 AP** on top of what
+  it has (up to max AP). (Was: topped up to 30.)
+- **Attack is greyed out** unless some attack can reach an enemy *and* fits
+  the party's AP and the class's bar ("not enough AP" vs "no enemy in
+  reach"); Meteor Strike reaches anyone but costs 90.
+- **Knocked-out fighters** no longer push anyone; defeated enemies sink away
+  after 2 seconds.
 
 ## Classes (built)
 
@@ -393,7 +443,7 @@ attack_power x the hit's multiplier.
 ### Cleric (130 HP, 60 AP, can Block, cannot Parry)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Bash | 10 | 0.8 per hit | the 1st Bash has 1 hit, the 2nd 2 hits, and so on; from the 4th Bash the hits land at random moments |
+| Bash | 10 | 0.8 per hit, x0.75 per earlier Bash | the 1st Bash has 1 hit, the 2nd 2 hits, and so on, but each hit is weaker (0.8, 0.6, 0.45, 0.34...): six Bashes deal 7.1x attack in 21 timed hits (was 16.8x); from the 4th Bash the hits land at random moments |
 | Divine Barrier | 25 | 1.0 | also gives allies within 4 m a barrier of 10% of their max HP |
 | Holy Light | 30 | 1.4 | reach 9 m; breaks Defense |
 
