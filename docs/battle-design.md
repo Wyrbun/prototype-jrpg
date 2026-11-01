@@ -83,12 +83,39 @@ threat ranges, and chained attacks.
   inside the area then (an earlier "touch it and it strikes at once" rule
   was removed: with tracking enemies it made them act ahead of the bar).
 - **Ally AI** (party members you aren't steering), in priority order:
-  1. **Stay out of danger:** leave any enemy area that could hit, never step
-     into one. Danger = a revealed Attack/Smash, or anything still being
-     prepared ("...").
-  2. **Stand near the edge of their attack range** from the nearest enemy
+  1. **Stack up** for a revealed shared-damage skill (Breath): gather on the
+     party member it's aimed at (or whoever inside is nearest the enemy) so
+     the damage is split. That area isn't treated as danger.
+  2. **Stay out of danger:** leave any enemy area that could hit, never step
+     into one. Danger = a revealed Attack/Smash, anything still being
+     prepared ("..."), fire trails and rock spikes. A circle or line that
+     follows this ally while hidden is ignored until revealed (it can't be
+     outrun). Circles that punish overlaps (Dark Bolt, Burning Spike) keep
+     allies a full circle apart: they spread out.
+  3. **Stand near the edge of their attack range** from their focus enemy
      (`ally_range_share`, 80% of reach): close in if too far, back off if much
-     too close, detouring around danger.
+     too close, detouring around danger. Focus = an enemy casting Healing
+     Ritual (they close within its interrupt range, so your hits break it),
+     then the caster of a growing circle not yet contained, otherwise the
+     nearest enemy.
+
+## Play-test reports (built)
+
+Every fight outside the tutorial saves a report when it ends (or when you
+leave it with N, P or Esc after at least one turn), in the game's user data
+folder: `%APPDATA%\Godot\app_userdata\Prototype JRPG\playtests` on
+Windows, from the editor and exported builds alike. Press **O** on the
+end-of-fight screen to open the folder.
+
+- One `.md` file per fight: round, attempt number, result, length and turns;
+  per party member HP left, damage dealt and taken, times downed; enemy HP
+  left; each enemy skill's uses, misses, people hit, damage, parries and
+  defends; where each member's damage came from; counts (parries, early
+  parries, defends, perfects, interrupts, guard breaks, contained casts...).
+- `playtests.csv`: one line per fight, for comparing attempts in a
+  spreadsheet.
+- Code: `scripts/battle/playtest_log.gd`; the battle reports damage through
+  `_hurt()` so every source is counted.
 
 ## Boss rush, arenas and sight (built)
 

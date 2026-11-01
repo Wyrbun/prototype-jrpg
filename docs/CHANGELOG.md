@@ -3,6 +3,18 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Smarter allies, play-test reports
+
+- **Allies understand the enemy mechanics:** they stack on the target of a
+  shared-damage skill (Breath) instead of running from it, spread a full
+  circle apart for overlap-punishing circles (Dark Bolt, Burning Spike),
+  stop trying to outrun circles that follow them while hidden (they used to
+  walk off sideways), close in on a Shaman's Healing Ritual so your hits can
+  interrupt it, and focus a growing Shadowflare's caster.
+- **Play-test reports:** every fight saves a report (Markdown) and a line in
+  `playtests.csv` in the game's user data folder. O on the end screen opens
+  the folder. Used for the coming balance pass.
+
 ## Full kits for the rest of the roster
 
 - **Goblin Fighter:** Attack is 2 hits (13 each). Defend no longer blocks

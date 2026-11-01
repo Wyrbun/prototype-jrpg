@@ -62,7 +62,9 @@ to slip out.
 
 **Positioning (between turns).** While the timeline runs, you steer one party
 member in real time and press **Tab** to switch between them. Enemies and the
-AI-controlled allies move too. Each enemy shows its threat area on the floor:
+AI-controlled allies move too: they dodge enemy areas, spread out or stack
+up when a skill calls for it, and close in on a healing enemy so you can
+interrupt it. Each enemy shows its threat area on the floor:
 faint while harmless, colored once its skill is revealed. When the enemy's
 icon reaches the end of the bar, anyone inside its area is hit. Each enemy has its own skills and
 area shapes: cones, circles, lines and donuts.
@@ -184,7 +186,8 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Boss rush: 11 rounds, arenas with rocks and a pit, multi-enemy fights
 - [x] Classes: Knight, Archer, Mage, Cleric, each with attacks and skills
 - [x] Title screen and a guided tutorial
-- [ ] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
+- [x] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
+- [x] Play-test reports after every fight (O on the end screen opens them)
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass
 - [ ] Abilities and Items

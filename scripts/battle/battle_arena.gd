@@ -272,6 +272,8 @@ var _pan_time := 0.0
 ## is panning over to them).
 var _turn_intro_left := 0.0
 var _flash_message := ""
+## This fight's play-test report (not kept for the tutorial).
+var playtest: PlaytestLog = null
 var _flash_time_left := 0.0
 
 @onready var camera: Camera3D = $Camera3D
@@ -322,6 +324,7 @@ func _ready() -> void:
 		add_child(tutorial)
 	else:
 		_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
+		playtest = PlaytestLog.new(encounter.title, party, enemies)
 
 
 ## Builds the current round: its arena, then the party and the enemies
@@ -388,6 +391,7 @@ func add_party_member(scene: PackedScene) -> Combatant:
 
 ## N / P: jump to the next or previous round (restarts the scene).
 func _change_round(step: int) -> void:
+	_save_playtest("Left early")
 	_round_index += step
 	get_tree().reload_current_scene()
 
@@ -431,6 +435,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("menu"):
 		get_viewport().set_input_as_handled()
+		_save_playtest("Left early")
 		get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")
 		return
 	if tutorial != null and tutorial.wants_input(event):
@@ -443,6 +448,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_change_round(1 if event.is_action_pressed("next_round") else -1)
 		return
 	if _game_over:
+		if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_O \
+				and playtest != null:
+			get_viewport().set_input_as_handled()
+			DirAccess.make_dir_recursive_absolute(PlaytestLog.FOLDER)
+			OS.shell_open(ProjectSettings.globalize_path(PlaytestLog.FOLDER))
+			return
 		if event.is_action_pressed("restart"):
 			get_viewport().set_input_as_handled()
 			get_tree().reload_current_scene()  # start the battle over
@@ -510,6 +521,8 @@ func _start_turn(fighter: Combatant) -> void:
 	_flash_time_left = 0.0  # don't carry old messages into a new turn
 	timeline_bar.active = fighter
 	print("%s's turn" % fighter.display_name)
+	if playtest:
+		playtest.turn(fighter)
 	# Effects cast by this fighter count down one of their turns.
 	var ended: PackedStringArray = []
 	for c in combatants:
@@ -701,15 +714,30 @@ func _enemy_target(enemy: Combatant) -> Combatant:
 
 
 ## Ally AI, in priority order:
-##   1. Stay out of danger: leave any enemy area that could hit, never walk into one.
-##   2. Stand near the edge of its own attack range from the nearest enemy
-##      (ally_range_share of its reach): close in if too far, back off if
-##      much closer than needed, going around danger either way.
+##   1. Stack up: for a revealed shared-damage skill (Breath), gather on the
+##      party member it's aimed at, so the damage is split.
+##   2. Stay out of danger: leave any enemy area that could hit, never walk
+##      into one. A circle or line that follows this ally while hidden can't
+##      be outrun, so it's ignored until revealed; circles that punish
+##      overlaps keep allies a full circle apart (spread out).
+##   3. Stand near the edge of its own attack range from its focus enemy
+##      (ally_range_share of its reach): a healer mid-ritual first (close
+##      enough to interrupt it), then a growing circle's caster (so it gets
+##      contained), otherwise the nearest enemy.
 func _ally_step(ally: Combatant, delta: float) -> void:
-	var margin := ally.body_radius + ally_danger_margin
+	var dangers := _ally_dangers(ally)
+	var stack_at: Variant = _stack_point(ally)
+	if stack_at != null:
+		var to_stack: Vector3 = stack_at - ally.global_position
+		to_stack.y = 0.0
+		if to_stack.length() > ally.body_radius + 0.9:
+			_safe_step(ally, to_stack, delta, dangers)
+		return
+
 	var away := Vector3.ZERO
-	for area in _danger_areas():
-		if area.contains(ally.global_position, margin):
+	for danger in dangers:
+		var area: AttackRange = danger["area"]
+		if area.contains(ally.global_position, danger["margin"]):
 			var from_area := ally.global_position - area.global_position
 			from_area.y = 0.0
 			away += from_area.normalized() if from_area.length() > 0.05 else Vector3.RIGHT
@@ -718,33 +746,118 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 		_keep_in_arena(ally)
 		return
 
-	var threat := _nearest(ally, _standing(enemies))
+	var threat := _ally_focus(ally)
 	if threat == null:
 		return
 	var to_threat := threat.global_position - ally.global_position
 	var gap := ally.gap_to(threat)
 	var ideal := ally.reach() * ally_range_share
+	var ritual := threat.loaded_def
+	if ritual != null and ritual.special == EnemySkill.Special.HEAL_ALLIES:
+		ideal = minf(ideal, ritual.interrupt_range * 0.8)  # close enough that hits interrupt it
 	if gap > ideal + 0.15:
-		if _safe_step(ally, to_threat, delta):
+		if _safe_step(ally, to_threat, delta, dangers):
 			return
 	elif gap < ideal - 1.0:
-		if _safe_step(ally, -to_threat, delta):
+		if _safe_step(ally, -to_threat, delta, dangers):
 			return
 	ally.face_toward(to_threat, delta)
 
 
+## The areas an AI ally avoids right now, each with how far to keep from it:
+## [{"area": AttackRange, "margin": meters}].
+func _ally_dangers(ally: Combatant) -> Array[Dictionary]:
+	var base := ally.body_radius + ally_danger_margin
+	var list: Array[Dictionary] = []
+	for enemy in enemies:
+		if not _is_danger(enemy):
+			continue
+		var def := enemy.loaded_def
+		if enemy.skill_revealed and def.shared_damage and _stack_target(enemy) != null:
+			continue  # stacking in it is the answer, not running
+		for area in _enemy_areas(enemy):
+			var margin := base
+			if area.has_meta("follow") and not enemy.skill_revealed:
+				if area.get_meta("follow") == ally:
+					continue  # it follows this ally: moving can't escape it yet
+				if def.special == EnemySkill.Special.ON_EACH_TARGET and def.overlap != EnemySkill.Overlap.NORMAL:
+					margin += area.radius  # keep my own circle from overlapping this one
+			list.append({"area": area, "margin": margin})
+	for hazard in _hazards:
+		list.append({"area": hazard["area"], "margin": base})
+	return list
+
+
+## Where allies gather for a revealed shared-damage skill, or null.
+func _stack_point(ally: Combatant) -> Variant:
+	for enemy in enemies:
+		if enemy.is_down or enemy.loaded_def == null or not enemy.skill_revealed:
+			continue
+		if not enemy.loaded_def.shared_damage:
+			continue
+		var target := _stack_target(enemy)
+		if target != null and target != ally:
+			return target.global_position
+		if target == ally:
+			return ally.global_position  # the others come to it; it holds still
+	return null
+
+
+## Who the party should stack on for a shared-damage skill: its locked
+## target if that one is inside the area, otherwise whoever inside is
+## closest to the enemy. Null if nobody is in it (then it's just avoided).
+func _stack_target(enemy: Combatant) -> Combatant:
+	var area := enemy.attack_range
+	if area == null:
+		return null
+	var target := enemy.cast_target
+	if target != null and not target.is_down and area.contains(target.global_position, target.body_radius):
+		return target
+	var best: Combatant = null
+	for member in _standing(party):
+		if area.contains(member.global_position, member.body_radius) \
+				and (best == null or enemy.gap_to(member) < enemy.gap_to(best)):
+			best = member
+	return best
+
+
+## The enemy an ally positions itself around: a healer mid-ritual, then the
+## caster of a growing circle not yet contained, otherwise the nearest.
+func _ally_focus(ally: Combatant) -> Combatant:
+	var standing := _standing(enemies)
+	var healers: Array[Combatant] = []
+	var growers: Array[Combatant] = []
+	for enemy in standing:
+		var def := enemy.loaded_def
+		if def == null:
+			continue
+		if def.special == EnemySkill.Special.HEAL_ALLIES:
+			healers.append(enemy)
+		elif def.special == EnemySkill.Special.GROWING and not enemy.contained:
+			growers.append(enemy)
+	if not healers.is_empty():
+		return _nearest(ally, healers)
+	if not growers.is_empty():
+		return _nearest(ally, growers)
+	return _nearest(ally, standing)
+
+
 ## Takes one step toward a direction, or the closest detour (up to 90° off)
 ## that doesn't enter a dangerous area. Returns false if every option is unsafe.
-func _safe_step(fighter: Combatant, direction: Vector3, delta: float) -> bool:
+func _safe_step(fighter: Combatant, direction: Vector3, delta: float, dangers: Array[Dictionary]) -> bool:
 	direction.y = 0.0
 	if direction.length_squared() < 0.0001:
 		return false
 	direction = arena.steer(fighter.global_position, direction.normalized(), fighter.body_radius)
-	var margin := fighter.body_radius + ally_danger_margin
 	for degrees in [0.0, 35.0, -35.0, 70.0, -70.0, 90.0, -90.0]:
 		var dir := direction.rotated(Vector3.UP, deg_to_rad(degrees))
-		var next := fighter.global_position + dir * fighter.move_speed * delta
-		if not _in_danger(next, margin):
+		var next := fighter.global_position + dir * fighter.current_move_speed() * delta
+		var safe := true
+		for danger in dangers:
+			if (danger["area"] as AttackRange).contains(next, danger["margin"]):
+				safe = false
+				break
+		if safe:
 			fighter.step(dir, delta)
 			_keep_in_arena(fighter)
 			return true
@@ -757,13 +870,6 @@ func _is_danger(enemy: Combatant) -> bool:
 	if enemy.attack_range == null or enemy.is_down or enemy.loaded_def == null:
 		return false
 	return not enemy.skill_revealed or enemy.loaded_def.is_offensive()
-
-
-func _in_danger(point: Vector3, extra_radius: float) -> bool:
-	for area in _danger_areas():
-		if area.contains(point, extra_radius):
-			return true
-	return false
 
 
 ## Every area an AI ally should stay out of: enemy areas being prepared or
@@ -889,6 +995,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
+	if playtest:
+		playtest.cast(enemy, skill_name)
 	if enemy.loaded_def.special == EnemySkill.Special.HEAL_ALLIES:
 		_heal_allies(enemy)
 		_finish_enemy_skill(enemy, reset_timeline)
@@ -900,6 +1008,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 		var mods := _strike_targets(enemy)
 		if mods.is_empty():
 			_count("misses")
+			if playtest:
+				playtest.miss(enemy, skill_name)
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
 			_leave_hazards(enemy)
 			_finish_enemy_skill(enemy, reset_timeline)
@@ -1062,6 +1172,7 @@ func _update_cast_areas() -> void:
 			if not enemy.contained and enemy.cast_damage_taken >= ceili(enemy.max_hp * def.contain_share):
 				enemy.set_meta("contained_radius", _cast_radius(enemy))
 				enemy.contained = true
+				_count("contained")
 				_popup(enemy, "CONTAINED", Color(0.6, 0.9, 1.0))
 				_flash("%s's %s is contained: it stops growing" % [enemy.display_name, def.skill_name])
 				if enemy.skill_revealed:
@@ -1242,9 +1353,14 @@ func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
 			mods[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
 	if mods.is_empty():
 		_count("misses")
+		if playtest:
+			playtest.cast(enemy, next.skill_name)
+			playtest.miss(enemy, next.skill_name)
 		_flash("%s's %s misses!" % [enemy.display_name, next.skill_name])
 		_finish_enemy_skill(enemy, reset_timeline)
 	else:
+		if playtest:
+			playtest.cast(enemy, next.skill_name)
 		_begin_strike(enemy, mods, reset_timeline)
 
 
@@ -1259,7 +1375,7 @@ func _tick_hazards(world_delta: float) -> void:
 			for member in _standing(party):
 				var now := area.contains(member.global_position, member.body_radius * 0.6)
 				if now and not inside.get(member, false):
-					var taken := member.take_damage(int(hazard["touch"]), false)
+					var taken := _hurt(member, int(hazard["touch"]), false, "Rock spike")
 					_popup(member, str(taken), Color(0.85, 0.7, 0.5))
 					_flash("%s walks into a rock spike!" % member.display_name)
 					if member.is_down:
@@ -1273,7 +1389,7 @@ func _tick_hazards(world_delta: float) -> void:
 			if acc[member] >= 4.0:
 				var chunk := floori(acc[member])
 				acc[member] -= chunk
-				var taken := member.take_damage(chunk, false)
+				var taken := _hurt(member, chunk, false, "%s fire" % hazard["name"])
 				_popup(member, str(taken), Color(1.0, 0.55, 0.2))
 				if member.is_down:
 					_flash("%s burns down in the fire!" % member.display_name)
@@ -1618,6 +1734,8 @@ func _resolve_strike() -> void:
 		var can_block: bool = target.can_block and not s.def.cannot_be_blocked and not mod.get("unblockable", false)
 		if s.reaction == Reaction.PARRY and can_parry:
 			parried = true
+			if playtest:
+				playtest.parried(s.enemy, skill_name)
 			_popup(target, "PARRY!", Color(1.0, 0.85, 0.2))
 			lines.append("%s parried %s's %s!" % [target.display_name, s.enemy.display_name, skill_name])
 			continue
@@ -1628,21 +1746,26 @@ func _resolve_strike() -> void:
 				lines.append("%s's barrier absorbs it" % target.display_name)
 			else:
 				target.recoverable = 0
+				if playtest and target.hp > 1:
+					playtest.hurt(target, target.hp - 1, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 				target.hp = mini(target.hp, 1)
 				_popup(target, "1 HP!", Color(1.0, 0.3, 0.2))
 				lines.append("%s is caught in the overlap: down to 1 HP!" % target.display_name)
 		elif s.reaction == Reaction.DEFEND and can_block:
 			_count("defends")
 			var share := defend_share_vs_smash if s.skill == Skills.Kind.SMASH else defend_share_vs_attack
-			var taken := target.take_damage(ceili(damage * share), true)
+			var taken := _hurt(target, ceili(damage * share), true, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
+			if playtest:
+				playtest.defended(s.enemy, skill_name)
 			_popup(target, str(taken), Color(0.6, 0.8, 1.0))
 			var guard_note := " Guard broken!" if s.skill == Skills.Kind.SMASH else ""
 			lines.append("%s defended:%s -%d HP (recoverable)" % [target.display_name, guard_note, taken])
 		else:
-			var taken := target.take_damage(damage, false)
+			var taken := _hurt(target, damage, false, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 			_popup(target, str(taken), Color(1.0, 0.4, 0.3))
 			if s.reaction == Reaction.PARRY_MISSED and can_parry:
 				parry_missed = true
+				_count("parries_too_early")
 				_push_back(target, parry_miss_push)
 			var extra := ""
 			if float(mod.get("mult", 1.0)) > 1.0:
@@ -1694,6 +1817,31 @@ func _resolve_strike() -> void:
 	strike_finished.emit()
 
 
+## A party member loses HP, recorded for the play-test report.
+## Returns the HP actually lost (after barriers and shields).
+func _hurt(member: Combatant, amount: int, recoverable: bool, source: String,
+		enemy: Combatant = null, skill_name: String = "") -> int:
+	var was_down := member.is_down
+	var taken := member.take_damage(amount, recoverable)
+	if playtest:
+		playtest.hurt(member, taken, source, enemy, skill_name)
+		if member.is_down and not was_down:
+			playtest.down(member)
+	return taken
+
+
+## Saves the play-test report once per fight (not in the tutorial).
+func _save_playtest(result: String) -> void:
+	if playtest == null or playtest.saved:
+		return
+	if result == "Left early" and playtest.turns.is_empty():
+		playtest.saved = true  # left before anything happened: nothing to report
+		return
+	var path: String = playtest.save(result, stats, party, enemies)
+	if path != "":
+		print("Play-test report: %s" % path)
+
+
 ## Fireball-like skills (one circle on a marked target) can only be Parried
 ## when only one person is caught in them.
 func _marked_alone(s: Strike) -> bool:
@@ -1718,7 +1866,9 @@ func _absorb_note(damage: int, taken: int) -> String:
 ## Archer's Riposte: the hit is countered, the enemy hurt and pushed away.
 func _riposte(archer: Combatant, enemy: Combatant, lines: PackedStringArray) -> void:
 	var damage := ceili(archer.attack_power * 2.0)
-	enemy.take_damage(damage, false)
+	var dealt := enemy.take_damage(damage, false)
+	if playtest:
+		playtest.deal(archer, dealt)
 	_popup(archer, "RIPOSTE!", Color(1.0, 0.85, 0.2))
 	_popup(enemy, str(damage), Color.WHITE)
 	_knock_away(enemy, archer.global_position, 3.0)
@@ -1741,6 +1891,7 @@ func _check_party() -> void:
 	if _standing(party).is_empty():
 		_game_over = true  # _update_ui shows the game-over text from now on
 		_result_text = "The party has fallen..."
+		_save_playtest("Defeat")
 		print("Game over")
 		return
 	if active != null and active.team == Combatant.Team.PARTY and active.is_down:
@@ -1763,6 +1914,7 @@ func _check_enemies() -> void:
 	if _standing(enemies).is_empty():
 		_game_over = true
 		_result_text = "Tutorial complete!" if tutorial_mode else "Victory!"
+		_save_playtest("Victory")
 		print("Victory")
 
 
@@ -2210,7 +2362,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 
 	if target.stance == Skills.Kind.COUNTER:
 		# Counter beats every attack: the enemy punishes you, combo over.
-		var taken := attacker.take_damage(counter_stance_damage, false)
+		var taken := _hurt(attacker, counter_stance_damage, false, "%s: Counter stance" % target.display_name)
 		_popup(target, "COUNTER!", Skills.info(Skills.Kind.COUNTER)["color"])
 		_popup(attacker, str(taken), Color(1.0, 0.4, 0.3))
 		_flash("%s's Counter stance punishes the %s! Combo stopped" % [target.display_name, move_name])
@@ -2243,7 +2395,9 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		_cancel_enemy_skill(target)
 
 	var damage := ceili(attacker.attack_power * multiplier)
-	target.take_damage(damage, false)
+	var dealt := target.take_damage(damage, false)
+	if playtest:
+		playtest.deal(attacker, dealt)
 	var is_smash: bool = move["kind"] == Skills.Kind.SMASH
 	_popup(target, str(damage), Color(1.0, 0.7, 0.3) if is_smash else Color.WHITE)
 
@@ -2691,6 +2845,8 @@ func _update_ui(delta: float) -> void:
 			controls_label.text = "Esc: back to the menu     R: play the tutorial again"
 		else:
 			controls_label.text = ("N: next round     R: play again     Esc: menu" if won else "R: retry     N / P: next / previous round     Esc: menu")
+			if playtest != null and playtest.saved:
+				controls_label.text += "\nPlay-test report saved     O: open the reports folder"
 		return
 	var party_turn := _party_turn()
 	controls_label.visible = (active == null or party_turn) and _strike == null and _menu_mode != BattleMenu.Mode.EXECUTING

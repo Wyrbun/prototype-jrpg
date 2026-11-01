@@ -22,7 +22,7 @@ const CONTROLS := [
 	["Choosing a target", "W / S (Jump: WASD)", "Pick who or where"],
 	["Enemy strike", "E", "Parry when the ring turns gold"],
 	["Enemy strike", "Q", "Defend (costs 10 AP)"],
-	["After a fight", "R / N", "Retry / next round"],
+	["After a fight", "R / N / O", "Retry / next round / open play-test reports"],
 	["Any time", "Esc", "Back to this menu"],
 ]
 
