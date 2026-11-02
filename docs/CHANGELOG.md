@@ -3,6 +3,157 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Positional rings (after Final Fantasy XIV)
+
+- The "behind" wedge became a **ring under each enemy** while you steer the
+  Assassin (`scripts/battle/positional_ring.gd`): an arrow at its front, a
+  thin white arc round the front and sides, and a thick violet **rear arc**
+  (60° either side of its back) that glows while the Assassin stands in it.
+- **No positionals:** Goblin Fighters and Kobold Archers get a plain full
+  violet ring instead. Every hit on them counts as "from behind" from any
+  side (Backstab always lands, Shadowstep's front bonus always applies).
+  Bosses and the Ogre keep their positionals.
+- Round 6's tip and the tutorial explain the rings; the tip is now split
+  over three lines so it fits the screen.
+
+## Assassin tutorial
+
+- New tutorial lesson 11, **The Assassin**: it joins, the Golem is Taunted
+  by the Knight (so its back stays open, as Taunt does in real fights), and
+  the goals walk through hitting from behind, Shadowstep, putting 4 Marks
+  on the Golem, Execute, and an auto-parry. Free practice is now lesson 12.
+- **"Behind" wedge:** while you steer the Assassin, a faint violet wedge
+  marks every enemy's back on the floor and glows when you stand in it.
+
+## The Assassin, party picker, new Round 6
+
+- **New class: the Assassin** (170 HP, 50 AP). It can't Block or Parry, but
+  while any enemy carries an **Assassin's Mark** it auto-parries, spending
+  a Mark. Attacks: Stab, Shadowstep, Backstab, Execute (all care about
+  being behind the enemy; random timings, the opener always mid-to-late).
+  Skills: Hook, Death Sentence, Shadow Cloak, Vanish. Details in
+  `battle-design.md`. Timeline icon "As" (the Archer has "A", the Stone
+  Golem "S").
+- **New Round 6:** Assassin + Knight vs Ogre Warrior + Goblin Fighter in
+  the square arena, with a tip on how the Assassin plays. The old Rounds
+  6-10 are now 7-11; the Boss Rush has 12 fights. (An old save pointing at
+  the old Round 6 now continues from this new one.)
+- **Choose your party from Round 7** (the boss rounds): 1 to 4 of the five
+  classes, solo allowed. Retrying keeps the pick; a new round asks again.
+- Encounters can carry a start-of-fight **tip**.
+
+## Timing types: colours and shapes
+
+- Each timing type has its own look on the combo bar: **Press** = white
+  square boxes (as before); **Hold** = blue rounded pills (a ▼ press pill,
+  a blue tail that lights up while you hold, a ▲ let-go pill); **Tap** = a
+  dashed pink stretch with one diamond per tap that fills as you tap.
+- The move list shows a matching badge (blue HOLD pill, pink ◆ TAP 5) in
+  place of "(Hold)" / "(Tap 5)" in the description; the HOLD / LET GO /
+  TAP labels under the bar use the same colours.
+- Move names on the bar are drawn on top of the timing marks so they stay
+  readable.
+
+## Hold and Tap timings
+
+- **Hold and Release** (Archer: Stunning Arrow, Gale Shot): press in the
+  first box, keep holding, let go in the last box for a Perfect. A bad
+  let-go (or a late start) only loses the Perfect; the hit lands and no AP
+  is lost. Pressing far too early is still a miss.
+- **Tap X times** (Mage: Energy Blast 3, Firebolt 5, Meteor Strike 8): tap
+  the key that many times before the hit. Each tap adds damage, all of them
+  make a Perfect, and taps can never miss.
+- The Mage's tap moves got a little longer so the taps fit (Energy Blast
+  0.9 s, Firebolt 1.3 s, Meteor Strike 1.8 s), and Gale Shot 1.2 s.
+- The combo bar shows HOLD / LET GO and TAP 3/5 under the boxes, the hint
+  line explains the current move's timing, move descriptions say "(Hold)"
+  or "(Tap 5)", and the tutorial mentions both when the Archer and Mage
+  join. Reports count Perfects per type.
+
+## Telling twins apart on the timeline
+
+- Enemies that share a name ("Kobold Archer A" / "B") show their letter on
+  a small badge on their timeline icon.
+- Whoever you're aiming at (while choosing a target, building a combo or
+  playing it) gets a pulsing gold ring and an arrow on the timeline, and
+  that enemy's floating name turns gold. Anyone else the highlighted move
+  would hit gets a thin gold ring on the timeline.
+
+## Kobold bait timing
+
+- When one Kobold readies a Power Shot and its partner a Ranged Attack,
+  the Ranged Attack now waits: it lands **2.5 seconds after the Power Shot**
+  (seconds you can move in; `bait_gap_seconds` on the battle). Hide behind
+  a rock for the Power Shot, then run back in next to the Kobold.
+- Until the Power Shot is done, the waiting attack's area stays grey and
+  its label reads "RANGED ATTACK - NEXT"; then it lights up as usual.
+- Works whichever of the two picked first (the Ranged Attack is the one
+  that waits).
+
+## Kobold team tactics (Round 2)
+
+- A friend's play-test stalled on Round 2: both Kobolds kept a Counter up,
+  so the Knight spent turns waiting and did no damage.
+- **Only one Kobold uses Counter now** (the first one), and never while
+  another enemy of its pair already holds a stance.
+- **The pair baits you:** while one Kobold prepares a Power Shot, the other
+  leans toward Ranged Attack (safe only right next to it), so running in to
+  dodge it can leave you in the line of the Power Shot unless you use a
+  rock. Two Power Shots at once are rare, and Power Shots are never more
+  common than before, so the round doesn't get deadlier. The pair also fans
+  out to about 8 m apart, so one spot can't be safe from both.
+- Bot test fights (16 per version, a bot that never uses rocks): wins went
+  from 4 to 5, Counter use halved, Power Shot damage about the same.
+- Built as a general `team_tactics` flag on enemies (Combatant), so other
+  enemy pairs can use it later. Round 4's single Kobold is unchanged.
+
+## Attack area preview, Change Keys
+
+- **Attack area preview:** while you browse moves and skills, the area the
+  highlighted one would hit is drawn on the ground (a circle on the target,
+  a circle around the attacker, or a line toward the target), with a ring
+  under everyone it would hit (fainter where damage falls off). Divine
+  Barrier shows its circle and the allies it would cover. The area is
+  bright when the move can be used, dim when it can't. While building a
+  combo the command panel hides, the move list goes see-through, and the
+  camera centres between the attacker and the target so the preview isn't
+  covered.
+- **Change Keys** on the title screen: pick an action, press the new key.
+  If another action already uses that key, the two swap. Each action keeps
+  its extra keys (arrows, Enter, Backspace); Esc (pause) and O (reports
+  folder) can't be taken. **Reset all keys to default** undoes everything.
+  Keys are saved in `user://keybinds.cfg` and apply in every mode.
+- Every on-screen hint (menus, strike prompts, the Controls page, the pause
+  menu, the end-of-fight lines and the tutorial notes) now shows the keys
+  you actually set.
+
+## Boss Rush save and Continue
+
+- **Auto-save in the Boss Rush:** every fight saves as it starts, and a win
+  saves the next round; **Continue** on the title screen starts the saved
+  fight over from its beginning. Beating the last round clears the save.
+  Round Select and the tutorial don't save. (A Save button in the pause
+  menu was tried first and replaced: auto-save is less confusing and
+  survives closing the window.)
+- Play-test reports now say how the fight was started (Boss Rush, continued
+  from a save, or Round Select). The CSV is unchanged.
+
+## Tutorial pass, pause menu
+
+- **Esc pauses the fight** instead of quitting: Resume, Restart fight or
+  Quit to title. Esc or K again resumes.
+- **Tutorial brought up to date:** it now covers the camera, why Attack can
+  be greyed out, the +30 AP per turn, the combo counter and cost preview,
+  losing all AP on a missed timing or early Parry (it still said "half"),
+  rings for multi-hit attacks and one Defend covering them, bosses needing
+  three hits to interrupt, allies stacking and spreading, Concentrate on the
+  meter, Bash's weaker repeats, max AP segments and the avoidable-hit
+  warning. A reminder that **timed hits are optional**: skipping one is a
+  normal hit, a wrong press ends the combo.
+- **New lesson 10, Special skills:** UNAVOIDABLE skills (spread, stack,
+  stand alone), lingering fire and spikes, growing circles, healing
+  enemies, and the orange follow-up sphere. Free practice is now lesson 11.
+
 ## Concentrate on the AP meter, no prompt for unavoidable hits
 
 - **Concentrate shows on the AP meter:** chevrons racing along the fill, a

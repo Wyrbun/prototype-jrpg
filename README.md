@@ -17,18 +17,28 @@ enemies. The goal of this stage is a fun core loop, not visuals.
 
 ## Boss rush
 
-The game plays as an **11-fight boss rush** (`data/boss_rush.tres`), with a
+The game plays as a **12-fight boss rush** (`data/boss_rush.tres`), with a
 different party lineup and arena each round, to test how enemies and party
 members combine. The title screen also has **Round Select**, and **N / P**
 still jump between rounds during a fight.
 
+**Saving is automatic in the Boss Rush:** every fight saves as it starts (and
+a win saves the next round). **Continue** on the title screen starts the
+saved fight from the beginning; beating the last round clears the save.
+Round Select and the tutorial don't save.
+
+**From Round 7 (the boss rounds) you choose the party:** any 1 to 4 of the
+five classes, solo included. Retrying keeps your pick; the next round asks
+again.
+
 ## Tutorial
 
 **Tutorial** on the title screen is one guided fight against a Training
-Golem that teaches every mechanic in 10 lessons: moving, the timeline, combos
-and timed hits, Wait, reading enemy skills, Parry and Defend, the skill
-triangle, Abilities (the Archer, Mage and Cleric join along the way), max AP,
-and rocks. It ends with free practice. Notes pause the fight until you press
+Golem that teaches every mechanic in 12 lessons: moving and the camera, the
+timeline, combos and timed hits, Wait, reading enemy skills, Parry and Defend,
+the skill triangle, Abilities (the Archer, Mage and Cleric join along the
+way), max AP, rocks, the special skills later enemies use, and the Assassin (getting behind enemies, Shadowstep, Marks, Execute, auto-parry). It ends with
+free practice. Notes pause the fight until you press
 J; goals run until you've done them. Nobody can fall, so it can't be lost.
 
 | Round | Party | Enemies | Arena |
@@ -38,12 +48,13 @@ J; goals run until you've done them. Nobody can fall, so it can't be lost.
 | 3 | Knight, Mage | Goblin Fighter, Bandit Arcanist | long rectangle |
 | 4 | Knight, Cleric | Kobold Archer, Orc Shaman | circle around a pit |
 | 5 | Knight, Archer, Mage | Ogre Warrior, Bandit Arcanist, Orc Shaman | rectangle with 4 rocks |
-| 6 | full party | Stone Golem | large arena |
-| 7 | full party | Living Armor | large arena |
-| 8 | full party | Stone Golem, Kobold Archer, Ogre Warrior | large arena |
-| 9 | full party | Living Armor, Orc Shaman, 2 Goblin Fighters | large arena |
-| 10 | full party | Dragon Hatchling | large arena |
-| Special | full party | Stone Golem, Living Armor, Dragon Hatchling | large arena |
+| 6 | Assassin, Knight | Ogre Warrior, Goblin Fighter | square (introduces the Assassin) |
+| 7 | your pick (1-4) | Stone Golem | large arena |
+| 8 | your pick | Living Armor | large arena |
+| 9 | your pick | Stone Golem, Kobold Archer, Ogre Warrior | large arena |
+| 10 | your pick | Living Armor, Orc Shaman, 2 Goblin Fighters | large arena |
+| 11 | your pick | Dragon Hatchling | large arena |
+| Special | your pick | Stone Golem, Living Armor, Dragon Hatchling | large arena |
 
 Rocks block movement and line of sight (no attacks through them, either
 way). The pit blocks movement only.
@@ -123,11 +134,13 @@ have to lose.
 | Enemy strike | Q | Defend (costs AP) |
 | Any time | Z / C, or right-drag | Rotate the camera (movement follows it) |
 | Any time | Mouse wheel / V | Zoom / reset the camera |
-| Any time | Esc | Back to the title screen |
+| In a fight | Esc | Pause menu: Resume, Restart fight, Quit to title |
 | Any time (not in the tutorial) | N / P | Next / previous round |
 | Battle over | R | Restart the round |
 
-Keys can be changed in **Project > Project Settings > Input Map**.
+These are the default keys. **Change Keys** on the title screen sets your
+own (saved in `user://keybinds.cfg`), and every hint in the game follows
+them. Esc (pause) and O (open reports) stay fixed.
 
 ## Running it
 
@@ -138,8 +151,9 @@ Keys can be changed in **Project > Project Settings > Input Map**.
 ## Project layout
 
 ```
-scenes/ui/title_menu.tscn         the title screen (main scene): Boss Rush, Tutorial, Round Select, Controls
+scenes/ui/title_menu.tscn         the title screen (main scene): Continue, Boss Rush, Tutorial, Round Select, Controls, Change Keys
 scenes/battle/battle_arena.tscn   the battle scene; loads the current round or the tutorial
+scripts/keybinds.gd               rebindable keys: saving them and filling key names into hints
 scripts/battle/tutorial.gd        the tutorial's lessons: text, goals, how each one sets up the fight
 data/tutorial.tres                the tutorial's fight: training arena, Knight, Training Golem
 scenes/arenas/                    one scene per arena: floor shape, rocks, pit, start spots
@@ -184,7 +198,7 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Max AP that grows with skill and resets on mistakes
 - [x] Positioning between turns, Wait command (current test setup)
 - [x] Enemy template: design enemy skills in the Inspector without code
-- [x] Boss rush: 11 rounds, arenas with rocks and a pit, multi-enemy fights
+- [x] Boss rush: 12 rounds, arenas with rocks and a pit, multi-enemy fights
 - [x] Classes: Knight, Archer, Mage, Cleric, each with attacks and skills
 - [x] Title screen and a guided tutorial
 - [x] Roster building blocks: multi-hit attacks, marked targets, hazards, healing

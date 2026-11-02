@@ -16,6 +16,10 @@ threat ranges, and chained attacks.
 
 - Every fighter slides along one bar at their own `speed`.
 - Reaching the end of the bar starts that fighter's turn and freezes the timeline.
+- **Reading the bar:** twins ("Kobold Archer A" / "B") carry their letter on
+  a badge; the fighter you're aiming at (target choice, combo bar, combo
+  playing) gets a pulsing gold ring and arrow, its floating name turns gold
+  (enemies), and others the highlighted move would hit get a thin ring.
 - After acting, the fighter goes back to the start of the bar.
 - The last stretch of the bar (from 73) is the **casting zone**. An enemy
   entering it **prepares a skill**. This is the Mabinogi "visible skill
@@ -104,7 +108,7 @@ threat ranges, and chained attacks.
 ## Play-test reports (built)
 
 Every fight outside the tutorial saves a report when it ends (or when you
-leave it with N, P or Esc after at least one turn), in the game's user data
+leave it with N, P, Restart or Quit after at least one turn), in the game's user data
 folder: `%APPDATA%\Godot\app_userdata\Prototype JRPG\playtests` on
 Windows, from the editor and exported builds alike. Press **O** on the
 end-of-fight screen to open the folder.
@@ -136,13 +140,42 @@ end-of-fight screen to open the folder.
   - **Pit**: blocks movement only.
 - Enemies and allies **steer around** obstacles; an enemy without a clear
   view of its target keeps walking until it has one.
-- Rounds 6-9 use the Round 10 arena for now (no mockup yet).
+- Rounds 7-10 use the Round 11 arena for now (no mockup yet).
+- **Party picker** (`scripts/battle/party_picker.gd`): from Round 7
+  (`PICK_PARTY_FROM` = index 6) the fight opens paused behind a "Choose your
+  party" panel: tick 1 to 4 of the five classes (solo allowed), then start;
+  the scene reloads with that party (`chosen_party`, `chosen_for_round`).
+  Retrying keeps the pick, a new round asks again, Esc goes to the title.
+- An `Encounter` can have a `tip`, shown for 9 s when the fight starts
+  (Round 6 explains the Assassin).
 
 ## Title screen and tutorial (built)
 
 - The game opens on the **title screen** (`scenes/ui/title_menu.tscn`):
-  Boss Rush, Tutorial, Round Select, Controls, Quit. Keyboard (W/S, J/Enter,
-  K/Esc) or mouse. **Esc** in a fight returns here.
+  Boss Rush, Tutorial, Round Select, Controls, Change Keys, Quit. Keyboard
+  (W/S, J/Enter, K/Esc) or mouse.
+- **Change Keys** (`scripts/keybinds.gd`): every action except Esc can get a
+  new main key; its extra keys (arrows, Enter, Backspace, keypad Enter)
+  stay. Taking a key another action uses swaps the two; a key that's only
+  another action's extra moves over. O is reserved (open reports). Saved to
+  `user://keybinds.cfg` (every key of every action), applied at startup by
+  the title screen and the battle. Hint texts use tokens like `{confirm}`,
+  `{parry}` or `{move}` and go through `Keybinds.fill()`, so the Controls
+  page, menus, strike prompts, pause menu and tutorial notes always name
+  the current keys.
+- **Esc in a fight pauses** (`scripts/battle/pause_menu.gd`): the fight
+  freezes and a menu offers Resume, Restart fight and Quit to title. Esc or
+  K again resumes, so an accidental Esc never throws a fight away. After a
+  fight is over, Esc goes straight to the title screen.
+- **Auto-save (Boss Rush only):** every Boss Rush fight saves its round as
+  it starts, and a win saves the next round (`scripts/save_game.gd`,
+  `user://save.cfg`); beating the last round clears the save. **Continue**
+  appears at the top of the title screen when a save exists and starts that
+  fight from its beginning, in Boss Rush mode. Starting a new Boss Rush
+  replaces the save (the title screen says so). Round Select fights and the
+  tutorial don't save; in a Boss Rush the pause menu's Quit says progress is
+  kept. Play-test reports note the mode ("Boss Rush", "Boss Rush
+  (continued from a save)" or "Round Select").
 - The **tutorial** (`scripts/battle/tutorial.gd`) is one continuous guided
   fight: Knight vs Training Golem in a small arena with one rock
   (`data/tutorial.tres`). It's a list of steps:
@@ -157,8 +190,18 @@ end-of-fight screen to open the folder.
   Defend, 6 The skill triangle (Thrust/Smash through Defense, Wait out
   Counter, interrupt Smash), 7 Abilities (Archer joins, then Mage and
   Cleric), 8 Max AP, 9 Rocks (the Golem waits with Long Strike revealed and
-  strikes once you're hidden behind the rock), 10 Free practice (the Golem
-  fights normally and can be defeated).
+  strikes once you're hidden behind the rock), 10 Special skills (notes),
+  11 The Assassin (joins; the Golem is Taunted by the Knight so its back
+  stays open: hit it from behind, use Shadowstep, put 4 Marks on it,
+  Execute, then let the Golem's Attack be auto-parried), 12 Free practice
+  (the Golem fights normally and can be defeated).
+- **Positional rings** (`PositionalRing`, a child of each enemy so it turns
+  with it): shown while a `flanks` fighter (the Assassin) is steered. Front
+  arrow, thin white front/side arc, thick violet rear arc (±60° off the
+  back), glowing while the Assassin is in it. Enemies with
+  `no_positionals` (Goblin Fighter, Kobold Archer) get a full violet ring:
+  `is_behind()` is always true for them, and Shadowstep's front bonus
+  applies too.
 - **Can't be lost:** every fighter has `cannot_fall` (HP stops at 1), party
   HP is topped up to 60% at each step, the Golem refills before free
   practice, and AP is topped up where a lesson needs it.
@@ -271,6 +314,24 @@ placed circles/lines up to x2 when the party is bunched (they punish it);
 Healing Ritual only when an ally in range is under 75% HP (more likely the
 more are hurt); Defense/Counter x1.6 with a party member close, x0.5
 otherwise; the last skill used x0.35 per repeat in a row.
+
+**Team tactics** (`team_tactics` on an enemy, on for the Kobold Archer):
+partners are other enemies of the same scene with the flag. Only the first
+partner in the fight uses Defense/Counter (others x0.1), and none adds a
+stance while a partner holds one (x0.1). While a partner prepares an
+attack: the same Power Shot x0.25, the same Ranged Attack x0.7, and a
+different non-Smash attack x1.6 (Smash skills are never boosted, so Power
+Shots stay as common as before). The pair ends up readying Power Shot +
+Ranged Attack together. Partners closer than
+`tactics_spread` (8 m) walk away from each other between casts.
+**Bait timing:** a normal attack prepared while a partner prepares a Smash
+(Power Shot), whichever came first, gets `bait_for`: its cast slows so it
+reaches the end of the bar `bait_gap_seconds` (2.5 s of free movement,
+default) after the Smash. While the Smash is still coming it isn't revealed
+(grey area, "NAME - NEXT" label); once the Smash is done it's revealed and
+the gap counts down in world time (`bait_gap_seconds * battle_speed`). It
+never casts faster than normal, and the timeline freezes during strikes and
+party turns, so the gap is pure moving time.
 
 **Stone Golem** (960 HP, speed 20, casts at half speed), following the roster:
 
@@ -402,6 +463,22 @@ down, which can:
   J inside = **Perfect** (+50% damage, max AP +5). J outside = the chain
   ends and max AP resets. No press = a normal hit (costs 5 of the extra
   max AP).
+- **Timing types** (`timing` in `moves.gd`, applied to a move's last hit):
+  - **Press** (default): the box above.
+  - **Hold** (Archer: Stunning Arrow, Gale Shot): press in the first box
+    (ending at `hold_start` of the block), keep holding through the tail,
+    let go in the box at the hit = Perfect. Let go early, still holding at
+    the hit, or a late start = **partial**: no Perfect, no penalty, normal
+    damage. Pressing before the first box is a normal miss.
+  - **Tap** (Mage: Energy Blast 3, Firebolt 5, Meteor Strike 8): tap J
+    `taps` times between `tap_start` and the hit. All taps = Perfect; some
+    = partial with +50% x taps/needed damage (no max AP); none = a normal
+    skipped hit. Taps outside the stretch are ignored, so Tap never misses.
+  - Look: Press = white square boxes; Hold = blue (`HOLD_COLOR`) rounded
+    pills with ▼ / ▲ and a tail that lights up while held; Tap = pink
+    (`TAP_COLOR`) dashed stretch with one diamond per tap. Gold still means
+    Perfect and red a miss. The move list shows a matching HOLD / TAP n
+    badge. Reports count `perfects_hold` and `perfects_tap`.
 - **Skill triangle, per hit and per enemy hit:** a **Counter** stance
   punishes the attacker (33 damage) and stops the combo; **Defense** blocks
   basic attacks, piercing moves ignore it, breaking moves break it; an
@@ -411,6 +488,12 @@ down, which can:
 - **Attack is greyed out** unless some attack can reach an enemy *and* fits
   the party's AP and the class's bar ("not enough AP" vs "no enemy in
   reach"); Meteor Strike reaches anyone but costs 90.
+- **Attack area preview:** the highlighted move or skill draws the area it
+  would hit (target circle, self circle or line, the same shapes the hit
+  uses) and a ring under each fighter it would hit, fainter for falloff
+  damage; bright when usable, dim when not. Divine Barrier shows its circle
+  and the allies inside. In the combo bar the command panel hides, the move
+  list is see-through, and the camera centres between attacker and target.
 - **Knocked-out fighters** no longer push anyone; defeated enemies sink away
   after 2 seconds.
 
@@ -439,8 +522,8 @@ attack_power x the hit's multiplier.
 |---|---|---|---|
 | Shoot | 10 | 1.0 | basic |
 | Triple Shot | 25 | 0.6, 0.6, 0.7 | lands at 20%, 40% and 100% of the block (last one delayed) |
-| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar |
-| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away |
+| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar (Hold) |
+| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away (Hold; 1.2 s) |
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -452,10 +535,10 @@ attack_power x the hit's multiplier.
 ### Mage (100 HP, 90 AP, can Parry, cannot Block)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Energy Blast | 15 | 1.0 | everyone within 1.8 m of the target |
-| Firebolt | 30 | 1.6 | a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it |
+| Energy Blast | 15 | 1.0 | everyone within 1.8 m of the target (Tap 3; 0.9 s) |
+| Firebolt | 30 | 1.6 | a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 5; 1.3 s) |
 | Tempest | 45 | 1.2 | everyone within 3.5 m of the Mage, pushed 6 m away |
-| Meteor Strike | 90 | 1.8 | every enemy, anywhere; breaks Defense |
+| Meteor Strike | 90 | 1.8 | every enemy, anywhere; breaks Defense (Tap 8; 1.8 s) |
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -476,6 +559,31 @@ attack_power x the hit's multiplier.
 | Shielding | 40 | every ally gets a shield of 30% of their max HP |
 | Haste | 50 | an ally runs 20% faster, 3 Cleric turns |
 | Full Cure | 60 | an ally is fully healed |
+
+### Assassin (170 HP, 50 AP, cannot Block or Parry: auto-parries with Marks)
+Fast (speed 14), melee reach, timeline icon "As". **Behind** = within 60°
+of the enemy's back (a 120° cone). **Assassin's Marks** sit on enemies (up
+to 5, "MARK x3" over the enemy, violet diamonds by its timeline icon) and go
+when it falls. While any Mark is out, a strike that can be parried is
+**auto-parried** (a normal Parry: staggers, max AP up), spending one Mark
+(from the attacker if it has one, else the enemy with the most). All its
+attacks have **random timings**; the first move of a combo always lands
+between 50% and 95% of its block. When not steered it walks round behind
+its focus enemy (`flanks`).
+
+| Attack | AP | Notes |
+|---|---|---|
+| Stab | 10 | 1.0; 1.5x from behind; every 3rd Stab hit on a Marked enemy adds a Mark |
+| Shadowstep | 20 | teleports behind the target, then hits: 1.5x if it started in front; reaches any Marked enemy at any range, and moves after it on the bar count as in reach |
+| Backstab | 35 | 2x from behind and adds a Mark; misses from the front |
+| Execute | 100 | 4x from behind; -15 AP per Mark on the target (min 25: fits the 50 AP bar from 4 Marks); spends all the target's Marks |
+
+| Skill | AP | Effect |
+|---|---|---|
+| Hook | 20 | enemy within 6 m: stops what it's preparing (or its stance), pulls it 2 m closer, spends its Marks |
+| Death Sentence | 40 | enemy within 6 m: 3 Marks |
+| Shadow Cloak | 50 | any Marked enemy: its Marks become a shield of 10% max HP each (17 per Mark) |
+| Vanish | 25 | enemies stop targeting the Assassin (while anyone else stands) until it attacks or 2 of its turns pass |
 
 ### Shared rules
 - **Durations count the caster's turns**: "3 turns" runs out when the

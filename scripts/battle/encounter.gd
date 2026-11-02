@@ -8,3 +8,6 @@ extends Resource
 ## Party members, in order (the first one starts under your control).
 @export var party: Array[PackedScene] = []
 @export var enemies: Array[PackedScene] = []
+## (Optional) a tip shown for a few seconds when the fight starts, e.g. how a
+## class that joins in this round plays.
+@export_multiline var tip: String = ""

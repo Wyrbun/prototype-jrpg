@@ -36,6 +36,16 @@ enum Team { PARTY, ENEMY }
 ## Party only: the class's AP: the most it can spend in one turn (the
 ## combo bar's length, and the limit for a skill's cost).
 @export var combo_limit: float = 50.0
+## Assassin: while any enemy carries an Assassin's Mark, a strike that can be
+## parried is parried automatically, spending one Mark.
+@export var auto_parry_with_marks := false
+## The letter on the timeline icon (blank = the first letter of the name).
+@export var icon_letter := ""
+## Party AI: when not steered, walk around behind the focus enemy (Assassin).
+@export var flanks := false
+## Enemies: no positionals. Every hit counts as "from behind", from anywhere
+## (its ring is a plain full circle). Small enemies (Goblin, Kobold).
+@export var no_positionals := false
 ## Enemies only: the skills it can prepare. Add an element, choose
 ## "New EnemySkill" and fill it in. Left empty, the enemy uses a basic
 ## Attack / Smash / Defense / Counter set.
@@ -55,6 +65,13 @@ enum Team { PARTY, ENEMY }
 ## Enemies only: how close it walks to its target, in meters between body
 ## edges. Ranged enemies keep their distance with a bigger number.
 @export var preferred_gap: float = 0.3
+## Enemies only: works together with allies of the same kind (the Kobold
+## Archers). They keep apart, a second one picks a different attack from
+## what its partner is preparing (one readies Ranged Attack, the other a
+## Power Shot), and only one holds a Defense or Counter stance at a time.
+@export var team_tactics := false
+## With team_tactics: how far apart partners try to stand, in metres.
+@export var tactics_spread := 8.0
 
 var hp: int
 ## HP lost while defending. It comes back at this fighter's next turn,
@@ -116,7 +133,12 @@ var interrupt_count := 0
 var contained := false
 var last_skill: EnemySkill = null
 
+## Enemies only: Assassin's Marks on this enemy (0 to MAX_MARKS).
+var marks := 0
+const MAX_MARKS := 5
+
 var _skill_label: Label3D = null
+var _marks_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
 var _reach_ring: MeshInstance3D = null
 var _reach_material: StandardMaterial3D = null
@@ -260,6 +282,35 @@ func add_status(status_name: String, turns: int, caster: Combatant) -> void:
 	statuses[status_name] = {"turns": turns, "caster": caster}
 
 
+## Sets this enemy's Assassin's Marks (capped) and the "MARK x3" label under
+## its name. Returns how many it has now.
+func set_marks(count: int) -> int:
+	marks = clampi(count, 0, MAX_MARKS)
+	if _marks_label == null:
+		_marks_label = Label3D.new()
+		_marks_label.position = _name_label.position + Vector3(0.0, 1.05, 0.0)  # above the skill label
+		_marks_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_marks_label.no_depth_test = true
+		_marks_label.font_size = 44
+		_marks_label.outline_size = 12
+		_marks_label.modulate = Color(0.78, 0.45, 1.0)
+		add_child(_marks_label)
+	_marks_label.text = ("MARK x%d" % marks) if marks > 0 and not is_down else ""
+	return marks
+
+
+## True if a point is behind this fighter: within 60 degrees of its back
+## (a 120-degree cone). Assassin moves care about this.
+func is_behind(point: Vector3) -> bool:
+	if no_positionals:
+		return true
+	var to_point := point - global_position
+	to_point.y = 0.0
+	if to_point.length() < 0.01:
+		return false
+	return flat_forward().dot(to_point.normalized()) <= -0.5
+
+
 ## Called at the start of every turn: effects cast by that fighter count
 ## down by one, and run out at zero. Returns the names that ran out.
 func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
@@ -313,6 +364,8 @@ func recover_hp() -> int:
 func _go_down() -> void:
 	is_down = true
 	recoverable = 0
+	if marks > 0:
+		set_marks(0)  # Marks go with the enemy
 	timeline_pos = 0.0
 	# Placeholder "knocked out" look: lay the body down and grey the name.
 	var body := get_node_or_null("Body") as Node3D

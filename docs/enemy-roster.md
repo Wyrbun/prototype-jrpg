@@ -23,8 +23,8 @@ bosses got +20% HP and twice the speed, casting at half speed).
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
-| Goblin Fighter | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
-| Kobold Archer | 175 | Ranged Attack (donut 2.5-12 m: safe only right next to it), Power Shot (unavoidable on its target unless a rock blocks, aims exactly; slow cast, 58 damage; long line, can't be parried, 2 s wind-up; rocks block it), Counter | |
+| Goblin Fighter (no positionals) | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
+| Kobold Archer (no positionals) | 175 | Ranged Attack (donut 2.5-12 m: safe only right next to it), Power Shot (unavoidable on its target unless a rock blocks, aims exactly; slow cast, 58 damage; long line, can't be parried, 2 s wind-up; rocks block it), Counter. **Team tactics** when there are two: they fan out (about 8 m apart), while one prepares a Power Shot the other leans toward Ranged Attack, two Power Shots at once are rare, and only the first one uses Counter. A Ranged Attack paired with a Power Shot waits to land 2.5 s after it (grey, tagged NEXT, until the Power Shot is done) | |
 | Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit), Fireball (unavoidable, no Parry or Defend: circle on its target; hits everyone inside, so stand alone) | |
 | Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out), then Sword Spin 2 s later (donut 3.5-6 m; always hits everyone Shout pushed, others can dodge into the middle; can't be parried) | |
 | Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (unavoidable: a line to each party member, rocks block; in 2+ lines: double damage, can't be blocked) | |

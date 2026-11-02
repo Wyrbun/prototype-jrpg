@@ -20,6 +20,7 @@
 [ext_resource type="PackedScene" path="res://scenes/characters/stone_golem.tscn" id="c_stone_golem"]
 [ext_resource type="PackedScene" path="res://scenes/characters/living_armor.tscn" id="c_living_armor"]
 [ext_resource type="PackedScene" path="res://scenes/characters/dragon_hatchling.tscn" id="c_dragon_hatchling"]
+[ext_resource type="PackedScene" path="res://scenes/characters/assassin.tscn" id="c_assassin"]
 
 [sub_resource type="Resource" id="Round_1"]
 script = ExtResource("2_encounter")
@@ -56,37 +57,45 @@ arena = ExtResource("a_rock_field")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage")])
 enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_bandit_arcanist"), ExtResource("c_orc_shaman")])
 
-[sub_resource type="Resource" id="Round_6"]
+[sub_resource type="Resource" id="Round_Assassin"]
 script = ExtResource("2_encounter")
 title = "Round 6"
+arena = ExtResource("a_square")
+party = Array[PackedScene]([ExtResource("c_assassin"), ExtResource("c_knight")])
+enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_goblin_fighter")])
+tip = "The Assassin joins! Hit the Ogre from behind: the violet arc of its ring.\nThe Goblin's full ring means any side counts. Backstab from behind adds Marks.\nMarks auto-parry for the Assassin and make Execute cheaper."
+
+[sub_resource type="Resource" id="Round_6"]
+script = ExtResource("2_encounter")
+title = "Round 7"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_stone_golem")])
 
 [sub_resource type="Resource" id="Round_7"]
 script = ExtResource("2_encounter")
-title = "Round 7"
+title = "Round 8"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_living_armor")])
 
 [sub_resource type="Resource" id="Round_8"]
 script = ExtResource("2_encounter")
-title = "Round 8"
+title = "Round 9"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_kobold_archer"), ExtResource("c_ogre_warrior")])
 
 [sub_resource type="Resource" id="Round_9"]
 script = ExtResource("2_encounter")
-title = "Round 9"
+title = "Round 10"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_living_armor"), ExtResource("c_orc_shaman"), ExtResource("c_goblin_fighter"), ExtResource("c_goblin_fighter")])
 
 [sub_resource type="Resource" id="Round_10"]
 script = ExtResource("2_encounter")
-title = "Round 10"
+title = "Round 11"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_dragon_hatchling")])
@@ -100,4 +109,4 @@ enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_livin
 
 [resource]
 script = ExtResource("1_rush")
-rounds = Array[ExtResource("2_encounter")]([SubResource("Round_1"), SubResource("Round_2"), SubResource("Round_3"), SubResource("Round_4"), SubResource("Round_5"), SubResource("Round_6"), SubResource("Round_7"), SubResource("Round_8"), SubResource("Round_9"), SubResource("Round_10"), SubResource("Round_11")])
+rounds = Array[ExtResource("2_encounter")]([SubResource("Round_1"), SubResource("Round_2"), SubResource("Round_3"), SubResource("Round_4"), SubResource("Round_5"), SubResource("Round_Assassin"), SubResource("Round_6"), SubResource("Round_7"), SubResource("Round_8"), SubResource("Round_9"), SubResource("Round_10"), SubResource("Round_11")])

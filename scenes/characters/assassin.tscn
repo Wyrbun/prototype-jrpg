@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/party_member.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.42, 0.24, 0.68, 1)
+
+[node name="Assassin" instance=ExtResource("1_base")]
+display_name = "Assassin"
+class_id = "assassin"
+max_hp = 170
+combo_limit = 50.0
+can_block = false
+can_parry = false
+auto_parry_with_marks = true
+icon_letter = "As"
+flanks = true
+attack_power = 15
+attack_reach = 0.8
+speed = 14.0
+move_speed = 5.5
+
+[node name="Body" parent="."]
+surface_material_override/0 = SubResource("Mat_body")

@@ -73,6 +73,11 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## Where an enemy's prepared skill is revealed. Closer to 100 means less
 ## time to see it coming.
 @export_range(0.0, 100.0) var reveal_at: float = 88.0
+## Paired enemies (team_tactics): when one readies a Power Shot (a Smash)
+## and its partner a normal attack, the normal attack lands this many seconds
+## after the Power Shot, so there's time to hide behind a rock and then run
+## back in. Counted in real seconds of free movement.
+@export var bait_gap_seconds: float = 2.5
 
 @export_group("AP")
 ## The most AP the party can hold at the start of the fight. Parries and
@@ -195,6 +200,17 @@ class Strike:
 static var _round_index := -1
 ## True when the title screen started the tutorial instead of a round.
 static var tutorial_mode := false
+## True in a Boss Rush (from the title screen's Boss Rush or Continue), where
+## fights can be saved; false for Round Select and the tutorial.
+static var boss_rush_mode := false
+## True when this Boss Rush was resumed with Continue (for the reports).
+static var continued := false
+## Boss rounds (from Round 7, index PICK_PARTY_FROM) let the player choose
+## the party: the chosen class scenes, and the round they were chosen for.
+## Retrying the same round keeps the pick; a new round asks again.
+const PICK_PARTY_FROM := 6
+static var chosen_party: Array[String] = []
+static var chosen_for_round := -1
 
 ## The tutorial's fight (data/tutorial.tres).
 @export var tutorial_encounter: Encounter
@@ -255,13 +271,19 @@ var _combo_target: Combatant = null
 var _ap_before_combo := 0.0
 
 # Combo playback (runs in _process while the menu is EXECUTING).
-enum Timing { NONE, PERFECT, MISS }
+## PARTIAL: the player went for a Hold or Tap timing but didn't nail it
+## (early/late release, too few taps): no Perfect, but no penalty either.
+enum Timing { NONE, PERFECT, MISS, PARTIAL }
 var _exec_attacker: Combatant = null
 var _exec_slot := 0
 var _exec_time := 0.0
 var _exec_hits_done := 0
 ## Timing result for each hit of the current move.
 var _exec_timings: Array[int] = []
+## Hold timings: holding Confirm after a good press in the first box.
+var _exec_holding := false
+## Tap timings: taps counted so far for the current slot's last hit.
+var _exec_taps := 0
 ## Counts down after the last move before the turn ends.
 var _exec_outro := -1.0
 ## Counts down the lead-in before the first move starts.
@@ -307,6 +329,22 @@ var _flash_time_left := 0.0
 var ap_meter: APMeter = null
 ## Hit count and damage total on the right while a combo plays.
 var combo_counter: ComboCounter = null
+## Esc during a fight: Resume / Restart fight / Quit to title.
+var pause_menu: PauseMenu = null
+## While choosing moves for a combo: the highlighted move's area on the
+## floor, and a ring under every enemy it would hit.
+var _preview_area: AttackRange = null
+var _preview_barrier: AttackRange = null
+var _preview_marks: Array[MeshInstance3D] = []
+## Who the previewed move would hit (also marked on the timeline).
+var _preview_hits: Array[Combatant] = []
+## The enemy whose floating name is lit up as the target.
+var _named_target: Combatant = null
+## While the Assassin is steered: each enemy's positional ring (enemy ->
+## PositionalRing): front arrow, violet rear arc, or a full ring for enemies
+## without positionals.
+var _behind_cones := {}
+var _preview_key := ""
 @onready var controls_label: Label = $UI/ControlsLabel
 @onready var party_status: PartyStatus = $UI/PartyStatus
 @onready var enemy_status: PartyStatus = $UI/EnemyStatus
@@ -314,6 +352,7 @@ var combo_counter: ComboCounter = null
 
 
 func _ready() -> void:
+	Keybinds.apply_saved()  # the player's own keys (Change Keys on the title screen)
 	_load_round()
 	combatants.append_array(party)
 	combatants.append_array(enemies)
@@ -346,6 +385,17 @@ func _ready() -> void:
 	ap_bar.visible = false
 	combo_counter = ComboCounter.new()
 	$UI.add_child(combo_counter)
+	pause_menu = PauseMenu.new()
+	$UI.add_child(pause_menu)
+	pause_menu.restart_requested.connect(func():
+		_save_playtest("Left early")
+		get_tree().reload_current_scene())
+	pause_menu.progress_saved = boss_rush_mode
+	if boss_rush_mode:
+		SaveGame.save_round(_round_index)  # auto-save: Continue starts this fight over
+	pause_menu.quit_requested.connect(func():
+		_save_playtest("Left early")
+		get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn"))
 	# The camera keeps its angle from the scene and backs away along its
 	# own view direction (+Z is "behind" a camera in Godot).
 	_cam_pitch = -camera.global_rotation_degrees.x
@@ -354,6 +404,20 @@ func _ready() -> void:
 	_cam_distance = camera_distance
 	_cam_focus = _camera_focus()
 	_place_camera()
+	if _picks_party() and chosen_for_round != _round_index:
+		# A new boss round: choose the party first (the fight waits, paused).
+		var picker := PartyPicker.new()
+		$UI.add_child(picker)
+		var ticked: Array = chosen_party.duplicate() if not chosen_party.is_empty() \
+				else encounter.party.map(func(scene): return scene.resource_path)
+		picker.open(encounter.title, ticked)
+		picker.chosen.connect(func(paths: Array[String]):
+			chosen_party = paths
+			chosen_for_round = _round_index
+			get_tree().reload_current_scene())
+		picker.back_requested.connect(func():
+			get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn"))
+		return
 	print("%s! Party: %s  vs  Enemies: %s" % [encounter.title, _names(party), _names(enemies)])
 	if tutorial_mode:
 		for c in combatants:
@@ -363,7 +427,13 @@ func _ready() -> void:
 		add_child(tutorial)
 	else:
 		_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
+		if encounter.tip != "":
+			_flash(encounter.tip, 9.0)
 		playtest = PlaytestLog.new(encounter.title, party, enemies)
+		if boss_rush_mode:
+			playtest.mode = "Boss Rush (continued from a save)" if continued else "Boss Rush"
+		else:
+			playtest.mode = "Round Select"
 
 
 ## Builds the current round: its arena, then the party and the enemies
@@ -376,7 +446,12 @@ func _load_round() -> void:
 	encounter = tutorial_encounter if tutorial_mode else boss_rush.rounds[_round_index]
 	arena = encounter.arena.instantiate() as Arena
 	add_child(arena)
-	party = _spawn(encounter.party, $Party, false)
+	var party_scenes: Array[PackedScene] = encounter.party
+	if _picks_party() and chosen_for_round == _round_index and not chosen_party.is_empty():
+		party_scenes = []
+		for path in chosen_party:
+			party_scenes.append(load(path))
+	party = _spawn(party_scenes, $Party, false)
 	enemies = _spawn(encounter.enemies, $Enemies, true)
 
 
@@ -401,10 +476,18 @@ func _spawn(scenes: Array[PackedScene], holder: Node3D, enemy_side: bool) -> Arr
 	return spawned
 
 
+## True for rounds where the player chooses the party (boss rounds).
+func _picks_party() -> bool:
+	return not tutorial_mode and _round_index >= PICK_PARTY_FROM
+
+
 ## Starts a round (0-based) or the tutorial. Used by the title screen.
-static func start(tree: SceneTree, round_index: int, tutorial: bool) -> void:
+static func start(tree: SceneTree, round_index: int, tutorial: bool, boss_rush: bool = false,
+		from_save: bool = false) -> void:
 	_round_index = round_index
 	tutorial_mode = tutorial
+	boss_rush_mode = boss_rush and not tutorial
+	continued = from_save and boss_rush_mode
 	tree.change_scene_to_file("res://scenes/battle/battle_arena.tscn")
 
 
@@ -431,6 +514,7 @@ func add_party_member(scene: PackedScene) -> Combatant:
 ## N / P: jump to the next or previous round (restarts the scene).
 func _change_round(step: int) -> void:
 	_save_playtest("Left early")
+	continued = false  # later rounds are plain Boss Rush again
 	_round_index += step
 	get_tree().reload_current_scene()
 
@@ -460,6 +544,9 @@ func _process(delta: float) -> void:
 			_update_target_marker(delta)
 		# On a party turn the fighter is locked in place until a command is chosen.
 	_update_cast_areas()
+	_update_move_preview()
+	_update_timeline_targets()
+	_update_behind_cones()
 	_animate_telegraphs(delta)
 	# Checked again: the strike above may have just knocked out the last fighter.
 	if not _game_over:
@@ -474,8 +561,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("menu"):
 		get_viewport().set_input_as_handled()
-		_save_playtest("Left early")
-		get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")
+		if _game_over:
+			get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")  # the fight is over anyway
+		else:
+			pause_menu.open()  # nothing is lost by accident: quitting is a menu choice
 		return
 	if tutorial != null and tutorial.wants_input(event):
 		get_viewport().set_input_as_handled()
@@ -530,7 +619,8 @@ func _advance_timeline(seconds: float) -> void:
 		if c.team == Combatant.Team.ENEMY:
 			if before < cast_zone_start and c.timeline_pos >= cast_zone_start:
 				_begin_cast(c)
-			if c.loaded_skill != Skills.NONE and not c.skill_revealed and c.timeline_pos >= reveal_at:
+			_tick_bait(c, seconds)
+			if c.loaded_skill != Skills.NONE and not c.skill_revealed and c.timeline_pos >= reveal_at and not _bait_waiting(c):
 				_reveal_skill(c)
 			if c.hold_at >= 0.0 and c.timeline_pos >= c.hold_at:
 				c.hold = true  # the tutorial keeps it here, skill revealed, without striking
@@ -740,6 +830,11 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 	var wants_closer := to_target.length() > stop_distance or not _can_see(enemy, target)
 	# Walk around rocks and pits on the way.
 	var heading := arena.steer(enemy.global_position, to_target, enemy.body_radius) if wants_closer else to_target
+	# Partners (team_tactics) fan out so the party can't stand safe from both.
+	var spread := _tactics_spread(enemy)
+	if spread != Vector3.ZERO:
+		heading = (heading.normalized() * (1.0 if wants_closer else 0.0) + spread * 1.5)
+		wants_closer = true
 	enemy.face_toward(heading, delta)
 	var facing_target := enemy.flat_forward().angle_to(heading) < deg_to_rad(45.0)
 	if wants_closer and facing_target:
@@ -750,6 +845,9 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 ## Slow casts (Shadowflare, Breath) and fast bosses (cast_zone_speed) move
 ## through the casting zone at a share of the enemy's speed.
 func _cast_speed(fighter: Combatant) -> float:
+	var bait := _bait_speed(fighter)
+	if bait >= 0.0:
+		return bait
 	if fighter.loaded_def != null and fighter.loaded_skill != Skills.NONE and fighter.timeline_pos >= cast_zone_start:
 		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed
 	return 1.0
@@ -767,7 +865,9 @@ func _enemy_target(enemy: Combatant) -> Combatant:
 		var taunter: Combatant = enemy.statuses["taunt"]["caster"]
 		if taunter != null and not taunter.is_down:
 			return taunter
-	return _nearest(enemy, _standing(party))
+	# Vanish: enemies lose track of a hidden Assassin while anyone else stands.
+	var seen := _standing(party).filter(func(m): return not m.statuses.has("vanish"))
+	return _nearest(enemy, seen if not seen.is_empty() else _standing(party))
 
 
 ## Ally AI, in priority order:
@@ -811,6 +911,22 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 	if threat == null:
 		return
 	var to_threat := threat.global_position - ally.global_position
+	if ally.flanks and not threat.no_positionals:
+		# Assassin: circle round to the enemy's back, within striking reach.
+		var spot := threat.global_position - threat.flat_forward() * (threat.body_radius + ally.body_radius + ally.reach() * 0.6)
+		var to_spot := spot - ally.global_position
+		to_spot.y = 0.0
+		if to_spot.length() > 0.35:
+			if to_spot.length() > 1.5 and not threat.is_behind(ally.global_position):
+				# Go round the side rather than straight through the front.
+				var side := to_threat.cross(Vector3.UP).normalized()
+				if side.dot(to_spot) < 0.0:
+					side = -side
+				to_spot = to_spot.normalized() + side * 0.8
+			if _safe_step(ally, to_spot, delta, dangers):
+				return
+		ally.face_toward(to_threat, delta)
+		return
 	var gap := ally.gap_to(threat)
 	var ideal := ally.reach() * ally_range_share
 	var ritual := threat.loaded_def
@@ -1027,6 +1143,7 @@ func _begin_cast(enemy: Combatant) -> void:
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
 	# Its area shows up right away, in grey: where it will land, not what it is.
 	_build_cast_areas(enemy)
+	_link_bait(enemy)
 	print("%s is preparing %s (hidden)" % [enemy.display_name, enemy.loaded_def.skill_name])
 
 
@@ -1115,6 +1232,8 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.stance = Skills.NONE
 	enemy.stance_time_left = 0.0
 	enemy.loaded_def = null
+	enemy.remove_meta("bait_for")
+	enemy.remove_meta("bait_left")
 	if reset_timeline:
 		_send_to_start(enemy)
 
@@ -1642,7 +1761,8 @@ func _animate_telegraphs(delta: float) -> void:
 ## situation adjusts it: skills that can't reach anyone are unlikely, area
 ## skills placed on the party like a bunched-up party, healing needs hurt
 ## allies, Defense / Counter like someone standing close, and the skill used
-## last time is less likely, so enemies mix their kit up.
+## last time is less likely, so enemies mix their kit up. Partners with
+## team_tactics pick something different from each other (see below).
 func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 	if enemy.forced_skill != null:
 		return enemy.forced_skill
@@ -1689,6 +1809,7 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 						score *= 0.05  # can't reach anyone: almost never worth preparing
 					elif not skill.shared_damage:
 						score *= 1.0 + 0.25 * maxi(reached - 1, 0)
+		score *= _tactics_factor(enemy, skill)
 		if skill == enemy.last_skill:
 			# Repeats get less likely the longer the streak runs.
 			score *= pow(0.35, enemy.get_meta("repeat_streak", 1))
@@ -1702,6 +1823,148 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 		if roll <= 0.0:
 			return pool[i]
 	return pool[pool.size() - 1]
+
+
+## Partners: other standing enemies of the same kind with team_tactics.
+func _tactics_partners(enemy: Combatant) -> Array[Combatant]:
+	var partners: Array[Combatant] = []
+	if not enemy.team_tactics:
+		return partners
+	for ally in _standing(enemies):
+		if ally != enemy and ally.team_tactics and ally.scene_file_path == enemy.scene_file_path:
+			partners.append(ally)
+	return partners
+
+
+## team_tactics skill choice. Only the first partner in the fight uses
+## Defense / Counter (the others almost never do), and never while another
+## partner already holds a stance. While a partner prepares a Power Shot, the
+## others favour Ranged Attack (safe only right next to the Kobold), so
+## running in to dodge it can leave you in the open for the Power Shot unless
+## you use a rock. A second Power Shot at the same time is unlikely, and the
+## same Ranged Attack a little less likely, so they mix their threats.
+func _tactics_factor(enemy: Combatant, skill: EnemySkill) -> float:
+	var factor := 1.0
+	var stance_skill := skill.kind == Skills.Kind.DEFENSE or skill.kind == Skills.Kind.COUNTER
+	var partners := _tactics_partners(enemy)
+	if stance_skill and not partners.is_empty() and enemies.find(partners[0]) < enemies.find(enemy):
+		factor *= 0.1  # only the first of the partners uses stances
+	for partner in partners:
+		if partner.stance != Skills.NONE:
+			if stance_skill:
+				factor *= 0.1
+			continue
+		if partner.loaded_def == null or partner.loaded_skill == Skills.NONE:
+			continue
+		if partner.loaded_def == skill or partner.loaded_def.skill_name == skill.skill_name:
+			# Two Power Shots at once would be brutal; two Ranged Attacks are fine.
+			factor *= 0.25 if skill.kind == Skills.Kind.SMASH else 0.7
+		elif not stance_skill and skill.kind != Skills.Kind.SMASH:
+			factor *= 1.6  # partner has a Power Shot coming: add the other threat
+	# Power Shots never become more common than usual (Round 2 should stay
+	# approachable); the pairing comes from the others leaning away from them.
+	return factor
+
+
+## team_tactics timing: a normal attack prepared alongside a partner's Power
+## Shot (either one may have been picked first) waits for it. While the Power
+## Shot is still coming, the attack stays grey with a "NEXT" tag and its cast
+## slows so it lands bait_gap_seconds after the Power Shot; once the Power
+## Shot is done, it's revealed and the gap counts down.
+func _link_bait(enemy: Combatant) -> void:
+	if not enemy.team_tactics or enemy.loaded_def == null:
+		return
+	for partner in _tactics_partners(enemy):
+		if not _still_casting(partner):
+			continue
+		if _is_bait_skill(enemy.loaded_def) and partner.loaded_def.kind == Skills.Kind.SMASH:
+			_make_bait(enemy, partner)
+			return
+		if enemy.loaded_def.kind == Skills.Kind.SMASH and _is_bait_skill(partner.loaded_def) \
+				and not partner.has_meta("bait_for"):
+			_make_bait(partner, enemy)
+			return
+
+
+func _is_bait_skill(def: EnemySkill) -> bool:
+	return def != null and def.kind == Skills.Kind.ATTACK and not def.is_mechanic()
+
+
+func _make_bait(waiter: Combatant, shooter: Combatant) -> void:
+	waiter.set_meta("bait_for", shooter)
+	if waiter.has_meta("bait_left"):
+		waiter.remove_meta("bait_left")
+	var text := waiter.loaded_def.skill_name.to_upper() + "  -  NEXT"
+	waiter.show_skill_text(text, Color(0.75, 0.75, 0.8) if not waiter.skill_revealed else waiter.loaded_def.color())
+
+
+## Preparing a skill and not yet striking with it.
+func _still_casting(enemy) -> bool:
+	if not is_instance_valid(enemy) or enemy.is_down or enemy.loaded_def == null or enemy.loaded_skill == Skills.NONE:
+		return false
+	return not (_strike != null and _strike.enemy == enemy)
+
+
+## True while a bait's partner still has its Power Shot coming.
+func _bait_waiting(enemy: Combatant) -> bool:
+	return enemy.has_meta("bait_for") and not enemy.has_meta("bait_left")
+
+
+## Moves a bait from "waiting for the Power Shot" to "counting down the gap",
+## and drops the link once the gap is over.
+func _tick_bait(enemy: Combatant, seconds: float) -> void:
+	if not enemy.has_meta("bait_for"):
+		return
+	if enemy.loaded_def == null or enemy.loaded_skill == Skills.NONE:
+		enemy.remove_meta("bait_for")
+		enemy.remove_meta("bait_left")
+		return
+	if not enemy.has_meta("bait_left"):
+		if _still_casting(enemy.get_meta("bait_for")):
+			return
+		# The Power Shot is done (or was stopped): now the gap.
+		enemy.set_meta("bait_left", bait_gap_seconds * battle_speed)
+		if enemy.timeline_pos >= reveal_at and not enemy.skill_revealed:
+			_reveal_skill(enemy)
+		elif enemy.skill_revealed:
+			enemy.show_skill_text(enemy.loaded_def.skill_name.to_upper(), enemy.loaded_def.color())
+		return
+	enemy.set_meta("bait_left", float(enemy.get_meta("bait_left")) - seconds)
+
+
+## Cast speed for a bait so it reaches the end of the bar on schedule (never
+## faster than it would normally go). -1 when the enemy isn't a bait.
+func _bait_speed(enemy: Combatant) -> float:
+	if not enemy.has_meta("bait_for") or enemy.loaded_def == null:
+		return -1.0
+	var normal := 1.0
+	if enemy.timeline_pos >= cast_zone_start:
+		normal = enemy.loaded_def.cast_speed * enemy.cast_zone_speed
+	var left: float  # world seconds until it should reach the end
+	if enemy.has_meta("bait_left"):
+		left = float(enemy.get_meta("bait_left"))
+	else:
+		var shooter = enemy.get_meta("bait_for")
+		if not _still_casting(shooter):
+			return normal
+		var shooter_rate: float = shooter.speed * time_scale * _cast_speed(shooter)
+		left = maxf(TIMELINE_LENGTH - shooter.timeline_pos, 0.0) / maxf(shooter_rate, 0.001) + bait_gap_seconds * battle_speed
+	var units := maxf(TIMELINE_LENGTH - enemy.timeline_pos, 0.0)
+	var needed := units / maxf(left, 0.05) / maxf(enemy.speed * time_scale, 0.001)
+	return clampf(needed, 0.02, normal)
+
+
+## team_tactics movement: a push away from partners closer than
+## tactics_spread (zero when none are that close).
+func _tactics_spread(enemy: Combatant) -> Vector3:
+	var push := Vector3.ZERO
+	for partner in _tactics_partners(enemy):
+		var away := enemy.global_position - partner.global_position
+		away.y = 0.0
+		var d := away.length()
+		if d < enemy.tactics_spread:
+			push += (away / maxf(d, 0.01)) * (1.0 - d / enemy.tactics_spread)
+	return push
 
 
 ## Roughly whether a skill aimed at this member could reach them (the enemy
@@ -1883,6 +2146,16 @@ func _resolve_strike() -> void:
 		var one_hp: bool = mod.get("one_hp", false)
 		if target.riposte_left > 0.0 and s.def.parryable():
 			_riposte(target, s.enemy, lines)
+			continue
+		if target.auto_parry_with_marks and s.def.parryable() and _marks_out() > 0:
+			# Assassin: a Mark is spent and the strike is parried for it.
+			_spend_mark(s.enemy)
+			parried = true
+			_count("auto_parries")
+			if playtest:
+				playtest.parried(s.enemy, skill_name)
+			_popup(target, "AUTO-PARRY!", Color(0.78, 0.45, 1.0))
+			lines.append("%s auto-parries %s's %s (a Mark is spent)" % [target.display_name, s.enemy.display_name, skill_name])
 			continue
 		var can_parry := target.can_parry and s.def.parryable()
 		var can_block: bool = target.can_block and s.def.blockable() and not mod.get("unblockable", false)
@@ -2129,6 +2402,13 @@ func _check_enemies() -> void:
 		_game_over = true
 		_result_text = "Tutorial complete!" if tutorial_mode else "Victory!"
 		_save_playtest("Victory")
+		if boss_rush_mode:
+			# Won: Continue picks up at the next round; after the last one the
+			# Boss Rush is done and the save is cleared.
+			if _round_index + 1 < boss_rush.rounds.size():
+				SaveGame.save_round(_round_index + 1)
+			else:
+				SaveGame.clear()
 		print("Victory")
 
 
@@ -2161,6 +2441,9 @@ func _menu_input(event: InputEvent) -> void:
 		if event.is_action_pressed("confirm"):
 			get_viewport().set_input_as_handled()
 			_judge_timing()
+		elif event.is_action_released("confirm"):
+			get_viewport().set_input_as_handled()
+			_judge_release()
 		return
 	var up := event.is_action_pressed("move_forward")
 	var down := event.is_action_pressed("move_back")
@@ -2223,9 +2506,10 @@ func _menu_input(event: InputEvent) -> void:
 				else:
 					_plan.pop_back()
 					battle_menu.combo.pop_back()
+					_refresh_combo_reach()
 			elif begin:
 				if _plan.is_empty():
-					_flash("Add at least one move first (J)")
+					_flash(Keybinds.fill("Add at least one move first ({confirm})"))
 				else:
 					_execute_combo()
 
@@ -2264,7 +2548,7 @@ func _choose_attack_target() -> void:
 	_target_choices = choices
 	_target_index = 0
 	_choosing_attack_target = true
-	_begin_targeting({"name": "Attack", "target": Moves.Target.ENEMY, "range": 0.0}, "Attack: choose an enemy (W / S)")
+	_begin_targeting({"name": "Attack", "target": Moves.Target.ENEMY, "range": 0.0}, Keybinds.fill("Attack: choose an enemy ({up} / {down})"))
 
 
 func _open_combo_bar(target: Combatant = null) -> void:
@@ -2274,6 +2558,12 @@ func _open_combo_bar(target: Combatant = null) -> void:
 	var usable: Array[bool] = []
 	var notes: PackedStringArray = []
 	for move in _moves:
+		if int(move.get("mark_discount", 0)) > 0:
+			# Execute: cheaper for every Mark on the target.
+			var full := int(move["cost"])
+			move["cost"] = maxi(int(move["min_cost"]), full - int(move["mark_discount"]) * _combo_target.marks)
+			if _combo_target.marks > 0:
+				move["desc"] = "4x from behind; %d Marks: %d AP (not %d)" % [_combo_target.marks, move["cost"], full]
 		if doubled:
 			move["cost"] = int(move["cost"]) * 2
 		var reaches := _can_target(controlled, _combo_target, move)
@@ -2309,6 +2599,20 @@ func _add_to_combo(index: int) -> void:
 	else:
 		_plan.append(entry)
 		battle_menu.combo.append(index)
+		_refresh_combo_reach()
+
+
+## After a Shadowstep on the bar, everything after it reaches the target
+## (the Assassin will be standing right behind it).
+func _refresh_combo_reach() -> void:
+	var stepped := false
+	for entry in _plan:
+		if entry["move"].get("teleport_behind", false):
+			stepped = true
+	for i in _moves.size():
+		var reaches := stepped or _can_target(controlled, _combo_target, _moves[i])
+		battle_menu.move_usable[i] = reaches
+		battle_menu.move_notes[i] = "" if reaches else "%s is out of its reach" % _combo_target.display_name
 
 
 ## What one combo slot will do: its hits, where each lands (as a fraction of
@@ -2346,6 +2650,12 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 			var before: float = times[-2] if times.size() > 1 else 0.0
 			hits.insert(hits.size() - 1, hits[0])
 			times.insert(times.size() - 1, (before + last) / 2.0)
+	if move.get("random_timing", false) and hits.size() == 1:
+		# Assassin: the hit comes at a random moment. The first move of a
+		# combo always lands in the middle or late part, so the opener is
+		# never a surprise.
+		var earliest := maxf(float(move["window"]) / duration + 0.05, 0.25)
+		times = [randf_range(0.5 if _plan.is_empty() else earliest, 0.95)]
 	if times.is_empty():
 		for i in hits.size():
 			times.append(float(i + 1) / hits.size())
@@ -2353,6 +2663,9 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 		"move": move, "name": move["name"], "color": move["color"], "cost": move["cost"],
 		"hits": hits, "times": times, "duration": duration,
 		"window": float(move["window"]) / duration,
+		"timing": int(move.get("timing", Moves.TimingType.PRESS)),
+		"hold_start": float(move.get("hold_start", 0.35)),
+		"taps": int(move.get("taps", 0)), "tap_start": float(move.get("tap_start", 0.12)),
 	}
 
 
@@ -2365,6 +2678,9 @@ func _execute_combo() -> void:
 	if combo_counter:
 		combo_counter.begin(controlled.display_name)
 	_exec_attacker.statuses.erase("arcane_cost")  # Arcane Barrier's cost lasts until the next attack
+	if _exec_attacker.statuses.has("vanish"):
+		_exec_attacker.statuses.erase("vanish")  # attacking gives a hidden Assassin away
+		_popup(_exec_attacker, "REVEALED", Color(0.7, 0.7, 0.8))
 	_count("combos")
 	_count("combos_" + _exec_attacker.class_id)
 	_exec_attacker.face_toward(_combo_target.global_position - _exec_attacker.global_position, 1.0, 100000.0)
@@ -2388,6 +2704,10 @@ func _start_combo_slot(slot: int) -> void:
 	_exec_timings.clear()
 	_exec_timings.resize((_plan[slot]["hits"] as Array).size())
 	_exec_timings.fill(Timing.NONE)
+	_exec_holding = false
+	_exec_taps = 0
+	battle_menu.exec_holding = false
+	battle_menu.exec_taps = 0
 	battle_menu.executing_slot = slot
 	battle_menu.slot_progress = 0.0
 
@@ -2418,6 +2738,7 @@ func _update_combo(delta: float) -> void:
 
 	while _exec_hits_done < hits.size() and _exec_time >= duration * float(times[_exec_hits_done]):
 		var multiplier: float = hits[_exec_hits_done]
+		multiplier *= 1.0 + _settle_special_timing(entry, _exec_hits_done)
 		var perfect := _exec_timings[_exec_hits_done] == Timing.PERFECT
 		if _exec_timings[_exec_hits_done] == Timing.NONE:
 			_shrink_max_ap(skipped_hit_max_ap_loss, _exec_attacker)  # opted out of the timing
@@ -2431,6 +2752,10 @@ func _update_combo(delta: float) -> void:
 		if perfect:
 			_popup(_exec_attacker, "PERFECT!", Color(1.0, 0.85, 0.2))
 			_count("perfects")
+			var kind_name: String = {Moves.TimingType.HOLD: "perfects_hold", Moves.TimingType.TAP: "perfects_tap"}.get(
+					entry["timing"] if _special_hit(entry, _exec_hits_done - 1) else -1, "")
+			if kind_name != "":
+				_count(kind_name)
 			_flash(_grow_max_ap(perfect_max_ap_gain, _exec_attacker))
 		if not keep_going or _game_over:
 			_stop_combo()
@@ -2446,8 +2771,78 @@ func _update_combo(delta: float) -> void:
 				combo_counter.finish()
 
 
+## The hint under the bar while a combo plays, for the current move's timing.
+func _timing_prompt() -> String:
+	if _exec_slot < _plan.size() and _exec_lead_in <= 0.0:
+		var entry := _plan[_exec_slot]
+		if _special_hit(entry, _exec_hits_done):
+			if int(entry["timing"]) == Moves.TimingType.HOLD:
+				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
+			return Keybinds.fill("TAP {confirm} %d times before the hit: Perfect!  (taps can't miss)" % int(entry["taps"]))
+	return Keybinds.fill("{confirm} when the playhead hits the box: Perfect!  (a wrong press ends the chain)")
+
+
+## True for the hit that uses the move's Hold or Tap timing (its last hit;
+## any earlier hits, like Agility's extra one, are normal presses).
+func _special_hit(entry: Dictionary, hit: int) -> bool:
+	return int(entry["timing"]) != Moves.TimingType.PRESS and hit == (entry["hits"] as Array).size() - 1
+
+
+## Called as a Hold / Tap hit lands: settles its result and returns its
+## extra damage share (on top of the Perfect bonus, used for partial taps).
+func _settle_special_timing(entry: Dictionary, hit: int) -> float:
+	if not _special_hit(entry, hit):
+		return 0.0
+	match int(entry["timing"]):
+		Moves.TimingType.HOLD:
+			if _exec_holding:
+				# Still holding when the arrow flies: let go too late.
+				_exec_holding = false
+				battle_menu.exec_holding = false
+				_mark_timing(hit, Timing.PARTIAL)
+				_popup(_exec_attacker, "LATE", Color(0.85, 0.8, 0.6))
+		Moves.TimingType.TAP:
+			var needed: int = maxi(int(entry["taps"]), 1)
+			if _exec_taps >= needed:
+				_mark_timing(hit, Timing.PERFECT)
+			elif _exec_taps > 0:
+				_mark_timing(hit, Timing.PARTIAL)
+				_popup(_exec_attacker, "%d / %d" % [_exec_taps, needed], Color(0.85, 0.8, 0.6))
+				return perfect_damage_bonus * float(_exec_taps) / needed
+	return 0.0
+
+
+func _mark_timing(hit: int, result: int) -> void:
+	_exec_timings[hit] = result
+	battle_menu.slot_results[_exec_slot][hit] = result
+
+
+## Confirm let go during the combo: ends a Hold. Inside the release box =
+## Perfect; too early = no Perfect (the hit still lands, nothing lost).
+func _judge_release() -> void:
+	if not _exec_holding or _exec_outro >= 0.0:
+		return
+	_exec_holding = false
+	battle_menu.exec_holding = false
+	var entry := _plan[_exec_slot]
+	var hit := _exec_hits_done
+	if not _special_hit(entry, hit):
+		return
+	var duration: float = entry["duration"]
+	var window: float = float(entry["window"]) * duration
+	var hit_time := duration * float(entry["times"][hit])
+	if _exec_time >= hit_time - window:
+		_mark_timing(hit, Timing.PERFECT)
+	else:
+		_mark_timing(hit, Timing.PARTIAL)
+		_popup(_exec_attacker, "EARLY", Color(0.85, 0.8, 0.6))
+
+
 ## J during the combo: inside the next hit's timing box = Perfect;
 ## anywhere else = miss, and the chain ends right there. One try per hit.
+## Hold hits: the press goes in the first box, then _judge_release judges
+## the let-go. Tap hits: every press inside the tap stretch counts, and
+## presses outside it are simply ignored.
 func _judge_timing() -> void:
 	if _exec_outro >= 0.0 or _exec_lead_in > 0.0:  # presses during the lead-in are ignored
 		return
@@ -2455,6 +2850,28 @@ func _judge_timing() -> void:
 	var duration: float = entry["duration"]
 	var window: float = float(entry["window"]) * duration
 	var hit := _exec_hits_done
+	if hit < _exec_timings.size() and _special_hit(entry, hit):
+		if int(entry["timing"]) == Moves.TimingType.TAP:
+			if _exec_time >= duration * float(entry["tap_start"]) and _exec_taps < int(entry["taps"]):
+				_exec_taps += 1
+				battle_menu.exec_taps = _exec_taps
+				if _exec_taps >= int(entry["taps"]):
+					_mark_timing(hit, Timing.PERFECT)
+			return
+		# Hold: the press must start in the first box.
+		if _exec_timings[hit] != Timing.NONE or _exec_holding:
+			return
+		var start_time := duration * float(entry["hold_start"])
+		if _exec_time >= start_time - window and _exec_time <= start_time:
+			_exec_holding = true
+			battle_menu.exec_holding = true
+			return
+		if _exec_time > start_time:
+			# Started late: no Perfect this time, but no harm done.
+			_mark_timing(hit, Timing.PARTIAL)
+			_popup(_exec_attacker, "LATE", Color(0.85, 0.8, 0.6))
+			return
+		# Too early: a normal miss (below).
 	if hit >= _exec_timings.size() or _exec_timings[hit] != Timing.NONE:
 		return  # one try per hit
 	var hit_time := duration * float(entry["times"][hit])
@@ -2528,6 +2945,12 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 		return false
 	if first_hit and float(move["barrier"]) > 0.0:
 		_give_barrier(attacker, move)
+	if first_hit and move.get("teleport_behind", false) and _combo_target != null and not _combo_target.is_down:
+		# Shadowstep: 1.5x if it started in front, then appear behind.
+		if _combo_target.no_positionals or not _combo_target.is_behind(attacker.global_position):
+			multiplier *= float(move.get("front_mult", 1.0))  # no positionals: every bonus applies
+		_step_behind(attacker, _combo_target)
+		_count("shadowsteps")
 	var keep_going := true
 	for victim in _hit_victims(attacker, move):
 		var enemy: Combatant = victim[0]
@@ -2544,6 +2967,15 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 			return false
 		_flash("%s turns to %s" % [attacker.display_name, _combo_target.display_name])
 	return true
+
+
+## Puts a fighter right behind an enemy, facing it (Shadowstep).
+func _step_behind(mover: Combatant, enemy: Combatant) -> void:
+	var back := -enemy.flat_forward()
+	mover.global_position = enemy.global_position + back * (enemy.body_radius + mover.body_radius + 0.25)
+	_keep_in_arena(mover)
+	mover.face_toward(enemy.global_position - mover.global_position, 1.0, 100000.0)
+	_popup(mover, "SHADOWSTEP", Color(0.78, 0.45, 1.0))
 
 
 ## Everyone one hit reaches, each with a damage share: [[enemy, share], ...].
@@ -2586,6 +3018,137 @@ func _hit_victims(attacker: Combatant, move: Dictionary) -> Array:
 	return result
 
 
+## While building a combo, shows what the highlighted move would hit: its
+## area on the floor (a circle on the target, a line through it, a circle
+## around the attacker) in the move's colour, and a ring under each enemy it
+## reaches (fainter for reduced-damage hits). Divine Barrier also shows who
+## gets the barrier. Rebuilt only when the highlighted move changes.
+func _update_move_preview() -> void:
+	var showing := _menu_mode == BattleMenu.Mode.COMBO and _party_turn() and controlled != null \
+			and _combo_target != null and not _moves.is_empty()
+	var key := ""
+	if showing:
+		key = "%d|%s|%s" % [battle_menu.move_index, controlled.get_instance_id(), _combo_target.get_instance_id()]
+	if key == _preview_key:
+		return
+	_preview_key = key
+	_clear_move_preview()
+	if not showing:
+		return
+	var move: Dictionary = _moves[clampi(battle_menu.move_index, 0, _moves.size() - 1)]
+	var color: Color = move["color"]
+	var usable := battle_menu.move_index < battle_menu.move_usable.size() and battle_menu.move_usable[battle_menu.move_index]
+	var size: float = move["area_size"]
+	var shape_def: EnemySkill = null
+	var place := Vector3.ZERO
+	var aim := Vector3.ZERO
+	match move["area"]:
+		Moves.Area.TARGET_CIRCLE:
+			shape_def = EnemySkill.make("", Skills.Kind.ATTACK, EnemySkill.Shape.CIRCLE, size + _combo_target.body_radius, 360.0, 0, 0.0, 0)
+			place = _combo_target.global_position
+		Moves.Area.SELF_CIRCLE:
+			shape_def = EnemySkill.make("", Skills.Kind.ATTACK, EnemySkill.Shape.CIRCLE, size + controlled.body_radius, 360.0, 0, 0.0, 0)
+			place = controlled.global_position
+		Moves.Area.LINE:
+			var dir := _combo_target.global_position - controlled.global_position
+			dir.y = 0.0
+			shape_def = EnemySkill.make("", Skills.Kind.ATTACK, EnemySkill.Shape.LINE, dir.length() + 6.0, 0.0, 0, 0.0, 0)
+			shape_def.width = size
+			place = controlled.global_position
+			aim = _combo_target.global_position
+	if shape_def != null:
+		_preview_area = AttackRange.new()
+		add_child(_preview_area)
+		_preview_area.global_position = Vector3(place.x, 0.05, place.z)
+		if aim != Vector3.ZERO and Vector2(aim.x - place.x, aim.z - place.z).length() > 0.05:
+			_preview_area.look_at(Vector3(aim.x, 0.05, aim.z), Vector3.UP)
+		_preview_area.show_hazard(shape_def, color if usable else Color(0.6, 0.6, 0.65))
+		_preview_area.set_alert(usable)  # brighter, so it reads through the menu
+	if float(move["barrier_radius"]) > 0.0:
+		var barrier_def := EnemySkill.make("", Skills.Kind.ATTACK, EnemySkill.Shape.CIRCLE, float(move["barrier_radius"]), 360.0, 0, 0.0, 0)
+		_preview_barrier = AttackRange.new()
+		add_child(_preview_barrier)
+		_preview_barrier.global_position = Vector3(controlled.global_position.x, 0.04, controlled.global_position.z)
+		_preview_barrier.show_hazard(barrier_def, Color(0.55, 0.8, 1.0))
+		for ally in _standing(party):
+			if ally.global_position.distance_to(controlled.global_position) <= float(move["barrier_radius"]):
+				_add_preview_mark(ally, Color(0.55, 0.8, 1.0, 0.9))
+	if not usable:
+		return
+	for victim in _hit_victims(controlled, move):
+		var enemy: Combatant = victim[0]
+		var share: float = victim[1]
+		var mark_color := color.lightened(0.3)
+		mark_color.a = 0.95 if share >= 1.0 else 0.5
+		_add_preview_mark(enemy, mark_color)
+
+
+func _add_preview_mark(fighter: Combatant, color: Color) -> void:
+	var mark := _make_ring(fighter.body_radius + 0.45, 0.12, color)
+	fighter.add_child(mark)
+	mark.position.y = 0.08
+	_preview_marks.append(mark)
+	_preview_hits.append(fighter)
+
+
+## Shows each enemy's positional ring (see PositionalRing) while a fighter
+## that strikes from behind (flanks: the Assassin) is steered, so the player
+## can see where to stand. Hidden for everyone else.
+func _update_behind_cones() -> void:
+	var show := controlled != null and controlled.flanks and not controlled.is_down and not _game_over
+	for enemy in enemies:
+		var ring: PositionalRing = _behind_cones.get(enemy)
+		var wanted := show and not enemy.is_down
+		if not wanted:
+			if ring != null:
+				ring.visible = false
+			continue
+		if ring == null:
+			ring = PositionalRing.new()
+			enemy.add_child(ring)
+			ring.build(enemy.body_radius + 0.9, enemy.no_positionals)
+			_behind_cones[enemy] = ring
+		ring.visible = true
+		ring.set_lit(enemy.is_behind(controlled.global_position))  # brighter when you're in it
+
+
+## Tells the timeline who the player is aiming at (the chosen target while
+## picking one, the combo's target while building or playing a combo) and
+## who the previewed move would also hit, so twins like Kobold Archer A and
+## B can be told apart on the bar.
+func _update_timeline_targets() -> void:
+	var target: Combatant = null
+	if _party_turn():
+		if _menu_mode == BattleMenu.Mode.TARGET and _pending_skill.get("target", -1) != Moves.Target.POINT \
+				and not _target_choices.is_empty():
+			target = _target_choices[clampi(_target_index, 0, _target_choices.size() - 1)]
+		elif (_menu_mode == BattleMenu.Mode.COMBO or _menu_mode == BattleMenu.Mode.EXECUTING) and _combo_target != null:
+			target = _combo_target
+	timeline_bar.target = target
+	timeline_bar.also_hit = _preview_hits
+	# The targeted enemy's floating name turns gold too, to match the bar.
+	var named: Combatant = target if target != null and target.team == Combatant.Team.ENEMY else null
+	if named != _named_target:
+		if is_instance_valid(_named_target):
+			_named_target.set_highlighted(false)
+		if named != null:
+			named.set_highlighted(true)
+		_named_target = named
+
+
+func _clear_move_preview() -> void:
+	for node in [_preview_area, _preview_barrier]:
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	_preview_area = null
+	_preview_barrier = null
+	for mark in _preview_marks:
+		if is_instance_valid(mark):
+			mark.queue_free()
+	_preview_marks.clear()
+	_preview_hits.clear()
+
+
 ## Cleric's Divine Barrier: allies near the user get barrier HP.
 func _give_barrier(user: Combatant, move: Dictionary) -> void:
 	for ally in _standing(party):
@@ -2593,6 +3156,52 @@ func _give_barrier(user: Combatant, move: Dictionary) -> void:
 			var gained := ally.add_shield(ceili(ally.max_hp * float(move["barrier"])))
 			if gained > 0:
 				_popup(ally, "+%d BARRIER" % gained, Color(0.55, 0.8, 1.0))
+
+
+## Assassin's Marks from one hit: Backstab from behind adds one, every 3rd
+## Stab on a Marked enemy adds one, Execute uses them all up.
+func _apply_mark_effects(attacker: Combatant, target: Combatant, move: Dictionary, behind: bool) -> void:
+	if target.is_down:
+		return
+	if int(move.get("marks_from_behind", 0)) > 0 and behind:
+		_add_marks(target, int(move["marks_from_behind"]))
+	if move.get("stab_marks", false) and target.marks > 0:
+		var stabs: int = target.get_meta("marked_stabs", 0) + 1
+		target.set_meta("marked_stabs", stabs)
+		if stabs % 3 == 0:
+			_add_marks(target, 1)
+	if move.get("consume_marks", false) and target.marks > 0:
+		_count("executes")
+		target.set_marks(0)
+		_popup(target, "MARKS SPENT", Color(0.78, 0.45, 1.0))
+
+
+func _add_marks(target: Combatant, count: int) -> void:
+	var before := target.marks
+	var now := target.set_marks(target.marks + count)
+	if now > before:
+		_popup(target, "+%d MARK" % (now - before), Color(0.78, 0.45, 1.0))
+		_count("marks")
+
+
+## Marks on all standing enemies (the Assassin's auto-parry needs one).
+func _marks_out() -> int:
+	var total := 0
+	for enemy in _standing(enemies):
+		total += enemy.marks
+	return total
+
+
+## Spends one Mark for an auto-parry: from the attacking enemy if it has
+## one, otherwise from the enemy with the most.
+func _spend_mark(prefer: Combatant) -> void:
+	var source: Combatant = prefer if prefer != null and prefer.marks > 0 else null
+	if source == null:
+		for enemy in _standing(enemies):
+			if source == null or enemy.marks > source.marks:
+				source = enemy
+	if source != null and source.marks > 0:
+		source.set_marks(source.marks - 1)
 
 
 ## Applies the skill triangle to one hit on one enemy, then the move's extra
@@ -2613,6 +3222,16 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		return false
 
 	var note := ""
+	# Assassin: where the attacker stands matters.
+	var behind := target.is_behind(attacker.global_position)
+	if move.get("front_miss", false) and not behind:
+		_popup(target, "MISS", Color(0.7, 0.7, 0.75))
+		_flash("%s misses: it only works from behind" % move_name)
+		return true
+	if behind and float(move.get("behind_mult", 1.0)) > 1.0:
+		multiplier *= float(move["behind_mult"])
+		_popup(attacker, "FROM BEHIND", Color(0.78, 0.45, 1.0))
+		_count("behind_hits")
 	if target.stance == Skills.Kind.DEFENSE:
 		match move["effect"]:
 			Moves.Effect.BREAK:
@@ -2654,6 +3273,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		combo_counter.damage(dealt)
 	var is_smash: bool = move["kind"] == Skills.Kind.SMASH
 	_popup(target, str(damage), Color(1.0, 0.7, 0.3) if is_smash else Color.WHITE)
+	_apply_mark_effects(attacker, target, move, behind)
 
 	var ritual := target.loaded_def
 	if ritual != null and ritual.special == EnemySkill.Special.HEAL_ALLIES and not target.is_down \
@@ -2708,6 +3328,8 @@ func _move_reach(fighter: Combatant, move: Dictionary) -> float:
 
 
 func _can_target(fighter: Combatant, enemy: Combatant, move: Dictionary) -> bool:
+	if move.get("marked_any_range", false) and enemy.marks > 0:
+		return true  # Shadowstep reaches any Marked enemy
 	var move_reach := _move_reach(fighter, move)
 	if fighter.gap_to(enemy) > move_reach:
 		return false
@@ -2761,7 +3383,7 @@ func _open_skills() -> void:
 		elif int(skill["cost"]) > controlled.combo_limit:
 			note = "Costs more than %s's AP limit" % controlled.display_name
 		elif skill["target"] == Moves.Target.ENEMY and _skill_choices(skill).is_empty():
-			note = "No enemy in range"
+			note = "No enemy has a Mark" if skill.get("needs_marks", false) else "No enemy in range"
 		elif skill["target"] == Moves.Target.OTHER_ALLY and _skill_choices(skill).is_empty():
 			note = "No ally to choose"
 		usable.append(note == "")
@@ -2789,7 +3411,10 @@ func _skill_choices(skill: Dictionary) -> Array[Combatant]:
 			choices.erase(controlled)
 		Moves.Target.ENEMY:
 			for enemy in _standing(enemies):
-				if controlled.gap_to(enemy) <= float(skill["range"]) and _can_see(controlled, enemy):
+				if skill.get("needs_marks", false):
+					if enemy.marks > 0:
+						choices.append(enemy)  # any Marked enemy, however far
+				elif controlled.gap_to(enemy) <= float(skill["range"]) and _can_see(controlled, enemy):
 					choices.append(enemy)
 			choices.sort_custom(func(a, b): return controlled.gap_to(a) < controlled.gap_to(b))
 	return choices
@@ -2804,14 +3429,14 @@ func _choose_skill(index: int) -> void:
 		Moves.Target.SELF, Moves.Target.NONE:
 			_use_skill(skill, controlled, controlled.global_position)
 		Moves.Target.POINT:
-			_begin_targeting(skill, "%s: move the marker with WASD" % skill["name"])
+			_begin_targeting(skill, Keybinds.fill("%s: move the marker with {move}" % skill["name"]))
 			_target_marker.global_position = controlled.global_position + controlled.flat_forward() * 3.0
 			_keep_marker_in_range()
 		_:
 			_target_choices = _skill_choices(skill)
 			_target_index = 0
 			var what := "an enemy" if skill["target"] == Moves.Target.ENEMY else "an ally"
-			_begin_targeting(skill, "%s: choose %s (W / S)" % [skill["name"], what])
+			_begin_targeting(skill, Keybinds.fill("%s: choose %s ({up} / {down})" % [skill["name"], what]))
 
 
 func _begin_targeting(skill: Dictionary, prompt: String) -> void:
@@ -2836,7 +3461,7 @@ func _update_target_marker(delta: float) -> void:
 		var chosen := _target_choices[_target_index]
 		_target_marker.global_position = chosen.global_position + Vector3(0, 0.05, 0)
 		var label := "%s: %s" % [_pending_skill["name"], chosen.display_name]
-		battle_menu.target_prompt = label + "   (W / S to change)"
+		battle_menu.target_prompt = label + Keybinds.fill("   ({up} / {down} to change)")
 
 
 func _keep_marker_in_range() -> void:
@@ -2928,6 +3553,38 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			for ally in _standing(party):
 				var gained := ally.add_shield(ceili(ally.max_hp * float(skill["shield"])))
 				_popup(ally, "+%d SHIELD" % gained, Color(0.55, 0.8, 1.0))
+		"Hook":
+			if _loaded_offensive(target) or target.stance != Skills.NONE:
+				_cancel_enemy_skill(target)  # stops its attack and breaks a Defense / Counter
+				message += ": %s's move is stopped" % target.display_name
+			else:
+				message += " on %s" % target.display_name
+			var dir := user.global_position - target.global_position
+			dir.y = 0.0
+			var room := maxf(dir.length() - user.body_radius - target.body_radius - 0.2, 0.0)
+			if room > 0.0:
+				target.global_position += dir.normalized() * minf(float(skill["pull"]), room)
+				_keep_in_arena(target)
+			if target.marks > 0:
+				target.set_marks(0)
+				message += " (its Marks are used up)"
+			_popup(target, "HOOKED", skill["color"])
+		"Death Sentence":
+			_add_marks(target, int(skill["marks"]))
+			message += ": %s has %d Marks" % [target.display_name, target.marks]
+		"Shadow Cloak":
+			var count := target.marks
+			target.set_marks(0)
+			var gained := user.add_shield(ceili(user.max_hp * float(skill["shield"]) * count))
+			_popup(user, "+%d SHIELD" % gained, Color(0.55, 0.8, 1.0))
+			message += ": %d Marks become a %d shield" % [count, gained]
+		"Vanish":
+			user.add_status("vanish", turns, user)
+			for enemy in _standing(enemies):
+				if enemy.cast_target == user:
+					enemy.cast_target = _enemy_target(enemy)  # it loses its lock
+			_popup(user, "VANISH", skill["color"])
+			message += ": enemies lose track of %s" % user.display_name
 		"Haste":
 			target.add_status("haste", turns, user)
 			_popup(target, "HASTE", skill["color"])
@@ -3110,6 +3767,13 @@ func _camera_relative(input: Vector2) -> Vector3:
 ## turns, the one you steer), a bit of the way toward the nearest opponent so
 ## both stay on screen.
 func _camera_focus() -> Vector3:
+	if _menu_mode == BattleMenu.Mode.COMBO and _party_turn() and active != null and _combo_target != null:
+		# Building a combo: frame the attacker and the target, nudged so they
+		# sit above the move list (which covers the middle of the screen).
+		var center := active.global_position.lerp(_combo_target.global_position, 0.5)
+		var toward_camera := camera.global_basis.z
+		toward_camera.y = 0.0
+		return center + toward_camera.normalized() * _cam_distance * 0.18
 	# During anyone's turn the camera is on them; otherwise on who you steer.
 	var subject := active if active != null else controlled
 	var anchor := subject.global_position if subject != null else _party_center()
@@ -3143,9 +3807,9 @@ func _update_ui(delta: float) -> void:
 		controls_label.visible = true
 		var won := _result_text == "Victory!"
 		if tutorial_mode:
-			controls_label.text = "Esc: back to the menu     R: play the tutorial again"
+			controls_label.text = Keybinds.fill("Esc: back to the menu     {restart}: play the tutorial again")
 		else:
-			controls_label.text = ("N: next round     R: play again     Esc: menu" if won else "R: retry     N / P: next / previous round     Esc: menu")
+			controls_label.text = Keybinds.fill("{next}: next round     {restart}: play again     Esc: menu" if won else "{restart}: retry     {next} / {prev}: next / previous round     Esc: menu")
 			if playtest != null and playtest.saved:
 				controls_label.text += "\nPlay-test report saved     O: open the reports folder"
 		return
@@ -3162,7 +3826,7 @@ func _update_ui(delta: float) -> void:
 	elif _menu_mode == BattleMenu.Mode.EXECUTING:
 		turn_label.text = "%s attacks!" % controlled.display_name
 		if _flash_time_left <= 0.0:
-			warning_label.text = "J when the playhead hits the box: Perfect!  (a wrong press ends the chain)"
+			warning_label.text = _timing_prompt()
 	elif party_turn:
 		turn_label.text = "%s's turn" % active.display_name
 	else:
@@ -3194,12 +3858,16 @@ func _strike_prompt() -> String:
 			return "Too early!"
 		Reaction.DEFEND:
 			return "Defending..."
-	var parry_hint := "E: Parry when the ring turns gold" if _strike.def.parryable() else "E: can't Parry this"
-	var defend_hint := "Q: Defend (%d AP)" % defend_cost if _strike.def.blockable() else "Q: can't Defend this"
+	var parry_hint := Keybinds.fill("{parry}: Parry when the ring turns gold" if _strike.def.parryable() else "{parry}: can't Parry this")
+	var defend_hint := Keybinds.fill("{defend}: Defend (%d AP)" % defend_cost if _strike.def.blockable() else "{defend}: can't Defend this")
 	if not _strike_targets_can("parry"):
-		parry_hint = "E: %s can't parry" % _names(_strike.targets)
+		parry_hint = Keybinds.fill("{parry}: ") + "%s can't parry" % _names(_strike.targets)
+	var auto := _strike.targets.filter(func(t): return t.auto_parry_with_marks)
+	if not auto.is_empty() and _strike.def.parryable():
+		parry_hint = ("%s auto-parries (a Mark is spent)" % _names(auto)) if _marks_out() > 0 \
+				else ("%s: no Marks out, can't parry" % _names(auto))
 	if not _strike_targets_can("block"):
-		defend_hint = "Q: %s can't block" % _names(_strike.targets)
+		defend_hint = Keybinds.fill("{defend}: ") + "%s can't block" % _names(_strike.targets)
 	if _strike.def.is_mechanic():
 		# No prompt: there's nothing to press.
 		return _flash_message if _flash_time_left > 0.0 else ""
@@ -3214,25 +3882,25 @@ func _controls_hint() -> String:
 		return ""  # the camera is still panning to the fighter
 	match _menu_mode:
 		BattleMenu.Mode.COMMANDS:
-			return "W / S: choose     J / Enter: select"
+			return Keybinds.fill("{up} / {down}: choose     {confirm} / Enter: select")
 		BattleMenu.Mode.COMBO:
-			return "W / S: choose move     J / Enter: add     K / Backspace: remove last     Space: begin"
+			return Keybinds.fill("{up} / {down}: choose move     {confirm} / Enter: add     {cancel} / Backspace: remove last     {begin}: begin")
 		BattleMenu.Mode.SKILLS:
-			return "W / S: choose skill     J / Enter: use (ends the turn)     K / Backspace: back"
+			return Keybinds.fill("{up} / {down}: choose skill     {confirm} / Enter: use (ends the turn)     {cancel} / Backspace: back")
 		BattleMenu.Mode.TARGET:
 			return ""
 	var standing := _standing(party)
 	var next_name := ""
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
-	var tab_part := "     Tab: switch to %s" % next_name if next_name != "" else ""
-	return "WASD: move %s (free)%s     Z / C or right-drag: camera     Esc: menu" % [controlled.display_name if controlled else "", tab_part]
+	var tab_part := Keybinds.fill("     {swap}: switch to ") + next_name if next_name != "" else ""
+	return Keybinds.fill("{move}: move %s (free)%s     {cam_l} / {cam_r} or right-drag: camera     Esc: pause") % [controlled.display_name if controlled else "", tab_part]
 
 
 ## Shows a short message under the turn label for a moment.
-func _flash(message: String) -> void:
+func _flash(message: String, seconds: float = 2.5) -> void:
 	_flash_message = message
-	_flash_time_left = 2.5
+	_flash_time_left = seconds
 
 
 # --- Helpers --------------------------------------------------------------

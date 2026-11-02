@@ -19,6 +19,10 @@ const PX_PER_AP := 8.0
 ## Width of the "READY" lead-in block in front of the strip during a combo.
 const LEAD_IN_PX := 70.0
 const GOLD := Color(0.95, 0.78, 0.35)
+## Timing types: Press boxes are white squares, Hold is blue and rounded,
+## Tap is pink with diamonds.
+const HOLD_COLOR := Color(0.35, 0.75, 1.0)
+const TAP_COLOR := Color(1.0, 0.45, 0.85)
 const PANEL_BG := Color(0.06, 0.07, 0.11, 0.9)
 
 var mode: int = Mode.HIDDEN
@@ -61,6 +65,9 @@ var slot_progress := 0.0
 var lead_in_progress := -1.0
 ## Per combo slot, one entry per hit: 0 = not judged yet, 1 = Perfect, 2 = Miss.
 var slot_results: Array = []
+## The playing slot's Hold / Tap state (set by the battle while it plays).
+var exec_holding := false
+var exec_taps := 0
 
 var _panel_style: StyleBoxFlat
 
@@ -94,6 +101,16 @@ func _draw() -> void:
 		# is visible, and keep only the bar as a slim progress strip.
 		_draw_combo_bar(font)
 		return
+	if mode == Mode.COMBO:
+		# Picking moves: the command menu steps aside and the move list turns
+		# see-through, so the highlighted move's area on the floor (and the
+		# enemies it would hit) stay visible behind it.
+		var solid := _panel_style.bg_color
+		_panel_style.bg_color = Color(solid, 0.45)
+		_draw_move_list(font)
+		_panel_style.bg_color = solid
+		_draw_combo_bar(font)
+		return
 	_draw_commands(font)
 	if mode == Mode.COMBO:
 		_draw_move_list(font)
@@ -104,7 +121,7 @@ func _draw() -> void:
 		var panel := Rect2((size.x - 520) / 2.0, size.y - 250, 520, 62)
 		draw_style_box(_panel_style, panel)
 		_text(font, panel.position + Vector2(16, 27), target_prompt, 19, GOLD)
-		_text(font, panel.position + Vector2(16, 50), "J / Enter: confirm     K / Backspace: back", 15, Color(0.75, 0.75, 0.8))
+		_text(font, panel.position + Vector2(16, 50), Keybinds.fill("{confirm} / Enter: confirm     {cancel} / Backspace: back"), 15, Color(0.75, 0.75, 0.8))
 
 
 # --- Command menu ----------------------------------------------------------
@@ -116,10 +133,10 @@ func _draw_commands(font: Font) -> void:
 	# Reaction reminders, only for what this class can do (stacked upward).
 	var reminder_y := -10.0
 	if show_parry:
-		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), "Parry: E", 15, Color(1.0, 0.85, 0.3))
+		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), Keybinds.fill("Parry: {parry}"), 15, Color(1.0, 0.85, 0.3))
 		reminder_y -= 20.0
 	if show_defend:
-		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), "Defend: Q", 15, Color(0.6, 0.8, 1.0))
+		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), Keybinds.fill("Defend: {defend}"), 15, Color(0.6, 0.8, 1.0))
 	draw_style_box(_panel_style, panel)
 
 	for i in commands.size():
@@ -162,6 +179,7 @@ func _draw_move_list(font: Font) -> void:
 		if not usable and i < move_notes.size() and move_notes[i] != "":
 			desc = move_notes[i]
 		_text(font, row.position + Vector2(270, 21), desc, 15, color.darkened(0.15))
+		_timing_badge(font, move, Vector2(row.end.x - 6, row.position.y + row.size.y / 2.0), not fits)
 
 
 func _draw_combo_bar(font: Font) -> void:
@@ -206,29 +224,60 @@ func _draw_combo_bar(font: Font) -> void:
 		draw_rect(segment.grow(-2), color)
 		if mode == Mode.EXECUTING and slot == executing_slot:
 			draw_rect(segment.grow(-1), Color.WHITE, false, 3.0)
-		var label := String(move["name"]).to_upper()
-		var label_size := 14
-		while label_size > 8 and font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > segment.size.x - 8:
-			label_size -= 1
-		var label_width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
-		_text(font, Vector2(segment.position.x + (segment.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
 		# One timing box per hit, ending where that hit lands (the last one at
 		# the end of the block): press J while the playhead is inside it.
 		var times: Array = move["times"]
 		var box_width := segment.size.x * float(move["window"])
+		var timing: int = int(move.get("timing", 0))
+		var playing := mode == Mode.EXECUTING and slot == executing_slot
 		for hit in times.size():
 			var hit_x := segment.position.x + segment.size.x * float(times[hit])
 			var box := Rect2(hit_x - box_width, segment.position.y - 3, box_width, segment.size.y + 6)
 			var result := 0
 			if slot < slot_results.size() and hit < (slot_results[slot] as Array).size():
 				result = slot_results[slot][hit]
-			var fill := Color(1, 1, 1, 0.25)
-			if result == 1:
-				fill = Color(1.0, 0.85, 0.2, 0.85)
-			elif result == 2:
-				fill = Color(1.0, 0.25, 0.2, 0.85)
+			var fill := _result_fill(result)
+			var special := timing != 0 and hit == times.size() - 1
+			if special and timing == 1:
+				# HOLD (blue, rounded): a press pill, a tail to hold through,
+				# and a release pill at the hit.
+				var start_x := segment.position.x + segment.size.x * float(move.get("hold_start", 0.35))
+				var start_box := Rect2(start_x - box_width, box.position.y, box_width, box.size.y)
+				var tail := Rect2(start_x - 2.0, segment.position.y + 11, maxf(box.position.x - start_x + 4.0, 0.0), segment.size.y - 22)
+				var held := playing and exec_holding
+				_pill(tail, Color(HOLD_COLOR, 0.9) if held else Color(HOLD_COLOR, 0.3), HOLD_COLOR, 1.5)
+				var start_fill := Color(1.0, 0.85, 0.2, 0.9) if held or result == 1 else (fill if result != 0 else Color(HOLD_COLOR, 0.35))
+				_pill(start_box, start_fill, HOLD_COLOR, 3.0)
+				_pill(box, fill if result != 0 else Color(HOLD_COLOR, 0.35), HOLD_COLOR, 3.0)
+				_arrow(start_box.get_center(), true)   # press down
+				_arrow(box.get_center(), false)        # let go
+				_small_tag(font, start_box, "HOLD", HOLD_COLOR)
+				_small_tag(font, box, "LET GO", HOLD_COLOR)
+				continue
+			elif special and timing == 2:
+				# TAP (pink, diamonds): a dashed stretch where every tap counts,
+				# one diamond per tap.
+				var needed: int = maxi(int(move.get("taps", 1)), 1)
+				var tap_x := segment.position.x + segment.size.x * float(move.get("tap_start", 0.12))
+				var stretch := Rect2(tap_x, box.position.y, hit_x - tap_x, box.size.y)
+				var done := exec_taps if playing else (needed if result == 1 else 0)
+				draw_rect(stretch, fill if result != 0 else Color(TAP_COLOR, 0.16))
+				_dashed_rect(stretch, TAP_COLOR)
+				var pip_gap := stretch.size.x / (needed + 1)
+				for pip in needed:
+					var centre := Vector2(stretch.position.x + pip_gap * (pip + 1), stretch.end.y - 8)
+					_diamond(centre, 5.0, TAP_COLOR if pip < done else Color(0.1, 0.1, 0.14), Color.WHITE)
+				_small_tag(font, stretch, ("TAP %d/%d" % [done, needed]) if playing else ("TAP x%d" % needed), TAP_COLOR)
+				continue
 			draw_rect(box, fill)
 			draw_rect(box, Color.WHITE, false, 1.5)
+		# The move's name goes on top of its timing marks so it stays readable.
+		var label := String(move["name"]).to_upper()
+		var label_size := 14
+		while label_size > 8 and font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > segment.size.x - 8:
+			label_size -= 1
+		var label_width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
+		_text(font, Vector2(segment.position.x + (segment.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
 		cursor = segment.end.x
 	draw_rect(bar, GOLD, false, 2.0)
 
@@ -258,6 +307,78 @@ func _draw_combo_bar(font: Font) -> void:
 			x = start + width * slot_progress
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color.WHITE, 3.0)
+
+
+func _result_fill(result: int) -> Color:
+	match result:
+		1:
+			return Color(1.0, 0.85, 0.2, 0.85)  # Perfect
+		2:
+			return Color(1.0, 0.25, 0.2, 0.85)  # miss
+		3:
+			return Color(0.75, 0.7, 0.55, 0.7)  # partial (Hold / Tap without the Perfect)
+	return Color(1, 1, 1, 0.25)
+
+
+## A tiny label just under a timing box ("HOLD", "LET GO", "TAP 2/5"); the
+## AP meter sits right above the bar while a combo plays.
+func _small_tag(font: Font, box: Rect2, text: String, color: Color) -> void:
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	_text(font, Vector2(box.get_center().x - width / 2.0, box.end.y + 13), text, 12, color.lightened(0.25))
+
+
+## A rounded box (Hold timings).
+func _pill(rect: Rect2, fill: Color, outline: Color, width: float) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = outline
+	style.set_border_width_all(int(width))
+	style.set_corner_radius_all(int(minf(rect.size.x, rect.size.y) / 2.0))
+	style.anti_aliasing = true
+	draw_style_box(style, rect)
+
+
+## A small triangle: pointing down (press) or up (let go).
+func _arrow(centre: Vector2, down: bool) -> void:
+	var d := 1.0 if down else -1.0
+	var points := PackedVector2Array([centre + Vector2(-5, -3 * d), centre + Vector2(5, -3 * d), centre + Vector2(0, 4 * d)])
+	draw_colored_polygon(points, Color.WHITE)
+	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), Color(0, 0, 0, 0.8), 1.0)
+
+
+## A diamond (Tap timings).
+func _diamond(centre: Vector2, r: float, fill: Color, outline: Color) -> void:
+	var points := PackedVector2Array([centre + Vector2(0, -r), centre + Vector2(r, 0), centre + Vector2(0, r), centre + Vector2(-r, 0)])
+	draw_colored_polygon(points, fill)
+	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), outline, 1.2)
+
+
+func _dashed_rect(rect: Rect2, color: Color) -> void:
+	var corners := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
+	for k in 4:
+		draw_dashed_line(corners[k], corners[(k + 1) % 4], color, 2.0, 5.0)
+
+
+## The badge on a move's row in the list: HOLD (blue pill) or TAP 5 (pink,
+## with a diamond). Press moves have none.
+func _timing_badge(font: Font, move: Dictionary, right: Vector2, dim: bool) -> void:
+	var timing: int = int(move.get("timing", 0))
+	if timing == 0:
+		return
+	var text := "HOLD" if timing == 1 else "TAP %d" % int(move.get("taps", 0))
+	var color := HOLD_COLOR if timing == 1 else TAP_COLOR
+	if dim:
+		color = color.darkened(0.45)
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + (30.0 if timing == 2 else 18.0)
+	var rect := Rect2(right.x - width, right.y - 9, width, 18)
+	if timing == 1:
+		_pill(rect, Color(color, 0.3), color, 2.0)
+		_text(font, rect.position + Vector2(9, 14), text, 13, Color.WHITE)
+	else:
+		draw_rect(rect, Color(color, 0.25))
+		_dashed_rect(rect, color)
+		_diamond(rect.position + Vector2(11, 9), 4.5, color, Color.WHITE)
+		_text(font, rect.position + Vector2(20, 14), text, 13, Color.WHITE)
 
 
 func _text(font: Font, pos: Vector2, text: String, font_size: int, color: Color) -> void:

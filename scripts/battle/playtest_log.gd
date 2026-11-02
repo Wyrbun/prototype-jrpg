@@ -16,6 +16,9 @@ const FOLDER := "user://playtests"
 static var attempts := {}
 
 var round_title := ""
+## How the fight was started: "Boss Rush", "Boss Rush (continued from a
+## save)" or "Round Select".
+var mode := ""
 var attempt := 1
 var party_names: PackedStringArray = []
 var enemy_names: PackedStringArray = []
@@ -127,6 +130,8 @@ func save(result: String, stats: Dictionary, members: Array[Combatant], foes: Ar
 	lines.append("# %s (attempt %d): %s" % [round_title, attempt, result])
 	lines.append("")
 	lines.append("- When: %s" % Time.get_datetime_string_from_system().replace("T", " "))
+	if mode != "":
+		lines.append("- Mode: %s" % mode)
 	lines.append("- Length: %d:%02d, %d turns" % [int(seconds) / 60, int(seconds) % 60, total_turns])
 	lines.append("- Party: %s" % ", ".join(party_names))
 	lines.append("- Enemies: %s" % ", ".join(enemy_names))

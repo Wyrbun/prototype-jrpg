@@ -1,7 +1,8 @@
 class_name TutorialPanel
 extends Control
 ## The tutorial's note box, top right: lesson title, explanation, and either
-## the current goal or "J / Enter / Space: continue".
+## the current goal or "J / Enter / Space: continue". Key names in
+## {braces} are filled in with the player's keys (see Keybinds).
 
 const GOLD := Color(0.95, 0.78, 0.35)
 const WIDTH := 430.0
@@ -37,8 +38,10 @@ func _draw() -> void:
 		return
 	var font := ThemeDB.fallback_font
 	var inner := WIDTH - PAD * 2.0
-	var body_size := font.get_multiline_string_size(body, HORIZONTAL_ALIGNMENT_LEFT, inner, 16)
-	var footer := "GOAL: " + goal if goal != "" else "J / Enter / Space: continue"
+	var text := Keybinds.fill(body)
+	var goal_text := Keybinds.fill(goal)
+	var body_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16)
+	var footer := "GOAL: " + goal_text if goal_text != "" else Keybinds.fill("{confirm} / Enter / {begin}: continue")
 	var footer_size := font.get_multiline_string_size(footer, HORIZONTAL_ALIGNMENT_LEFT, inner - 24.0, 17)
 	var height := PAD + 22.0 + 12.0 + body_size.y + 16.0 + footer_size.y + PAD
 	var box := Rect2(size.x - WIDTH - 20.0, 96.0, WIDTH, height)
@@ -52,18 +55,18 @@ func _draw() -> void:
 		var count_width := font.get_string_size(count, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 		_line(font, Vector2(box.end.x - PAD - count_width, title_baseline), count, 14, Color(0.6, 0.6, 0.65))
 	var body_top := title_baseline + 16.0
-	draw_multiline_string(font, Vector2(x, body_top + font.get_ascent(16)), body, HORIZONTAL_ALIGNMENT_LEFT, inner, 16, -1, Color(0.92, 0.92, 0.95))
+	draw_multiline_string(font, Vector2(x, body_top + font.get_ascent(16)), text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16, -1, Color(0.92, 0.92, 0.95))
 	var y := body_top + body_size.y + 8.0
 	draw_line(Vector2(x, y), Vector2(box.end.x - PAD, y), Color(GOLD, 0.35), 1.0)
 	y += 6.0
 	var color := Color(0.6, 0.6, 0.65)
-	if goal != "":
+	if goal_text != "":
 		color = Color(0.5, 0.95, 0.55) if goal_done else Color(1.0, 0.9, 0.55)
 		var mark := Rect2(x, y + 5.0, 14.0, 14.0)
 		draw_rect(mark, color, goal_done)
 		if not goal_done:
 			draw_rect(mark, color, false, 2.0)
-	var footer_x := x + (24.0 if goal != "" else 0.0)
+	var footer_x := x + (24.0 if goal_text != "" else 0.0)
 	draw_multiline_string_outline(font, Vector2(footer_x, y + font.get_ascent(17)), footer, HORIZONTAL_ALIGNMENT_LEFT, inner - 24.0, 17, -1, 4, Color.BLACK)
 	draw_multiline_string(font, Vector2(footer_x, y + font.get_ascent(17)), footer, HORIZONTAL_ALIGNMENT_LEFT, inner - 24.0, 17, -1, color)
 

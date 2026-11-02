@@ -47,6 +47,7 @@ display_name = "Goblin Fighter"
 max_hp = 225
 speed = 11.0
 move_speed = 3.5
+no_positionals = true
 turn_speed_degrees = 200.0
 body_radius = 0.6
 skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
