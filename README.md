@@ -6,7 +6,8 @@ classic battle systems into one hybrid:
 - **Grandia 2**: a shared timeline that decides who acts next, with a casting
   zone where enemies prepare their moves.
 - **Valkyrie Profile 2**: real-time positioning on a 3D battlefield, and
-  attacking enemies from the right angle.
+  attacking enemies from the right angle (the Assassin hits hardest from
+  behind).
 - **Mabinogi**: a rock-paper-scissors skill triangle (Attack, Smash, Defense,
   Counter) and reading what the enemy has loaded.
 - **Legend of Legaia**: building combos in an AP bar and playing them with
@@ -29,7 +30,9 @@ Round Select and the tutorial don't save.
 
 **From Round 7 (the boss rounds) you choose the party:** any 1 to 4 of the
 five classes, solo included. Retrying keeps your pick; the next round asks
-again.
+again. Round 6 introduces the fifth class, the Assassin.
+
+**Esc pauses** any fight: Resume, Restart fight or Quit to title.
 
 ## Tutorial
 
@@ -37,9 +40,11 @@ again.
 Golem that teaches every mechanic in 12 lessons: moving and the camera, the
 timeline, combos and timed hits, Wait, reading enemy skills, Parry and Defend,
 the skill triangle, Abilities (the Archer, Mage and Cleric join along the
-way), max AP, rocks, the special skills later enemies use, and the Assassin (getting behind enemies, Shadowstep, Marks, Execute, auto-parry). It ends with
-free practice. Notes pause the fight until you press
-J; goals run until you've done them. Nobody can fall, so it can't be lost.
+way, with their Hold and Tap timings), max AP, rocks, the special skills
+later enemies use, and the Assassin (getting behind enemies, Shadowstep,
+Marks, Execute, auto-parry). It ends with free practice. Notes pause the
+fight until you press J; goals run until you've done them. Nobody can fall,
+so it can't be lost.
 
 | Round | Party | Enemies | Arena |
 |---|---|---|---|
@@ -72,13 +77,18 @@ whoever it locked onto, and only slows down in the last second: that's when
 to slip out.
 
 **Positioning (between turns).** While the timeline runs, you steer one party
-member in real time and press **Tab** to switch between them. Enemies and the
-AI-controlled allies move too: they dodge enemy areas, spread out or stack
+member in real time and press **Tab** to switch between them. The fight
+doesn't wait: enemies and the AI-controlled allies keep moving whether you
+move or not. Allies dodge enemy areas, spread out or stack
 up when a skill calls for it, and close in on a healing enemy so you can
 interrupt it. Each enemy shows its threat area on the floor:
 faint while harmless, colored once its skill is revealed. When the enemy's
-icon reaches the end of the bar, anyone inside its area is hit. Each enemy has its own skills and
-area shapes: cones, circles, lines and donuts.
+icon reaches the end of the bar, anyone inside its area is hit. Each enemy
+has its own skills and area shapes: cones, circles, lines and donuts. Some
+skills are **unavoidable** and are answered by spreading out, stacking up or
+standing alone instead. Enemies that share a name (Kobold Archer A / B) carry
+their letter on the timeline, and the enemy you're aiming at gets a gold
+ring there.
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu
 opens: **Attack** (needs an enemy in reach), **Abilities** (one skill, then
@@ -86,23 +96,44 @@ the turn ends), or **Wait** (spends no AP and brings the next turn sooner).
 
 **Combos.** Attack asks which enemy to hit when more than one is in reach
 (W / S, then J), then opens a Legaia-style combo bar with the class's own
-attacks. Fill the bar with party AP (the bar is as long as the class's AP),
-then watch a playhead sweep across it. Every hit has a timing box: press **J**
-inside it for a **Perfect** hit.
+attacks. The highlighted move shows on the floor what it would hit. Fill the
+bar with party AP (the bar is as long as the class's AP), then watch a
+playhead sweep across it. Every hit has a timing, and nailing it is a
+**Perfect** (+50% damage, more max AP). Timings are optional: no press is a
+normal hit. There are three kinds:
 
-**Enemy strikes.** When an enemy attacks, a ring shrinks onto the target.
-Press **E** as it turns gold to **Parry**, or **Q** to **Defend** (costs AP;
-the damage you take comes back if you aren't hit again before your next turn).
-Not every class can do both (see below).
+- **Press** (white square boxes): press **J** inside the box. A press at the
+  wrong moment ends the combo.
+- **Hold** (blue, rounded; Archer): press in the first box, hold, let go in
+  the last. A bad let-go only loses the Perfect.
+- **Tap** (pink, diamonds; Mage): tap **J** exactly the shown number of
+  times. One tap too many is a miss.
+
+The Assassin's hits land at random moments in their boxes.
+
+**Enemy strikes.** When an enemy attacks, a ring shrinks onto the target
+(one ring per hit for multi-hit attacks), and the floor areas hide so the
+ring is all you need to watch. Press **E** as it turns gold to **Parry**, or
+**Q** to **Defend** (costs AP; the damage you take comes back if you aren't
+hit again before your next turn). Not every class can do both (see below);
+the Assassin parries automatically while it has Marks out.
 
 ## Classes
 
 | Class | HP | AP | Block / Parry | Attacks | Skills |
 |---|---|---|---|---|---|
 | Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Double Slash, Smash (breaks Defense) | Light Heal, Brace, Shield Bash, Taunt |
-| Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow, Gale Shot | Jump, Riposte, True Sight, Agility |
-| Mage | 100 | 90 | Parry only | Energy Blast, Firebolt, Tempest, Meteor Strike | Arcane Barrier, Concentrate, Teleport |
+| Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow (Hold), Gale Shot (Hold) | Jump, Riposte, True Sight, Agility |
+| Mage | 100 | 90 | Parry only | Energy Blast (Tap 3), Firebolt (Tap 5), Tempest, Meteor Strike (Tap 8) | Arcane Barrier, Concentrate, Teleport |
 | Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Divine Barrier, Holy Light | Healing, Shielding, Haste, Full Cure |
+| Assassin | 170 | 50 | auto-parry with Marks | Stab, Shadowstep, Backstab, Execute (all stronger from behind) | Hook, Death Sentence, Shadow Cloak, Vanish |
+
+**The Assassin** puts **Assassin's Marks** on enemies (Backstab from behind,
+Death Sentence, every 3rd Stab on a Marked enemy) and spends them: Execute
+gets 15 AP cheaper per Mark, auto-parry uses one, Hook and Shadow Cloak use
+a target's Marks. While you steer it, a ring under each enemy shows its front
+(arrow) and back (violet arc); small enemies like Goblins and Kobolds have a
+full violet ring, meaning any side counts as behind.
 
 A class's **AP** is the most it can spend in one turn, on a combo or a skill;
 the AP itself comes from the shared party pool. Effects that last "3 turns"
@@ -129,12 +160,13 @@ have to lose.
 | Abilities | W / S, J / K | Choose a skill, use it / go back |
 | Choosing a target | W / S (Jump: WASD), J / K | Pick who or where, confirm / go back |
 | Combo bar | Space | Begin the combo |
-| Combo playing | J or Enter | Timed hit: press inside the box for a Perfect |
+| Combo playing | J or Enter | Timed hit: press in the box, hold through a Hold bar, or tap the shown count |
 | Enemy strike | E | Parry (when the ring turns gold) |
 | Enemy strike | Q | Defend (costs AP) |
 | Any time | Z / C, or right-drag | Rotate the camera (movement follows it) |
 | Any time | Mouse wheel / V | Zoom / reset the camera |
 | In a fight | Esc | Pause menu: Resume, Restart fight, Quit to title |
+| Before a boss round | W / S, J | Tick 1 to 4 party members, then start |
 | Any time (not in the tutorial) | N / P | Next / previous round |
 | Battle over | R | Restart the round |
 
@@ -154,7 +186,9 @@ them. Esc (pause) and O (open reports) stay fixed.
 scenes/ui/title_menu.tscn         the title screen (main scene): Continue, Boss Rush, Tutorial, Round Select, Controls, Change Keys
 scenes/battle/battle_arena.tscn   the battle scene; loads the current round or the tutorial
 scripts/keybinds.gd               rebindable keys: saving them and filling key names into hints
+scripts/save_game.gd              Boss Rush auto-save (Continue)
 scripts/battle/tutorial.gd        the tutorial's lessons: text, goals, how each one sets up the fight
+scripts/battle/tutorial_panel.gd  the tutorial's note / goal panel
 data/tutorial.tres                the tutorial's fight: training arena, Knight, Training Golem
 scenes/arenas/                    one scene per arena: floor shape, rocks, pit, start spots
 scenes/characters/                one scene per party member and enemy (stats and skills)
@@ -168,8 +202,14 @@ scripts/battle/skills.gd          the skill triangle: names, colors, default are
 scripts/battle/enemy_skill.gd     one enemy skill: shape, damage, wind-up, rules (edited in the Inspector)
 scripts/battle/moves.gd           every class's attacks and skills: AP cost, hits, timing, areas, effects
 scripts/battle/attack_range.gd    an enemy's threat area drawn on the floor
+scripts/battle/positional_ring.gd the front / back ring under enemies (Assassin)
 scripts/battle/timeline_bar.gd    the turn-order bar
-scripts/battle/battle_menu.gd     the command menu and combo bar
+scripts/battle/battle_menu.gd     the command menu and combo bar (Press / Hold / Tap timings)
+scripts/battle/ap_meter.gd        the party AP meter
+scripts/battle/combo_counter.gd   hits, damage and Perfects shown during a combo
+scripts/battle/pause_menu.gd      the Esc pause menu
+scripts/battle/party_picker.gd    choosing the party before boss rounds
+scripts/battle/playtest_log.gd    the play-test report written after every fight
 scripts/battle/party_status.gd    HP bars
 docs/battle-design.md             detailed design notes and open questions
 docs/CHANGELOG.md                 how the system evolved, milestone by milestone
@@ -199,13 +239,15 @@ donut, with its size), damage, wind-up, and the rules "cannot be parried" and
 - [x] Positioning between turns, Wait command (current test setup)
 - [x] Enemy template: design enemy skills in the Inspector without code
 - [x] Boss rush: 12 rounds, arenas with rocks and a pit, multi-enemy fights
-- [x] Classes: Knight, Archer, Mage, Cleric, each with attacks and skills
+- [x] Classes: Knight, Archer, Mage, Cleric, Assassin, each with attacks and skills
+- [x] Timing types: Press, Hold and Release, Tap; positionals and Marks (Assassin)
 - [x] Title screen and a guided tutorial
+- [x] Pause menu, Boss Rush auto-save, rebindable keys, party picker for boss rounds
 - [x] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
 - [x] Play-test reports after every fight (O on the end screen opens them)
 - [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass
-- [ ] Abilities and Items
+- [ ] Items (the menu entry is there, marked "coming later")
 
 See [`docs/battle-design.md`](docs/battle-design.md) for the full design
 reasoning and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the history.
