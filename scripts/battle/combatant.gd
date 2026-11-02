@@ -65,6 +65,11 @@ enum Team { PARTY, ENEMY }
 ## Enemies only: how close it walks to its target, in meters between body
 ## edges. Ranged enemies keep their distance with a bigger number.
 @export var preferred_gap: float = 0.3
+## Enemies only: when none of its aimed skills reaches anyone, it walks
+## close_in_speed times faster to catch up (the Dragon, so kiting it doesn't
+## leave it casting only its everyone-hitting skill).
+@export var closes_in := false
+@export var close_in_speed: float = 2.5
 ## Enemies only: works together with allies of the same kind (the Kobold
 ## Archers). They keep apart, a second one picks a different attack from
 ## what its partner is preparing (one readies Ranged Attack, the other a
@@ -342,7 +347,7 @@ func current_move_speed() -> float:
 func status_text() -> String:
 	var tags: PackedStringArray = []
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST"}
+			"taunt": "TAUNTED", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())

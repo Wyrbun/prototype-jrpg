@@ -3,6 +3,78 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## After a full Boss Rush play-test
+
+- **Finisher hint:** the Arts panel now counts hidden Arts by recipe length
+  ("Hidden: 2 two-move, 1 four-move"), so the four-move finishers are known
+  to exist without giving away their recipe. No finisher was found in the
+  full run.
+- **Fire reaches 4.5 m** (and Fireball with it). The Mage dealt 41 damage in
+  4 turns in Round 10 after Meteor Strike stopped reaching anyone; the Archer
+  still has the longest reach (6 m).
+- **The Dragon closes in:** while none of its aimed skills (Breath, Fire
+  Wave) reaches anyone, it walks 2.5x faster (`closes_in`,
+  `close_in_speed`). Kiting it had left it casting Burning Spike 4 times in
+  a row; bot runs now see Breath, Fire Wave and Burning Spike mixed.
+- Play-test reports: "Where the party's damage came from" is now "Damage
+  taken, by source", and left out when nothing got through.
+
+## Multi-hit strikes: every hit can be Parried
+
+- Fix: a Parry used to end a multi-hit strike, so the later rings never
+  got their chance. Now the chain goes on and each hit is parried in its
+  own window. Every Parry grows max AP; the enemy is staggered once per
+  strike (not once per hit).
+
+## Assassin Arts (every class now has Arts)
+
+- Five secret Arts from Stab, Shadowstep and Backstab: Twin Fangs, Ambush,
+  Phantom Rush, Cutthroat and the finisher **Thousand Cuts** (teleport
+  behind, six cuts, +2 Marks). Execute stays its own move.
+- Multi-hit Assassin Arts keep random timings: one hit per stretch of the
+  block, so the boxes never overlap.
+- New `last_hit` field for changes on a move's last hit only (Triple Shot's
+  piercing arrow uses it too), and `add_marks`.
+
+## Cleric Arts
+
+- Holy Light 30 -> 20 AP (1.4x -> 1.2x) and Divine Barrier 25 -> 20 AP, so
+  the four-move finisher fits the 60 AP bar.
+- Five secret Arts: Smite, Judgment, Blessed Strike (heals allies near the
+  Cleric, more on a Perfect), Sanctuary (big barrier) and the finisher
+  **Divine Judgment** (heals the whole party 15% and shields everyone 10%).
+- Bash chains stay Bash: no Art is Bash + Bash alone.
+- Barriers (and the new Art heals) now come with a move's last hit instead
+  of its first; the same for single-hit moves like Divine Barrier.
+
+## Mage Arts (three elements)
+
+- The Mage's list is now Fire (Tap 4, line), Frost (Tap 3, small circle,
+  **chills**: half walking speed until its next turn) and Gust (circle on
+  self, pushes 3 m).
+- Six secret Arts from mixing them: Fireball, Blizzard (chills a group),
+  Steam Burst (breaks Defense), Firestorm, Tempest (now an Art, pushes 7 m)
+  and the finisher **Meteor Strike** (Fire, Frost, Fire, Gust: 75 AP, 4.8x
+  to every enemy). Meteor is no longer a 90 AP move you can pick from the
+  start, and the Mage loses its "reach anyone" option until it's built.
+
+## Archer Arts
+
+- The Archer's list is now three basics: Shoot, **Power Draw** (Hold, 20 AP)
+  and **Pinning Shot** (15 AP: the enemy can't walk until its next turn).
+- Six Arts, secret until found like the Knight's: Double Shot, Triple Shot,
+  Piercing Arrow (Hold, goes through a whole line), Stunning Arrow and Gale
+  Shot (now built, still Hold), and the finisher **Arrow Rain** (three volleys
+  on a circle that break Defense and pin everyone hit).
+- Numbers nudged from the first plan so every Art beats its parts: Piercing
+  Arrow 3.0, Stunning Arrow 2.6, Arrow Rain 1.4 + 1.4 + 2.2.
+- **Triple Shot reworked:** it was weaker than Double Shot + Shoot (3.1 vs
+  3.5), and three Shoots always merge into it. Now 1.1 + 1.1 + 1.8 = 4.0,
+  and the delayed last arrow ignores Defense.
+- The Arts panel's "next:" hint (all classes) only shows when adding that
+  move really would end the bar on that Art: after a merged Double Shot it
+  no longer suggests another Shoot for Double Shot.
+
 ## Arts stay secret until found (Legend of Legaia style)
 
 - Undiscovered Arts no longer show anywhere: no "???" rows, no recipe hints,

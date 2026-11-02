@@ -163,8 +163,8 @@ func save(result: String, stats: Dictionary, members: Array[Combatant], foes: Ar
 		var s: Dictionary = skills[key]
 		lines.append("| %s | %d | %d | %d | %d | %d | %d | %d |" % [key, s["casts"], s["misses"], s["hits"], s["damage"], s["parried"], s["defended"], s["avoidable"]])
 	lines.append("")
-	lines.append("## Where the party's damage came from")
-	lines.append("")
+	# Damage the party took, by source (left out when nothing got through).
+	var taken_lines: PackedStringArray = []
 	for member in members:
 		var entry: Dictionary = party.get(member.display_name, {"sources": {}})
 		var sources: Dictionary = entry.get("sources", {})
@@ -178,8 +178,12 @@ func save(result: String, stats: Dictionary, members: Array[Combatant], foes: Ar
 				parts.append("%s %d" % [source, sources[source]])
 		if parts.is_empty():
 			continue
-		lines.append("- **%s:** %s" % [member.display_name, ", ".join(parts)])
-	lines.append("")
+		taken_lines.append("- **%s:** %s" % [member.display_name, ", ".join(parts)])
+	if not taken_lines.is_empty():
+		lines.append("## Damage taken, by source")
+		lines.append("")
+		lines.append_array(taken_lines)
+		lines.append("")
 	lines.append("## Counts")
 	lines.append("")
 	var stat_keys := stats.keys()

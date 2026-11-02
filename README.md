@@ -111,7 +111,7 @@ normal hit. There are three kinds:
 
 The Assassin's hits land at random moments in their boxes.
 
-**Arts (Knight, so far).** Basic moves in the right order merge into a named
+**Arts (every class).** Basic moves in the right order merge into a named
 Art on the bar, Legend of Legaia style: Slash + Slash becomes Double Slash,
 Thrust + Thrust + Slash becomes Smash, and four moves make the finisher
 Crusader's Edge. Arts hit harder than their parts, and longer ones add
@@ -135,10 +135,10 @@ the Assassin parries automatically while it has Marks out.
 | Class | HP | AP | Block / Parry | Attacks | Skills |
 |---|---|---|---|---|---|
 | Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Guard Strike (delays its turn), and Arts made from them: Double Slash, Lunge, Shield Rush, Smash, Crusader's Edge | Light Heal, Brace, Shield Bash, Taunt |
-| Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow (Hold), Gale Shot (Hold) | Jump, Riposte, True Sight, Agility |
-| Mage | 100 | 90 | Parry only | Energy Blast (Tap 3), Firebolt (Tap 5), Tempest, Meteor Strike (Tap 8) | Arcane Barrier, Concentrate, Teleport |
-| Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Divine Barrier (Hold: Perfect = bigger barrier), Holy Light | Healing, Shielding, Haste, Full Cure |
-| Assassin | 170 | 50 | auto-parry with Marks | Stab, Shadowstep, Backstab, Execute (all stronger from behind) | Hook, Death Sentence, Shadow Cloak, Vanish |
+| Archer | 150 | 70 | neither | Shoot, Power Draw (Hold), Pinning Shot (can't walk until its next turn), and Arts made from them: Double Shot, Triple Shot, Piercing Arrow, Stunning Arrow, Gale Shot, Arrow Rain | Jump, Riposte, True Sight, Agility |
+| Mage | 100 | 90 | Parry only | Fire (Tap, line), Frost (Tap, chills: half walking speed), Gust (pushes away), and Arts made from them: Fireball, Blizzard, Steam Burst, Firestorm, Tempest, Meteor Strike | Arcane Barrier, Concentrate, Teleport |
+| Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Holy Light (reach 9 m), Divine Barrier (Hold: Perfect = bigger barrier), and Arts made from them: Smite, Judgment, Blessed Strike (heals), Sanctuary, Divine Judgment | Healing, Shielding, Haste, Full Cure |
+| Assassin | 170 | 50 | auto-parry with Marks | Stab, Shadowstep, Backstab, Execute (all stronger from behind), and Arts made from the first three: Twin Fangs, Ambush, Phantom Rush, Cutthroat, Thousand Cuts | Hook, Death Sentence, Shadow Cloak, Vanish |
 
 **The Assassin** puts **Assassin's Marks** on enemies (Backstab from behind,
 Death Sentence, every 3rd Stab on a Marked enemy) and spends them: Execute

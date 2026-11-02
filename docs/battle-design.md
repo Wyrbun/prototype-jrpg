@@ -238,8 +238,8 @@ the triangle):
 - **On marked:** one circle on the party member the enemy locked onto
   (follows while hidden; unavoidable ones keep following). Hits everyone
   inside, so the target should stand alone (Fireball, Rock Spikes).
-- Also per skill: **hits** (multi-hit, a ring per hit, a Parry stops the
-  rest), **launch** (last hit throws targets), **shared damage** (100%,
+- Also per skill: **hits** (multi-hit, a ring per hit, each hit can be
+  Parried), **launch** (last hit throws targets), **shared damage** (100%,
   67%, 50%, 40%... for 1, 2, 3, 4 targets), **trail** (leaves the area
   burning for N of the enemy's turns, damage per second; for circles placed
   on the party, each circle burns where it landed: Burning Spike).
@@ -367,8 +367,9 @@ Stances still work for any enemy that lists them.
 - **Multi-hit strikes** (Goblin and Ogre Attack: 2 hits, Living Armor
   Combo: 3): every hit still to come shows its own fainter ring, closing in
   so it reaches the marker exactly when that hit lands (later hits come
-  every 0.55 x the wind-up). Each hit can be Parried in its own window; a
-  Parry stops the rest. **One Defend guards the whole chain** for a single
+  every 0.55 x the wind-up). Each hit can be Parried in its own window and
+  the chain goes on: every Parry grows max AP, the enemy is staggered once
+  per strike. **One Defend guards the whole chain** for a single
   10 AP. Launch only happens on the last hit; max AP is lost once per chain.
 - Assumption: one Parry/Defend input covers **everyone** caught in the strike.
 - At 0 HP a fighter is **down** (lies on the floor, takes no turns). If the
@@ -455,7 +456,7 @@ down, which can:
 - **Target:** if more than one enemy is in reach, Attack first asks which
   one (W / S cycles, a gold ring marks it, J confirms, K goes back); the
   default is the nearest in the fighter's normal reach, otherwise the nearest
-  a long-range attack can reach (Holy Light, Meteor Strike). With only one
+  a long-range attack can reach (Holy Light). With only one
   choice it goes straight to the combo bar, which shows the target's name. Moves that can't reach the target are greyed out. If the target
   falls mid-combo, the rest goes to the nearest enemy still in reach.
 - The combo plays hit by hit, then **the turn ends**. While it plays, the
@@ -467,12 +468,12 @@ down, which can:
   max AP).
 - **Timing types** (`timing` in `moves.gd`, applied to a move's last hit):
   - **Press** (default): the box above.
-  - **Hold** (Archer: Stunning Arrow, Gale Shot; Cleric: Divine Barrier): press in the first box
+  - **Hold** (Archer: Power Draw and its Hold Arts; Cleric: Divine Barrier): press in the first box
     (ending at `hold_start` of the block), keep holding through the tail,
     let go in the box at the hit = Perfect. Let go early, still holding at
     the hit, or a late start = **partial**: no Perfect, no penalty, normal
     damage. Pressing before the first box is a normal miss.
-  - **Tap** (Mage: Energy Blast 3, Firebolt 5, Meteor Strike 8): tap J
+  - **Tap** (Mage: Fire 4, Frost 3, and the Tap Arts: Steam Burst 5, Fireball and Blizzard 6, Meteor Strike 8): tap J
     `taps` times between `tap_start` and the hit. All taps = Perfect; some
     = partial with +50% x taps/needed damage (no max AP); none = a normal
     skipped hit. Taps before the stretch are ignored; **one tap past the
@@ -492,7 +493,7 @@ down, which can:
   it has (up to max AP). (Was: topped up to 30.)
 - **Attack is greyed out** unless some attack can reach an enemy *and* fits
   the party's AP and the class's bar ("not enough AP" vs "no enemy in
-  reach"); Meteor Strike reaches anyone but costs 90.
+  reach"); Holy Light reaches 9 m but costs 30.
 - **Attack area preview:** the highlighted move or skill draws the area it
   would hit (target circle, self circle or line, the same shapes the hit
   uses) and a ring under each fighter it would hit, fainter for falloff
@@ -538,8 +539,8 @@ timing boxes.
 **Discovery** (`scripts/arts_book.gd`, `user://arts.cfg`): undiscovered Arts
 are a surprise. They don't merge while building and aren't named anywhere;
 the **Arts panel** lists only discovered Arts (recipe, and "next: X" when the
-end of the bar is heading towards one) plus a count of how many are still
-hidden. When a combo plays, the bar is also read with the hidden recipes
+end of the bar is heading towards one) plus how many are still hidden, by
+recipe length ("Hidden: 2 two-move, 1 four-move"), the only hint about them. When a combo plays, the bar is also read with the hidden recipes
 (`_find_hidden_arts`); when the playhead reaches the first block of one, its
 blocks merge with a white flash, the combo pauses (`art_reveal_seconds`,
 1.4 s) on a **NEW ART!** banner with the Art's name, then the Art plays. From
@@ -549,7 +550,7 @@ then on it merges while building and appears in the list. Reports count
 cursor into the Arts panel (known Arts only); Confirm adds the whole recipe
 at once, locked as that Art (`_combo_locks`), so moves before it can't
 steal part of it. Removing one of its moves unlocks it.
-Other classes have no Arts yet (their lists are unchanged).
+Every class has Arts now.
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -562,9 +563,24 @@ Other classes have no Arts yet (their lists are unchanged).
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Shoot | 10 | 1.0 | basic |
-| Triple Shot | 25 | 0.6, 0.6, 0.7 | lands at 20%, 40% and 100% of the block (last one delayed) |
-| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar (Hold; 1.5 s) |
-| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away (Hold; 1.8 s) |
+| Power Draw | 20 | 1.4 | Hold; 1.2 s, the arrow flies at 85% of the block |
+| Pinning Shot | 15 | 0.9 | **pins** the enemy: it can turn but not walk until its own next turn starts (status `pinned`, shown as PINNED) |
+
+**Arts:**
+
+| Recipe | Art | AP | Hits (parts) | Effect |
+|---|---|---|---|---|
+| Shoot + Shoot | Double Shot | 20 | 1.25 x2 = 2.5 (2.0) | basic |
+| Shoot x3 | Triple Shot | 30 | 1.1 + 1.1 + 1.8 = 4.0 (3.0) | last arrow delayed (20%, 40%, 100%) and ignores Defense (`last_hit`) |
+| Shoot + Power Draw | Piercing Arrow | 30 | 3.0 (2.4) | Hold (1.5 s); LINE 1.2 m wide, full damage to every enemy in it, ignores Defense |
+| Pinning Shot + Power Draw | Stunning Arrow | 35 | 2.6 (2.3) | Hold (1.5 s); an enemy preparing an attack loses it and goes back to the start of the bar |
+| Power Draw + Power Draw | Gale Shot | 40 | 3.4 (2.8) | Hold (1.8 s); breaks Defense, pushes 4 m away |
+| Pinning Shot + Shoot + Shoot + Power Draw | Arrow Rain (finisher) | 55 | 1.4 + 1.4 + 2.2 = 5.0 (4.3) | three volleys on a 2.5 m circle at the target; breaks Defense, pins everyone hit |
+
+Shoot chains only get better as they grow: Triple Shot (4.0) beats Double
+Shot + Shoot (3.5), and four Shoots (Triple Shot + Shoot) tie Double Shot x2
+at 5.0. When adding Arts, check them against other Arts made from the same
+moves, not only against their plain parts.
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -576,10 +592,22 @@ Other classes have no Arts yet (their lists are unchanged).
 ### Mage (100 HP, 90 AP, can Parry, cannot Block)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Energy Blast | 15 | 1.0 | everyone within 1.8 m of the target (Tap 3; 0.9 s) |
-| Firebolt | 30 | 1.6 | a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 5; 1.3 s) |
-| Tempest | 45 | 1.2 | everyone within 3.5 m of the Mage, pushed 6 m away |
-| Meteor Strike | 90 | 1.8 | every enemy, anywhere; breaks Defense (Tap 8; 1.8 s) |
+| Fire | 20 | 1.1 | reach 4.5 m (the Mage's own is 3; the Archer keeps the longest, 6); a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 4; 1.1 s) |
+| Frost | 20 | 0.9 | everyone within 1.8 m of the target; **chills** them: half walking speed until their own next turn (status `chilled`) (Tap 3; 1.0 s) |
+| Gust | 15 | 0.8 | everyone within 3 m of the Mage, pushed 3 m away (Press; 0.6 s) |
+
+**Arts:**
+
+| Recipe | Art | AP | Hits (parts) | Effect |
+|---|---|---|---|---|
+| Fire + Fire | Fireball | 40 | 3.0 (2.2) | Tap 6; reach 4.5 m; everyone within 2.2 m of the target |
+| Frost + Frost | Blizzard | 40 | 2.4 (1.8) | Tap 6; everyone within 3 m of the target, all chilled |
+| Fire + Frost | Steam Burst | 40 | 2.8 (2.0) | Tap 5; within 1.8 m of the target, breaks Defense |
+| Gust + Fire | Firestorm | 35 | 2.6 (1.9) | everyone within 3.5 m of the Mage, pushed 4 m |
+| Gust + Gust | Tempest | 30 | 2.0 (1.6) | everyone within 4.5 m of the Mage, pushed 7 m |
+| Fire + Frost + Fire + Gust | Meteor Strike (finisher) | 75 | 4.8 (best other reading: Steam Burst + Fire + Gust = 4.7) | Tap 8; every enemy anywhere, breaks Defense, Smash type |
+
+Order matters: Frost + Fire and Fire + Gust are just two spells.
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -591,8 +619,19 @@ Other classes have no Arts yet (their lists are unchanged).
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Bash | 10 | 0.8 per hit, x0.75 per earlier Bash | the 1st Bash has 1 hit, the 2nd 2 hits, and so on, but each hit is weaker (0.8, 0.6, 0.45, 0.34...): six Bashes deal 7.1x attack in 21 timed hits (was 16.8x); from the 4th Bash the hits land at random moments |
-| Divine Barrier | 25 | 1.0 | Hold (1.5 s): gives allies within 4 m a barrier of 10% of their max HP; a Perfect let-go makes it 15% within 5.5 m (the preview shows both circles) |
-| Holy Light | 30 | 1.4 | reach 9 m; breaks Defense |
+| Holy Light | 20 | 1.2 | reach 9 m; breaks Defense |
+| Divine Barrier | 20 | 1.0 | Hold (1.5 s): gives allies within 4 m a barrier of 10% of their max HP; a Perfect let-go makes it 15% within 5.5 m (the preview shows both circles) |
+
+**Arts** (no Art is Bash + Bash alone, so Bash chains keep growing; support
+effects come with the Art's last hit):
+
+| Recipe | Art | AP | Hits (parts) | Effect |
+|---|---|---|---|---|
+| Bash + Holy Light | Smite | 30 | 2.4 (2.0) | breaks Defense |
+| Holy Light + Holy Light | Judgment | 40 | 3.2 (2.4) | reach 9 m, everyone within 2 m of the target, breaks Defense |
+| Bash + Divine Barrier | Blessed Strike | 30 | 2.2 (1.8) | Hold; heals allies within 4 m by 8% of max HP (Perfect 12%) |
+| Divine Barrier + Divine Barrier | Sanctuary | 40 | 1.5 (2.0) | Hold; barrier 15% within 5 m (Perfect 22% within 6.5 m) |
+| Bash + Bash + Holy Light + Divine Barrier | Divine Judgment (finisher) | 60 | 1.2 + 1.2 + 2.6 = 5.0 (other reading: Bash + Smite + Divine Barrier = 4.2) | breaks Defense; heals the whole party 15% and gives everyone a 10% barrier |
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -620,6 +659,20 @@ its focus enemy (`flanks`).
 | Shadowstep | 20 | teleports behind the target, then hits: 1.5x if it started in front; reaches any Marked enemy at any range, and moves after it on the bar count as in reach |
 | Backstab | 35 | 2x from behind and adds a Mark; misses from the front |
 | Execute | 100 | 4x from behind; -15 AP per Mark on the target (min 25: fits the 50 AP bar from 4 Marks); spends all the target's Marks |
+
+**Arts** (Execute is never part of a recipe, so its Mark discount stays its
+own). Multi-hit Arts keep random timings: the block is cut into one stretch
+per hit and each hit lands somewhere in its own stretch, so boxes never
+overlap; as an opener the first stretch starts at 35%. Marks marked "+N" are
+added by the last hit (`last_hit: {"add_marks": N}`).
+
+| Recipe | Art | AP | Hits | Effect |
+|---|---|---|---|---|
+| Stab + Stab | Twin Fangs | 20 | 1.25 x2 (1.5x each from behind) | both count as Stab hits for growing Marks |
+| Shadowstep + Stab | Ambush | 30 | 2.4 x1.5 = 3.6 | teleports behind first; +1 Mark; reaches Marked enemies anywhere |
+| Shadowstep + Shadowstep | Phantom Rush | 40 | 1.8 x2 | teleports behind; +1 Mark; reaches Marked enemies anywhere |
+| Stab + Backstab | Cutthroat | 45 | 1.3 x2, x2 from behind = 5.2 | a Mark per hit from behind (+2); misses from the front |
+| Stab + Shadowstep + Stab | Thousand Cuts (finisher) | 40 | 0.8 x6, x1.5 from behind = 7.2 (other reading: Stab + Ambush = 5.1) | teleports behind; +2 Marks |
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -650,6 +703,15 @@ its focus enemy (`flanks`).
   for extra time; limited per enemy (`baits_per_turn`, 1-3 by enemy type).
 - **Climbing AP costs:** the 4th+ attack in a turn costing 15, 20, 25...
   These could come back as their own mode or ability.
+
+### Parked for later: Arts inside Arts (Legend of Legaia "tech")
+
+In Legaia, if one Art's inputs fit inside part of another combo, that Art
+still counts there. Today the bar takes one reading (longest known recipe
+first, left to right), so an Art that overlaps a bigger one is swallowed by
+it. Keep this in mind when designing more Arts: recipes that nest inside
+each other could become a deliberate trick (and a whole can of worms for
+how the bar merges, costs and reveals them).
 
 ## Open questions
 

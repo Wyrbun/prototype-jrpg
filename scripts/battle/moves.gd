@@ -19,13 +19,21 @@ class_name Moves
 ##   reach     (optional) its own reach in meters; UNLIMITED = anywhere
 ##   falloff   LINE only: damage share on enemies behind the first one
 ##   knockback meters each enemy hit is pushed away
+##   pin       the enemy hit can't walk until its next turn (Pinning Shot)
+##   heal_allies  share of max HP healed on allies within heal_radius of the
+##             user, once per move (perfect_heal replaces it on a Perfect)
+##   chill     the enemy hit walks at half speed until its next turn (Frost)
+##   last_hit  (optional) fields that change on the last hit only, e.g.
+##             {"effect": PIERCE} (Triple Shot) or {"add_marks": 2}
+##   add_marks Assassin's Marks this hit puts on the target
 ##   stun      cancels the target's turn if it's preparing an attack
 ##   escalating Bash: each new Bash in the chain has one more hit
 ##   escalate_falloff  escalating only: each hit is this much weaker per
 ##             earlier Bash in the chain (0.75: 0.8, then 0.6, 0.45...)
 ##   barrier   share of max HP given as a barrier to allies near the user
 ##             (barrier_radius meters), once per move; perfect_barrier and
-##             perfect_barrier_radius replace them on a Perfect
+##             perfect_barrier_radius replace them on a Perfect (given on
+##             the move's last hit)
 ##   Assassin fields (all optional):
 ##   behind_mult   damage multiplier when the attacker is behind the target
 ##   front_miss    always misses when not behind the target (Backstab)
@@ -80,36 +88,38 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		"archer":
 			list = [
+				# Basic moves: in the right order they become Arts (see arts()).
 				_attack("Shoot", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack"),
-				_attack("Triple Shot", 25, [0.6, 0.6, 0.7], 1.4, 0.14, PURPLE, "3 hits, the last one delayed",
-						{"times": [0.2, 0.4, 1.0]}),
-				# Hold moves: a slower playhead, and the arrow flies at 85% of the
+				# Hold move: a slower playhead, and the arrow flies at 85% of the
 				# block, so there's a breath after letting go before the next move.
-				_attack("Stunning Arrow", 40, [1.0], 1.5, 0.18, GOLD, "Cancels a turn about to strike",
-						{"stun": true, "timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
-				_attack("Gale Shot", 45, [1.6], 1.8, 0.2, TEAL, "Pushes back, breaks Defense",
-						{"effect": Effect.BREAK, "knockback": 4.0, "timing": TimingType.HOLD, "hold_start": 0.3, "times": [0.85]}),
+				_attack("Power Draw", 20, [1.4], 1.2, 0.18, GOLD, "Strong shot (Hold)",
+						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_attack("Pinning Shot", 15, [0.9], 0.6, 0.16, GREEN, "Can't walk until its next turn",
+						{"pin": true}),
 			]
 		"mage":
 			list = [
-				_attack("Energy Blast", 15, [1.0], 0.9, 0.16, BLUE, "Small circle, hits several",
-						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "timing": TimingType.TAP, "taps": 3}),
-				_attack("Firebolt", 30, [1.6], 1.3, 0.16, RED, "Line: 100% first, 75% behind",
-						{"area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "timing": TimingType.TAP, "taps": 5}),
-				_attack("Tempest", 45, [1.2], 1.1, 0.16, TEAL, "Circle on self, pushes far",
-						{"area": Area.SELF_CIRCLE, "area_size": 3.5, "reach": 3.5, "knockback": 6.0}),
-				_attack("Meteor Strike", 90, [1.8], 1.8, 0.2, ORANGE, "Hits all enemies, breaks Defense",
-						{"area": Area.ALL, "reach": UNLIMITED, "effect": Effect.BREAK, "kind": Skills.Kind.SMASH,
-						"timing": TimingType.TAP, "taps": 8}),
+				# Basic moves (three elements): in the right order they become
+				# Arts (see arts()).
+				# Reach 4.5 m (the Mage's own is 3): enough to cast from a safe
+				# spot, still well short of the Archer's 6.
+				_attack("Fire", 20, [1.1], 1.1, 0.16, RED, "Line: 100% first, 75% behind; reach 4.5 m",
+						{"reach": 4.5, "area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "timing": TimingType.TAP, "taps": 4}),
+				_attack("Frost", 20, [0.9], 1.0, 0.16, BLUE, "Small circle; chills (half walking speed)",
+						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "chill": true, "timing": TimingType.TAP, "taps": 3}),
+				_attack("Gust", 15, [0.8], 0.6, 0.16, TEAL, "Circle on self, pushes 3 m",
+						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "knockback": 3.0}),
 			]
 		"cleric":
 			list = [
+				# Basic moves: in the right order they become Arts (see arts()).
+				# No Art is Bash + Bash alone, so Bash chains keep growing.
 				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "+1 hit per Bash in the chain, each weaker", {"escalating": true, "escalate_falloff": 0.75}),
-				_attack("Divine Barrier", 25, [1.0], 1.5, 0.18, GOLD, "Barrier to allies near you; Perfect: bigger",
+				_attack("Holy Light", 20, [1.2], 1.0, 0.16, Color(1.0, 0.95, 0.7), "Long range, breaks Defense",
+						{"effect": Effect.BREAK, "reach": 9.0}),
+				_attack("Divine Barrier", 20, [1.0], 1.5, 0.18, GOLD, "Barrier to allies near you; Perfect: bigger",
 						{"barrier": 0.10, "barrier_radius": 4.0, "perfect_barrier": 0.15, "perfect_barrier_radius": 5.5,
 						"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
-				_attack("Holy Light", 30, [1.4], 1.0, 0.16, Color(1.0, 0.95, 0.7), "Long range, breaks Defense",
-						{"effect": Effect.BREAK, "reach": 9.0}),
 			]
 		"assassin":
 			# Slower playheads than the Knight's: the timings are random, so the
@@ -151,6 +161,75 @@ static func arts(class_id: String) -> Array[Dictionary]:
 				_art(["Slash", "Slash", "Thrust", "Guard Strike"], "Crusader's Edge", [1.4, 1.4, 3.2], 1.8, 0.18, GOLD,
 						"Finisher: breaks Defense, cancels its turn, knocks it back",
 						{"effect": Effect.BREAK, "stun": true, "knockback": 3.0, "times": [0.3, 0.55, 1.0], "finisher": true}),
+			]
+		"archer":
+			list = [
+				_art(["Shoot", "Shoot"], "Double Shot", [1.25, 1.25], 0.9, 0.16, PURPLE, "Two strong arrows"),
+				_art(["Shoot", "Shoot", "Shoot"], "Triple Shot", [1.1, 1.1, 1.8], 1.4, 0.15, PURPLE, "3 arrows; the delayed last one ignores Defense",
+						{"times": [0.2, 0.4, 1.0], "last_hit": {"effect": Effect.PIERCE}}),
+				_art(["Shoot", "Power Draw"], "Piercing Arrow", [3.0], 1.5, 0.18, TEAL, "Hold: flies through every enemy in a line",
+						{"area": Area.LINE, "area_size": 1.2, "falloff": 1.0, "effect": Effect.PIERCE,
+						"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_art(["Pinning Shot", "Power Draw"], "Stunning Arrow", [2.6], 1.5, 0.18, GOLD, "Hold: cancels a turn about to strike",
+						{"stun": true, "timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_art(["Power Draw", "Power Draw"], "Gale Shot", [3.4], 1.8, 0.2, TEAL, "Hold: breaks Defense, pushes back 4 m",
+						{"effect": Effect.BREAK, "knockback": 4.0, "timing": TimingType.HOLD, "hold_start": 0.3, "times": [0.85]}),
+				_art(["Pinning Shot", "Shoot", "Shoot", "Power Draw"], "Arrow Rain", [1.4, 1.4, 2.2], 1.8, 0.18, ORANGE,
+						"Finisher: 3 volleys on a circle; breaks Defense, pins all it hits",
+						{"area": Area.TARGET_CIRCLE, "area_size": 2.5, "effect": Effect.BREAK, "pin": true,
+						"times": [0.3, 0.55, 1.0], "finisher": true}),
+			]
+		"mage":
+			list = [
+				_art(["Fire", "Fire"], "Fireball", [3.0], 1.5, 0.18, ORANGE, "Tap: big blast on a circle at the target",
+						{"reach": 4.5, "area": Area.TARGET_CIRCLE, "area_size": 2.2, "timing": TimingType.TAP, "taps": 6}),
+				_art(["Frost", "Frost"], "Blizzard", [2.4], 1.5, 0.18, BLUE, "Tap: wide circle, chills everyone hit",
+						{"area": Area.TARGET_CIRCLE, "area_size": 3.0, "chill": true, "timing": TimingType.TAP, "taps": 6}),
+				_art(["Fire", "Frost"], "Steam Burst", [2.8], 1.3, 0.18, Color(0.85, 0.85, 0.95), "Tap: small circle, breaks Defense",
+						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "effect": Effect.BREAK, "timing": TimingType.TAP, "taps": 5}),
+				_art(["Gust", "Fire"], "Firestorm", [2.6], 0.9, 0.16, RED, "Fire whirl around you, pushes 4 m",
+						{"area": Area.SELF_CIRCLE, "area_size": 3.5, "reach": 3.5, "knockback": 4.0}),
+				_art(["Gust", "Gust"], "Tempest", [2.0], 0.9, 0.16, TEAL, "Wide circle around you, pushes 7 m",
+						{"area": Area.SELF_CIRCLE, "area_size": 4.5, "reach": 4.5, "knockback": 7.0}),
+				_art(["Fire", "Frost", "Fire", "Gust"], "Meteor Strike", [4.8], 1.9, 0.2, ORANGE,
+						"Finisher: hits every enemy, breaks Defense, Smash type",
+						{"area": Area.ALL, "reach": UNLIMITED, "effect": Effect.BREAK, "kind": Skills.Kind.SMASH,
+						"timing": TimingType.TAP, "taps": 8, "finisher": true}),
+			]
+		"assassin":
+			# Execute is never part of a recipe: its Mark discount stays its own.
+			# Multi-hit Arts keep random timings, one hit per stretch of the block.
+			list = [
+				_art(["Stab", "Stab"], "Twin Fangs", [1.25, 1.25], 1.4, 0.18, BLUE, "2 hits, 1.5x each from behind; both count as Stabs",
+						{"behind_mult": 1.5, "stab_marks": true, "random_timing": true}),
+				_art(["Shadowstep", "Stab"], "Ambush", [2.4], 1.2, 0.18, VIOLET, "Teleport behind, strike 1.5x, +1 Mark",
+						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true,
+						"last_hit": {"add_marks": 1}}),
+				_art(["Shadowstep", "Shadowstep"], "Phantom Rush", [1.8, 1.8], 1.6, 0.18, PURPLE, "Teleport behind, 2 hits, +1 Mark",
+						{"teleport_behind": true, "marked_any_range": true, "random_timing": true, "last_hit": {"add_marks": 1}}),
+				_art(["Stab", "Backstab"], "Cutthroat", [1.3, 1.3], 1.6, 0.18, RED, "2 hits, 2x + a Mark each from behind; misses in front",
+						{"behind_mult": 2.0, "front_miss": true, "marks_from_behind": 1, "random_timing": true}),
+				_art(["Stab", "Shadowstep", "Stab"], "Thousand Cuts", [0.8, 0.8, 0.8, 0.8, 0.8, 0.8], 2.6, 0.16, GOLD,
+						"Finisher: teleport behind, 6 cuts at 1.5x, +2 Marks",
+						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true,
+						"last_hit": {"add_marks": 2}, "finisher": true}),
+			]
+		"cleric":
+			list = [
+				_art(["Bash", "Holy Light"], "Smite", [2.4], 0.9, 0.16, Color(1.0, 0.95, 0.7), "Holy blow up close, breaks Defense",
+						{"effect": Effect.BREAK}),
+				_art(["Holy Light", "Holy Light"], "Judgment", [3.2], 1.3, 0.18, GOLD, "Long range circle, breaks Defense",
+						{"effect": Effect.BREAK, "reach": 9.0, "area": Area.TARGET_CIRCLE, "area_size": 2.0}),
+				_art(["Bash", "Divine Barrier"], "Blessed Strike", [2.2], 1.5, 0.18, GREEN, "Hold: heals allies near you 8% (Perfect 12%)",
+						{"heal_allies": 0.08, "heal_radius": 4.0, "perfect_heal": 0.12,
+						"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_art(["Divine Barrier", "Divine Barrier"], "Sanctuary", [1.5], 1.7, 0.2, Color(0.55, 0.8, 1.0), "Hold: big barrier 15% in 5 m (Perfect 22% in 6.5 m)",
+						{"barrier": 0.15, "barrier_radius": 5.0, "perfect_barrier": 0.22, "perfect_barrier_radius": 6.5,
+						"timing": TimingType.HOLD, "hold_start": 0.3, "times": [0.85]}),
+				_art(["Bash", "Bash", "Holy Light", "Divine Barrier"], "Divine Judgment", [1.2, 1.2, 2.6], 1.8, 0.18, GOLD,
+						"Finisher: breaks Defense; whole party healed 15% + 10% barrier",
+						{"effect": Effect.BREAK, "heal_allies": 0.15, "heal_radius": UNLIMITED,
+						"barrier": 0.10, "barrier_radius": UNLIMITED, "times": [0.3, 0.55, 1.0], "finisher": true}),
 			]
 	return list
 

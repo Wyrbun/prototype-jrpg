@@ -59,6 +59,7 @@ speed = 20.0
 cast_zone_speed = 0.5
 interrupt_resist = 3
 move_speed = 2.2
+closes_in = true
 turn_speed_degrees = 70.0
 body_radius = 1.2
 skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])

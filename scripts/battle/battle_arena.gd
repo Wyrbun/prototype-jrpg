@@ -865,8 +865,13 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		wants_closer = true
 	enemy.face_toward(heading, delta)
 	var facing_target := enemy.flat_forward().angle_to(heading) < deg_to_rad(45.0)
+	if enemy.statuses.has("pinned"):
+		return  # Pinning Shot: it can turn, but not walk
 	if wants_closer and facing_target:
-		enemy.global_position += enemy.flat_forward() * enemy.move_speed * delta
+		var walk := enemy.move_speed * (0.5 if enemy.statuses.has("chilled") else 1.0)  # Frost
+		if enemy.closes_in and not _reaches_anyone(enemy):
+			walk *= enemy.close_in_speed  # the Dragon: nothing reaches, so it hurries in
+		enemy.global_position += enemy.flat_forward() * walk * delta
 		_keep_in_arena(enemy)
 
 
@@ -1255,6 +1260,7 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.set_meta("aim_locked", false)
 	enemy.set_meta("forced_targets", [])
 	enemy.set_meta("ap_penalty_done", false)
+	enemy.set_meta("staggered_chain", false)
 	enemy.loaded_skill = Skills.NONE
 	enemy.skill_revealed = false
 	enemy.stance = Skills.NONE
@@ -2010,6 +2016,19 @@ func _skill_reaches(enemy: Combatant, skill: EnemySkill, member: Combatant) -> b
 	return d <= reach + member.body_radius * 0.5
 
 
+## True if one of the enemy's aimed skills (not the ones placed on party
+## members) can reach someone from where it stands.
+func _reaches_anyone(enemy: Combatant) -> bool:
+	for skill in enemy.skills:
+		if skill.special != EnemySkill.Special.NONE or skill.kind == Skills.Kind.DEFENSE \
+				or skill.kind == Skills.Kind.COUNTER:
+			continue
+		for member in _standing(party):
+			if _skill_reaches(enemy, skill, member):
+				return true
+	return false
+
+
 ## Pairs of party members standing within `distance` of each other.
 func _close_pairs(members: Array[Combatant], distance: float) -> int:
 	var pairs := 0
@@ -2241,9 +2260,13 @@ func _resolve_strike() -> void:
 		_popup(target, "LAUNCHED", Color(1.0, 0.6, 0.3))
 
 	if parried:
+		# Every hit of a multi-hit strike can be parried, and each Parry grows
+		# max AP; the enemy is staggered once per strike.
 		_count("parries")
-		s.enemy.timeline_penalty += stagger_push
-		lines.append("%s is staggered" % s.enemy.display_name)
+		if not s.enemy.get_meta("staggered_chain", false):
+			s.enemy.set_meta("staggered_chain", true)
+			s.enemy.timeline_penalty += stagger_push
+			lines.append("%s is staggered" % s.enemy.display_name)
 		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
 	if parry_missed:
 		ap = 0.0
@@ -2265,8 +2288,9 @@ func _resolve_strike() -> void:
 		if target.is_down:
 			lines.append("%s is down!" % target.display_name)
 
-	# Multi-hit skills: the next hit follows quickly, unless it was parried.
-	if s.hits_left > 0 and not parried and not s.enemy.is_down:
+	# Multi-hit skills: the next hit follows quickly (a Parry doesn't stop
+	# it: each hit has its own ring to Parry).
+	if s.hits_left > 0 and not s.enemy.is_down:
 		var next_mods := {}
 		for target in s.targets:
 			if not target.is_down:
@@ -2453,7 +2477,7 @@ func _open_commands() -> void:
 	var note := ""
 	if not can_attack:
 		# Something in reach but every attack that reaches it costs too much
-		# (Meteor Strike reaches anyone, but costs 90 AP)?
+		# (Holy Light reaches far, but costs 30 AP)?
 		var reachable := false
 		for enemy in _standing(enemies):
 			for move in Moves.attacks(controlled.class_id):
@@ -2837,23 +2861,48 @@ func _update_arts_list() -> void:
 	var names: Array = battle_menu.combo.map(func(k): return _moves[k]["name"])
 	var all := Moves.arts(controlled.class_id)
 	var hidden := 0
+	var hidden_sizes := {}  # recipe length -> how many hidden (the panel's only hint)
 	for index in all.size():
 		var art: Dictionary = all[index]
 		if not ArtsBook.known(controlled.class_id, art["name"]):
 			hidden += 1  # undiscovered Arts stay a surprise: no name, no recipe, no hint
+			var length := (art["recipe"] as Array).size()
+			hidden_sizes[length] = int(hidden_sizes.get(length, 0)) + 1
 			continue
 		var recipe: Array = art["recipe"]
-		# Heading towards it: the last few moves are the start of its recipe.
+		# Heading towards it: the last few moves are the start of its recipe,
+		# and adding the next one really would end the bar on this Art (an
+		# earlier merge can swallow the moves it needs).
 		var next := ""
 		for start in range(maxi(names.size() - recipe.size() + 1, 0), names.size()):
 			var tail: Array = names.slice(start)
-			if tail.size() < recipe.size() and recipe.slice(0, tail.size()) == tail:
+			if tail.size() < recipe.size() and recipe.slice(0, tail.size()) == tail \
+					and _would_finish_art(recipe[tail.size()], art["name"]):
 				next = recipe[tail.size()]
 				break
 		rows.append({"name": art["name"], "recipe": " + ".join(recipe), "known": true, "index": index,
 				"next": next, "color": art["color"], "finisher": art.get("finisher", false)})
 	battle_menu.arts = rows
 	battle_menu.arts_hidden = hidden
+	battle_menu.arts_hidden_sizes = hidden_sizes
+
+
+## True if adding this basic move to the bar would make the bar end on this
+## Art (read the same way the bar merges known Arts).
+func _would_finish_art(move_name: String, art_name: String) -> bool:
+	var move_index := -1
+	for i in _moves.size():
+		if _moves[i]["name"] == move_name:
+			move_index = i
+	if move_index < 0:
+		return false
+	battle_menu.combo.append(move_index)
+	var groups := _parse_combo(false)
+	battle_menu.combo.pop_back()
+	if groups.is_empty():
+		return false
+	var last: Dictionary = groups[-1]
+	return last["move"]["name"] == art_name and int(last["length"]) > 1
 
 
 ## After a Shadowstep on the bar, everything after it reaches the target
@@ -2910,6 +2959,18 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 		# never a surprise.
 		var earliest := maxf(float(move["window"]) / duration + 0.05, 0.25)
 		times = [randf_range(0.5 if _plan.is_empty() else earliest, 0.95)]
+	elif move.get("random_timing", false):
+		# Multi-hit Assassin Arts: the block is cut into one stretch per hit,
+		# and each hit lands somewhere in its own stretch (boxes never overlap).
+		# An opener starts a little later, so its first hit isn't a surprise.
+		var box := float(move["window"]) / duration
+		var start := maxf(box + 0.05, 0.35 if _plan.is_empty() else 0.2)
+		var stretch := (0.95 - start) / hits.size()
+		times = []
+		for i in hits.size():
+			var lo := start + stretch * i + box * 0.5
+			var hi := maxf(start + stretch * (i + 1) - box * 0.5, lo)
+			times.append(randf_range(lo, hi))
 	if times.is_empty():
 		for i in hits.size():
 			times.append(float(i + 1) / hits.size())
@@ -3022,7 +3083,12 @@ func _update_combo(delta: float) -> void:
 			multiplier *= 1.0 + perfect_damage_bonus
 		_exec_attacker.play_lunge()
 		_exec_hit_perfect = perfect  # Divine Barrier grows on a Perfect
-		var keep_going := _land_hit(_exec_attacker, entry["move"], multiplier, _exec_hits_done == 0)
+		var hit_move: Dictionary = entry["move"]
+		if hit_move.has("last_hit") and _exec_hits_done == hits.size() - 1:
+			# Triple Shot's piercing last arrow, the Marks an Assassin Art leaves.
+			hit_move = hit_move.duplicate()
+			hit_move.merge(hit_move["last_hit"], true)
+		var keep_going := _land_hit(_exec_attacker, hit_move, multiplier, _exec_hits_done == 0, _exec_hits_done == hits.size() - 1)
 		_exec_hit_perfect = false
 		if combo_counter:
 			combo_counter.hit(perfect)
@@ -3229,11 +3295,14 @@ func _stop_combo() -> void:
 ## One hit of a move lands: works out everyone it reaches (by the move's
 ## area), applies it to each, and handles barriers. Returns false if the
 ## combo should stop (countered, attacker down, nobody left to hit).
-func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_hit: bool) -> bool:
+func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_hit: bool, last_hit: bool = true) -> bool:
 	if attacker.is_down:
 		return false
-	if first_hit and float(move["barrier"]) > 0.0:
+	# Support effects come with the last hit (a Hold's Perfect is known by then).
+	if last_hit and float(move["barrier"]) > 0.0:
 		_give_barrier(attacker, move)
+	if last_hit and float(move.get("heal_allies", 0.0)) > 0.0:
+		_art_heal(attacker, move)
 	if first_hit and move.get("teleport_behind", false) and _combo_target != null and not _combo_target.is_down:
 		# Shadowstep: 1.5x if it started in front, then appear behind.
 		if _combo_target.no_positionals or not _combo_target.is_behind(attacker.global_position):
@@ -3353,7 +3422,7 @@ func _update_move_preview() -> void:
 			_preview_area.look_at(Vector3(aim.x, 0.05, aim.z), Vector3.UP)
 		_preview_area.show_hazard(shape_def, color if usable else Color(0.6, 0.6, 0.65))
 		_preview_area.set_alert(usable)  # brighter, so it reads through the menu
-	if float(move["barrier_radius"]) > 0.0:
+	if float(move["barrier_radius"]) > 0.0 and float(move["barrier_radius"]) < Moves.UNLIMITED:
 		var barrier_def := EnemySkill.make("", Skills.Kind.ATTACK, EnemySkill.Shape.CIRCLE, float(move["barrier_radius"]), 360.0, 0, 0.0, 0)
 		_preview_barrier = AttackRange.new()
 		add_child(_preview_barrier)
@@ -3485,6 +3554,21 @@ func _give_barrier(user: Combatant, move: Dictionary) -> void:
 				_popup(ally, "+%d BARRIER" % gained, Color(0.55, 0.8, 1.0))
 
 
+## Blessed Strike / Divine Judgment: heals allies near the user (or the whole
+## party), more on a Perfect.
+func _art_heal(user: Combatant, move: Dictionary) -> void:
+	var share := float(move["heal_allies"])
+	if _exec_hit_perfect and move.has("perfect_heal"):
+		share = float(move["perfect_heal"])
+	var radius := float(move.get("heal_radius", Moves.UNLIMITED))
+	for ally in _standing(party):
+		if ally.global_position.distance_to(user.global_position) <= radius:
+			var healed := ally.heal(ceili(ally.max_hp * share))
+			if healed > 0:
+				_popup(ally, "+%d" % healed, Color(0.5, 1.0, 0.55))
+				_count("art_healing")
+
+
 ## Assassin's Marks from one hit: Backstab from behind adds one, every 3rd
 ## Stab on a Marked enemy adds one, Execute uses them all up.
 func _apply_mark_effects(attacker: Combatant, target: Combatant, move: Dictionary, behind: bool) -> void:
@@ -3497,6 +3581,8 @@ func _apply_mark_effects(attacker: Combatant, target: Combatant, move: Dictionar
 		target.set_meta("marked_stabs", stabs)
 		if stabs % 3 == 0:
 			_add_marks(target, 1)
+	if int(move.get("add_marks", 0)) > 0:
+		_add_marks(target, int(move["add_marks"]))  # Ambush, Phantom Rush, Thousand Cuts
 	if move.get("consume_marks", false) and target.marks > 0:
 		_count("executes")
 		target.set_marks(0)
@@ -3620,6 +3706,18 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		note = "Stunned! Turn cancelled"
 	if float(move["knockback"]) > 0.0 and not target.is_down:
 		_knock_away(target, attacker.global_position, move["knockback"])
+	if move.get("pin", false) and not target.is_down and target.team == Combatant.Team.ENEMY:
+		# Pinning Shot / Arrow Rain: rooted until its own next turn starts.
+		if not target.statuses.has("pinned"):
+			_popup(target, "PINNED", Color(0.55, 0.9, 0.5))
+		target.add_status("pinned", 1, target)
+		_count("pins")
+	if move.get("chill", false) and not target.is_down and target.team == Combatant.Team.ENEMY:
+		# Frost / Blizzard: half walking speed until its own next turn starts.
+		if not target.statuses.has("chilled"):
+			_popup(target, "CHILLED", Color(0.6, 0.85, 1.0))
+		target.add_status("chilled", 1, target)
+		_count("chills")
 	if float(move.get("delay", 0.0)) > 0.0 and not target.is_down:
 		# Guard Strike / Shield Rush: its turn comes later (out of the casting
 		# zone means it loses what it was preparing).
@@ -3668,8 +3766,8 @@ func _can_target(fighter: Combatant, enemy: Combatant, move: Dictionary) -> bool
 
 
 ## The enemy the controlled fighter's attacks go after: the nearest one in
-## its normal reach, or else the nearest one a long-range attack (Holy Light,
-## Meteor Strike) can reach.
+## its normal reach, or else the nearest one a long-range attack (Holy Light)
+## can reach.
 ## check_cost: only count attacks the party can pay for right now (off
 ## mid-combo, when the moves are already paid).
 func _attack_target(check_cost: bool = true) -> Combatant:

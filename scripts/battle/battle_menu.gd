@@ -76,6 +76,8 @@ var arts_focus := false
 var arts_index := 0
 ## How many Arts are still undiscovered (counted, never named).
 var arts_hidden := 0
+## Hidden Arts by recipe length ({2: 3, 4: 1}): the only hint about them.
+var arts_hidden_sizes := {}
 ## While a hidden Art reveals itself mid-combo: its name and the banner's
 ## progress (0 -> 1).
 var reveal_name := ""
@@ -231,9 +233,21 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 			var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 			_text(font, Vector2(row.end.x - hint_w - 6, row.position.y + 14), hint, 12, GOLD)
 	if arts_hidden > 0:
-		var line := ("%d more still hidden" % arts_hidden) if not arts.is_empty() \
-				else ("%d Arts to discover: try new move orders" % arts_hidden)
+		var line := ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
 		_text(font, Vector2(panel.position.x + 12, panel.end.y - 9), line, 12, Color(0.6, 0.62, 0.7))
+
+
+## "2 two-move, 1 four-move": how many hidden Arts of each length.
+func _hidden_by_length() -> String:
+	if arts_hidden_sizes.is_empty():
+		return "%d Arts" % arts_hidden
+	var words := {2: "two", 3: "three", 4: "four", 5: "five"}
+	var lengths := arts_hidden_sizes.keys()
+	lengths.sort()
+	var parts: PackedStringArray = []
+	for length in lengths:
+		parts.append("%d %s-move" % [arts_hidden_sizes[length], words.get(length, str(length))])
+	return ", ".join(parts)
 
 
 func _draw_combo_bar(font: Font) -> void:
