@@ -473,7 +473,10 @@ down, which can:
   - **Tap** (Mage: Energy Blast 3, Firebolt 5, Meteor Strike 8): tap J
     `taps` times between `tap_start` and the hit. All taps = Perfect; some
     = partial with +50% x taps/needed damage (no max AP); none = a normal
-    skipped hit. Taps outside the stretch are ignored, so Tap never misses.
+    skipped hit. Taps before the stretch are ignored; **one tap past the
+    count is a miss** (chain ends, AP 0, max AP resets).
+  - Hold moves land at 85% of their block (`times`), leaving a gap after
+    the let-go before the next move.
   - Look: Press = white square boxes; Hold = blue (`HOLD_COLOR`) rounded
     pills with ▼ / ▲ and a tail that lights up while held; Tap = pink
     (`TAP_COLOR`) dashed stretch with one diamond per tap. Gold still means
@@ -522,8 +525,8 @@ attack_power x the hit's multiplier.
 |---|---|---|---|
 | Shoot | 10 | 1.0 | basic |
 | Triple Shot | 25 | 0.6, 0.6, 0.7 | lands at 20%, 40% and 100% of the block (last one delayed) |
-| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar (Hold) |
-| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away (Hold; 1.2 s) |
+| Stunning Arrow | 40 | 1.0 | an enemy preparing an attack loses it and goes back to the start of the bar (Hold; 1.5 s) |
+| Gale Shot | 45 | 1.6 | breaks Defense, pushes the enemy 4 m away (Hold; 1.8 s) |
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -568,7 +571,9 @@ when it falls. While any Mark is out, a strike that can be parried is
 **auto-parried** (a normal Parry: staggers, max AP up), spending one Mark
 (from the attacker if it has one, else the enemy with the most). All its
 attacks have **random timings**; the first move of a combo always lands
-between 50% and 95% of its block. When not steered it walks round behind
+between 50% and 95% of its block. Its moves play slower than the Knight's
+(Stab 0.8 s, Shadowstep 1.1 s, Backstab 1.2 s, Execute 1.6 s) so the boxes
+are easier to spot. When not steered it walks round behind
 its focus enemy (`flanks`).
 
 | Attack | AP | Notes |

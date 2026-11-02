@@ -547,6 +547,7 @@ func _process(delta: float) -> void:
 	_update_move_preview()
 	_update_timeline_targets()
 	_update_behind_cones()
+	_fade_areas_during_strike()
 	_animate_telegraphs(delta)
 	# Checked again: the strike above may have just knocked out the last fighter.
 	if not _game_over:
@@ -2392,7 +2393,8 @@ func _check_enemies() -> void:
 	if _game_over:
 		return
 	for enemy in enemies:
-		if enemy.is_down and enemy.attack_range and enemy.attack_range.visible:
+		if enemy.is_down and enemy.attack_range and (enemy.attack_range.visible or enemy.attack_range.has_meta("faded_for_strike")):
+			enemy.attack_range.remove_meta("faded_for_strike")
 			_finish_enemy_skill(enemy, false)
 			enemy.attack_range.visible = false
 			for hazard in _hazards.duplicate():
@@ -2778,7 +2780,7 @@ func _timing_prompt() -> String:
 		if _special_hit(entry, _exec_hits_done):
 			if int(entry["timing"]) == Moves.TimingType.HOLD:
 				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
-			return Keybinds.fill("TAP {confirm} %d times before the hit: Perfect!  (taps can't miss)" % int(entry["taps"]))
+			return Keybinds.fill("TAP {confirm} exactly %d times before the hit: Perfect!  (a tap too many is a miss)" % int(entry["taps"]))
 	return Keybinds.fill("{confirm} when the playhead hits the box: Perfect!  (a wrong press ends the chain)")
 
 
@@ -2852,11 +2854,16 @@ func _judge_timing() -> void:
 	var hit := _exec_hits_done
 	if hit < _exec_timings.size() and _special_hit(entry, hit):
 		if int(entry["timing"]) == Moves.TimingType.TAP:
-			if _exec_time >= duration * float(entry["tap_start"]) and _exec_taps < int(entry["taps"]):
-				_exec_taps += 1
-				battle_menu.exec_taps = _exec_taps
-				if _exec_taps >= int(entry["taps"]):
-					_mark_timing(hit, Timing.PERFECT)
+			if _exec_time < duration * float(entry["tap_start"]):
+				return  # before the tap stretch: ignored
+			if _exec_taps >= int(entry["taps"]):
+				# One tap too many: a miss, like any wrong press.
+				_timing_miss(hit, "Too many taps!")
+				return
+			_exec_taps += 1
+			battle_menu.exec_taps = _exec_taps
+			if _exec_taps >= int(entry["taps"]):
+				_mark_timing(hit, Timing.PERFECT)
 			return
 		# Hold: the press must start in the first box.
 		if _exec_timings[hit] != Timing.NONE or _exec_holding:
@@ -2879,13 +2886,18 @@ func _judge_timing() -> void:
 		_exec_timings[hit] = Timing.PERFECT
 		battle_menu.slot_results[_exec_slot][hit] = Timing.PERFECT
 	else:
-		_exec_timings[hit] = Timing.MISS
-		battle_menu.slot_results[_exec_slot][hit] = Timing.MISS
-		_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
-		var reset_note := _reset_max_ap()
-		ap = 0.0  # a missed timing costs all the party's AP
-		_flash("Missed the timing! The chain ends, AP lost. " + reset_note)
-		_stop_combo()
+		_timing_miss(hit, "Missed the timing!")
+
+
+## A missed timing (a wrong press, or a tap too many): the chain ends, the
+## party loses all its AP and max AP resets.
+func _timing_miss(hit: int, why: String) -> void:
+	_mark_timing(hit, Timing.MISS)
+	_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
+	var reset_note := _reset_max_ap()
+	ap = 0.0  # a missed timing costs all the party's AP
+	_flash("%s The chain ends, AP lost. %s" % [why, reset_note])
+	_stop_combo()
 
 
 ## The highest max AP can grow to: 100 per party member, plus 100.
@@ -3089,6 +3101,31 @@ func _add_preview_mark(fighter: Combatant, color: Color) -> void:
 	mark.position.y = 0.08
 	_preview_marks.append(mark)
 	_preview_hits.append(fighter)
+
+
+## While a strike you can react to plays (its rings closing in for a Parry
+## or Defend), enemy areas and the party's gold reach rings fade out so the
+## strike's rings are all you need to read.
+## They come back the moment it's over. Unavoidable strikes keep them.
+func _fade_areas_during_strike() -> void:
+	# (visible, not GeometryInstance3D.transparency: the Compatibility
+	# renderer used by some exports ignores transparency.)
+	var hide := _strike != null and not _strike.def.is_mechanic()
+	for member in party:
+		member.hide_reach = hide
+	for enemy in enemies:
+		var areas: Array = enemy.extra_areas.duplicate()
+		if enemy.attack_range and not enemy.is_down:
+			areas.append(enemy.attack_range)
+		for area in areas:
+			if not is_instance_valid(area):
+				continue
+			if hide and area.visible:
+				area.visible = false
+				area.set_meta("faded_for_strike", true)
+			elif not hide and area.has_meta("faded_for_strike"):
+				area.remove_meta("faded_for_strike")
+				area.visible = not (area == enemy.attack_range and enemy.is_down)
 
 
 ## Shows each enemy's positional ring (see PositionalRing) while a fighter

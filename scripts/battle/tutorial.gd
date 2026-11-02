@@ -169,7 +169,7 @@ func _build_steps() -> void:
 			knight.hold = true
 			_golem_rest())
 	_goal(1, "Moving",
-		"Between turns you steer one party member in real time. Enemies move at the same time, so where you stand matters.\n\n{cam_l} / {cam_r} or a right-drag turns the camera, the mouse wheel zooms, and {cam_reset} resets it. {up} always walks away from the camera.",
+		"Between turns you steer one party member in real time. The fight doesn't wait for you: enemies walk and the timeline keeps running whether you move or stand still, so where you stand matters.\n\n{cam_l} / {cam_r} or a right-drag turns the camera, the mouse wheel zooms, and {cam_reset} resets it. {up} always walks away from the camera.",
 		"Walk around with {move}",
 		func(): return _walked > 5.0,
 		func(): _walked = 0.0)
@@ -277,7 +277,7 @@ func _build_steps() -> void:
 		func(): return _stat("skills") >= 1,
 		func(): _top_up_ap(80.0))
 	_note(7, "The Mage and the Cleric",
-		"Two more join.\n\nThe Mage's attacks hit areas: Energy Blast catches enemies near the target, Firebolt runs through a line, and Meteor Strike hits every enemy. These are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage, all of them make a Perfect, and taps can never miss. Its Concentrate skill doubles AP recharge for a while (the AP meter shows it).\n\nThe Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit, though each hit is weaker.",
+		"Two more join.\n\nThe Mage's attacks hit areas: Energy Blast catches enemies near the target, Firebolt runs through a line, and Meteor Strike hits every enemy. These are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press. Its Concentrate skill doubles AP recharge for a while (the AP meter shows it).\n\nThe Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit, though each hit is weaker.",
 		func():
 			battle.add_party_member(MAGE)
 			battle.add_party_member(CLERIC))
@@ -316,6 +316,15 @@ func _build_steps() -> void:
 			golem.add_status("taunt", 99, knight)  # it tracks the Knight, not the nearest ally
 			_golem_show("Long Strike"))
 	steps[-1]["tick"] = func():
+		# Keep the Golem on the Knight: using Taunt yourself here would
+		# otherwise swap in a 3-turn Taunt, and when it ran out the Golem
+		# turned to someone else and the lesson could never finish.
+		if not golem.statuses.has("taunt") or golem.statuses["taunt"]["caster"] != knight \
+				or int(golem.statuses["taunt"]["turns"]) < 50:
+			golem.add_status("taunt", 99, knight)
+		# If its cast was lost (it was stunned or hit out of it), show it again.
+		if golem.loaded_def == null and not golem.hold and golem.timeline_pos < battle.cast_zone_start - 2.0:
+			_golem_show("Long Strike")
 		# Once the Knight is in the line but hidden, let the Golem strike.
 		if golem.hold and golem.skill_revealed and golem.attack_range.contains(knight.global_position, knight.body_radius) \
 				and not battle._can_see(golem, knight):

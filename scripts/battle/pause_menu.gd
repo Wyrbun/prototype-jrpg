@@ -84,7 +84,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		pass  # swallow other keys while paused
 	else:
 		handled = false
-	if handled:
+	# Choosing Quit / Restart / Start can switch scenes: by then this menu
+	# has left the tree and has no viewport.
+	if handled and is_inside_tree():
 		get_viewport().set_input_as_handled()
 
 

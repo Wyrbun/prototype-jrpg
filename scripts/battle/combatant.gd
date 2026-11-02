@@ -141,6 +141,8 @@ var _skill_label: Label3D = null
 var _marks_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
 var _reach_ring: MeshInstance3D = null
+## Party only: hides the reach ring (while a strike's rings close in).
+var hide_reach := false
 var _reach_material: StandardMaterial3D = null
 var _body_rest_position := Vector3.ZERO
 var _lunge_tween: Tween = null
@@ -216,7 +218,7 @@ func _build_reach_ring() -> void:
 func update_reach_ring(is_controlled: bool, enemy_in_reach: bool) -> void:
 	if _reach_ring == null:
 		return
-	_reach_ring.visible = not is_down
+	_reach_ring.visible = not is_down and not hide_reach
 	var grow := (body_radius + reach()) / (body_radius + attack_reach)
 	_reach_ring.scale = Vector3(grow, 1.0, grow)
 	var alpha := 0.85 if is_controlled else 0.25

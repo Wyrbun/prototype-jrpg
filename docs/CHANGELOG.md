@@ -3,6 +3,35 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Fixes and timing tweaks
+
+- **Quit to title no longer crashes** (pause menu, and Esc on the party
+  picker): the menu marked the key as handled after the scene had already
+  changed, when it no longer had a viewport.
+- **Tutorial lesson 9 (Rocks) can't get stuck any more.** Using the Knight's
+  own Taunt there replaced the lesson's Taunt with a 3-turn one; when it ran
+  out, the Golem aimed its Long Strike at someone else and the goal could
+  never be met. The lesson now keeps the Golem on the Knight, and re-shows
+  Long Strike if the cast is lost.
+- **Enemy areas and the party's gold reach rings hide while a strike's
+  rings close in** (Parry / Defend moments), so the strike's rings are the
+  only thing to read; they come back right after. Unavoidable strikes keep
+  their areas.
+- **Tap moves: one tap too many is a miss** (chain ends, AP to 0, max AP
+  resets), like a wrong press. Taps before the stretch are still ignored.
+- **Slower Assassin combos:** Stab 0.8 s (was 0.55), Shadowstep 1.1 s
+  (0.8), Backstab 1.2 s (0.9), Execute 1.6 s (1.2), with slightly wider
+  boxes, since its random timings need a moment to spot.
+- **Slower Hold moves:** Stunning Arrow 1.5 s (was 0.9), Gale Shot 1.8 s
+  (was 1.2), slightly wider boxes, and the arrow flies at 85% of the block,
+  so there's a moment after letting go before the next move's timing.
+
+## Tutorial wording: the fight doesn't wait
+
+- Lesson 1 said enemies "move at the same time", which could read as if
+  they only move when you do. It now says the fight keeps going (enemies
+  walk, the timeline runs) whether you move or stand still.
+
 ## Positional rings (after Final Fantasy XIV)
 
 - The "behind" wedge became a **ring under each enemy** while you steer the

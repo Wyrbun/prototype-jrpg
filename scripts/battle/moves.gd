@@ -81,10 +81,12 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 				_attack("Shoot", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack"),
 				_attack("Triple Shot", 25, [0.6, 0.6, 0.7], 1.4, 0.14, PURPLE, "3 hits, the last one delayed",
 						{"times": [0.2, 0.4, 1.0]}),
-				_attack("Stunning Arrow", 40, [1.0], 0.9, 0.15, GOLD, "Cancels a turn about to strike",
-						{"stun": true, "timing": TimingType.HOLD, "hold_start": 0.45}),
-				_attack("Gale Shot", 45, [1.6], 1.2, 0.16, TEAL, "Pushes back, breaks Defense",
-						{"effect": Effect.BREAK, "knockback": 4.0, "timing": TimingType.HOLD, "hold_start": 0.3}),
+				# Hold moves: a slower playhead, and the arrow flies at 85% of the
+				# block, so there's a breath after letting go before the next move.
+				_attack("Stunning Arrow", 40, [1.0], 1.5, 0.18, GOLD, "Cancels a turn about to strike",
+						{"stun": true, "timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_attack("Gale Shot", 45, [1.6], 1.8, 0.2, TEAL, "Pushes back, breaks Defense",
+						{"effect": Effect.BREAK, "knockback": 4.0, "timing": TimingType.HOLD, "hold_start": 0.3, "times": [0.85]}),
 			]
 		"mage":
 			list = [
@@ -107,14 +109,16 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 						{"effect": Effect.BREAK, "reach": 9.0}),
 			]
 		"assassin":
+			# Slower playheads than the Knight's: the timings are random, so the
+			# eye needs a moment to find each box.
 			list = [
-				_attack("Stab", 10, [1.0], 0.55, 0.16, BLUE, "1.5x from behind; 3 Stabs grow a Mark",
+				_attack("Stab", 10, [1.0], 0.8, 0.18, BLUE, "1.5x from behind; 3 Stabs grow a Mark",
 						{"behind_mult": 1.5, "stab_marks": true, "random_timing": true}),
-				_attack("Shadowstep", 20, [1.0], 0.8, 0.16, VIOLET, "Teleport behind; 1.5x if from the front",
+				_attack("Shadowstep", 20, [1.0], 1.1, 0.18, VIOLET, "Teleport behind; 1.5x if from the front",
 						{"teleport_behind": true, "front_mult": 1.5, "marked_any_range": true, "random_timing": true}),
-				_attack("Backstab", 35, [1.0], 0.9, 0.16, RED, "2x + a Mark from behind; misses in front",
+				_attack("Backstab", 35, [1.0], 1.2, 0.18, RED, "2x + a Mark from behind; misses in front",
 						{"behind_mult": 2.0, "front_miss": true, "marks_from_behind": 1, "random_timing": true}),
-				_attack("Execute", 100, [1.0], 1.2, 0.18, GOLD, "4x from behind; -15 AP per Mark on it",
+				_attack("Execute", 100, [1.0], 1.6, 0.2, GOLD, "4x from behind; -15 AP per Mark on it",
 						{"behind_mult": 4.0, "mark_discount": 15, "min_cost": 25, "consume_marks": true, "random_timing": true}),
 			]
 		_:
