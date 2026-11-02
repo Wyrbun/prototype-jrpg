@@ -1,6 +1,7 @@
 extends Control
 ## The title screen: Continue (when a Boss Rush save exists), Boss Rush,
-## Tutorial, Round Select, Controls, Change Keys, Quit.
+## Tutorial, Round Select, Controls, Change Keys, Forget Arts (once any Art
+## has been discovered), Quit.
 ##
 ## Keyboard: W / S (or arrows) to choose, J (or Enter) to select, K (or Esc)
 ## to go back (or whatever keys the player has set). The mouse works too.
@@ -12,6 +13,7 @@ const ROW_HEIGHT := 44.0
 const MAIN_NOTES := {"Boss Rush": "All 12 rounds, from the start", "Tutorial": "Learn every mechanic in a guided fight",
 		"Round Select": "Jump straight to any round", "Controls": "Every key at a glance",
 		"Change Keys": "Set your own keys", "Quit": ""}
+const FORGET_ROW := "Forget Arts"
 const RESET_ROW := "Reset all keys to default"
 ## Key names in {braces} are filled in with the player's current keys.
 const CONTROLS := [
@@ -39,6 +41,8 @@ var _style: StyleBoxFlat
 var _capturing := -1
 ## Change Keys: a short message under the list ("Swapped with Parry").
 var _key_message := ""
+## Forget Arts: true after the first press; a second press confirms.
+var _forget_armed := false
 
 
 func _ready() -> void:
@@ -78,7 +82,10 @@ func _items() -> Array:
 
 ## Continue only shows up when there's a Boss Rush save.
 func _main_items() -> Array:
-	var list := ["Boss Rush", "Tutorial", "Round Select", "Controls", "Change Keys", "Quit"]
+	var list := ["Boss Rush", "Tutorial", "Round Select", "Controls", "Change Keys"]
+	if ArtsBook.count() > 0:
+		list.append(FORGET_ROW)
+	list.append("Quit")
 	if SaveGame.has_save():
 		list.push_front("Continue")
 	return list
@@ -91,6 +98,11 @@ func _main_note(item: String) -> String:
 		var saved := SaveGame.saved_round()
 		var title: String = load("res://data/boss_rush.tres").rounds[clampi(saved, 0, _rounds.size() - 1)].title
 		return "Boss Rush from the start of %s" % title
+	if item == FORGET_ROW:
+		var n := ArtsBook.count()
+		if _forget_armed:
+			return "Press again to forget %d Art%s" % [n, "" if n == 1 else "s"]
+		return "Hide the %d discovered Art%s again" % [n, "" if n == 1 else "s"]
 	return MAIN_NOTES.get(item, "")
 
 
@@ -106,6 +118,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		var hovered := _row_at(event.position)
 		if hovered >= 0:
+			if hovered != index:
+				_forget_armed = false
 			index = hovered
 		return
 	if event is InputEventMouseButton and event.pressed and count > 0 \
@@ -123,6 +137,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			select = true
 		elif page == Page.CONTROLS:
 			back = true
+	if up or down or back:
+		_forget_armed = false
 	if up and count > 0:
 		index = (index - 1 + count) % count
 		_keep_visible()
@@ -167,6 +183,13 @@ func _select() -> void:
 					index = 0
 					_scroll = 0
 					_key_message = ""
+				FORGET_ROW:
+					if not _forget_armed:
+						_forget_armed = true
+					else:
+						ArtsBook.reset()
+						_forget_armed = false
+						index = _main_items().find("Change Keys")  # the row is gone now
 				"Quit":
 					get_tree().quit()
 		Page.ROUNDS:
@@ -304,7 +327,8 @@ func _draw() -> void:
 			if extras != "" and i != _capturing:
 				_text(font, row.position + Vector2(540, baseline), extras, 14, Color(0.55, 0.57, 0.65))
 		if page == Page.MAIN and _main_note(items[i]) != "":
-			_text(font, row.position + Vector2(220, 27), _main_note(items[i]), 15, Color(0.6, 0.62, 0.7))
+			var note_color := Color(1.0, 0.6, 0.45) if items[i] == FORGET_ROW and _forget_armed else Color(0.6, 0.62, 0.7)
+			_text(font, row.position + Vector2(220, 27), _main_note(items[i]), 15, note_color)
 	# Arrows on the right edge when there are more rows above or below.
 	var arrow_x := list.end.x - 26.0
 	if _scroll > 0:

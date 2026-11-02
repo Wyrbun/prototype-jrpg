@@ -1,6 +1,7 @@
 class_name Moves
 ## Each class's attacks (built into combos in the combo bar, Legend of
-## Legaia-style) and skills (the Abilities menu: one skill, then the turn ends).
+## Legaia-style) and skills (the Abilities menu: one skill per turn, and you
+## can still Attack or Wait after it).
 ##
 ## All numbers live here, one line per move, so they're easy to tune.
 ##
@@ -23,7 +24,8 @@ class_name Moves
 ##   escalate_falloff  escalating only: each hit is this much weaker per
 ##             earlier Bash in the chain (0.75: 0.8, then 0.6, 0.45...)
 ##   barrier   share of max HP given as a barrier to allies near the user
-##             (barrier_radius meters), once per move
+##             (barrier_radius meters), once per move; perfect_barrier and
+##             perfect_barrier_radius replace them on a Perfect
 ##   Assassin fields (all optional):
 ##   behind_mult   damage multiplier when the attacker is behind the target
 ##   front_miss    always misses when not behind the target (Backstab)
@@ -70,11 +72,11 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 	match class_id:
 		"knight":
 			list = [
+				# Basic moves: in the right order they become Arts (see arts()).
 				_attack("Slash", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack"),
-				_attack("Thrust", 20, [1.2], 0.7, 0.14, TEAL, "Ignores Defense", {"effect": Effect.PIERCE}),
-				_attack("Double Slash", 15, [0.7, 0.7], 0.9, 0.16, PURPLE, "Two hits (basic)"),
-				_attack("Smash", 30, [2.2], 1.2, 0.18, ORANGE, "Breaks Defense",
-						{"kind": Skills.Kind.SMASH, "effect": Effect.BREAK}),
+				_attack("Thrust", 15, [1.1], 0.7, 0.14, TEAL, "Ignores Defense", {"effect": Effect.PIERCE}),
+				_attack("Guard Strike", 15, [0.9], 0.6, 0.16, GREEN, "Shield blow: delays the enemy's turn",
+						{"delay": 8.0}),
 			]
 		"archer":
 			list = [
@@ -103,8 +105,9 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 		"cleric":
 			list = [
 				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "+1 hit per Bash in the chain, each weaker", {"escalating": true, "escalate_falloff": 0.75}),
-				_attack("Divine Barrier", 25, [1.0], 0.9, 0.16, GOLD, "Barrier (10% HP) to allies near you",
-						{"barrier": 0.10, "barrier_radius": 4.0}),
+				_attack("Divine Barrier", 25, [1.0], 1.5, 0.18, GOLD, "Barrier to allies near you; Perfect: bigger",
+						{"barrier": 0.10, "barrier_radius": 4.0, "perfect_barrier": 0.15, "perfect_barrier_radius": 5.5,
+						"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
 				_attack("Holy Light", 30, [1.4], 1.0, 0.16, Color(1.0, 0.95, 0.7), "Long range, breaks Defense",
 						{"effect": Effect.BREAK, "reach": 9.0}),
 			]
@@ -124,6 +127,39 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 		_:
 			list = [_attack("Attack", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack")]
 	return list
+
+
+## Arts: named attacks made from basic moves in a set order (Legend of
+## Legaia style). When the moves on the combo bar spell a recipe, those
+## blocks merge into the Art. An Art costs what its moves cost, but hits
+## harder (+25-50%), and longer ones add effects. The bar reads left to
+## right and always takes the longest recipe it can.
+## Extra fields: recipe (move names in order), and "delay" (pushes the
+## enemy back on the timeline, like Guard Strike).
+static func arts(class_id: String) -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	match class_id:
+		"knight":
+			list = [
+				_art(["Slash", "Slash"], "Double Slash", [1.25, 1.25], 0.9, 0.16, PURPLE, "Two strong hits"),
+				_art(["Slash", "Thrust"], "Lunge", [2.6], 0.8, 0.15, TEAL, "Piercing lunge: ignores Defense",
+						{"effect": Effect.PIERCE}),
+				_art(["Guard Strike", "Slash"], "Shield Rush", [1.2, 1.2], 0.9, 0.16, GREEN, "Two hits; pushes its turn far back",
+						{"delay": 18.0}),
+				_art(["Thrust", "Thrust", "Slash"], "Smash", [4.2], 1.2, 0.18, ORANGE, "Heavy blow: Smash type, breaks Defense",
+						{"kind": Skills.Kind.SMASH, "effect": Effect.BREAK}),
+				_art(["Slash", "Slash", "Thrust", "Guard Strike"], "Crusader's Edge", [1.4, 1.4, 3.2], 1.8, 0.18, GOLD,
+						"Finisher: breaks Defense, cancels its turn, knocks it back",
+						{"effect": Effect.BREAK, "stun": true, "knockback": 3.0, "times": [0.3, 0.55, 1.0], "finisher": true}),
+			]
+	return list
+
+
+static func _art(recipe: Array, art_name: String, hits: Array, duration: float, window: float,
+		color: Color, desc: String, extra: Dictionary = {}) -> Dictionary:
+	var art := _attack(art_name, 0, hits, duration, window, color, desc, extra)
+	art["recipe"] = recipe
+	return art
 
 
 static func skills(class_id: String) -> Array[Dictionary]:

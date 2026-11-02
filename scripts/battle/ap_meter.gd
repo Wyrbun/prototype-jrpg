@@ -162,7 +162,10 @@ func _bar_rect() -> Rect2:
 ## Pixels per AP: 1.25, shrinking when the full bar would get too wide
 ## (four party members: 500 AP in at most 460 px).
 func _px() -> float:
-	return minf(MAX_PX_PER_AP, minf(size.x * 0.36, 460.0) / maxf(ceiling, 1.0))
+	# Never wider than the gap between the party and enemy HP panels (each
+	# up to ~440 px from its edge), so big parties don't run into them.
+	var room := clampf(size.x - 880.0, 220.0, 460.0)
+	return minf(MAX_PX_PER_AP, minf(size.x * 0.36, room) / maxf(ceiling, 1.0))
 
 
 func _x_of(ap: float) -> float:

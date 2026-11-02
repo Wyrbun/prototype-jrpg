@@ -68,6 +68,18 @@ var slot_results: Array = []
 ## The playing slot's Hold / Tap state (set by the battle while it plays).
 var exec_holding := false
 var exec_taps := 0
+## The Arts panel beside the move list while building a combo: one row per
+## Art, {name, recipe, known, next, color, finisher} (set by the battle).
+var arts: Array = []
+## Tab in the combo bar: the cursor is in the Arts list instead of the moves.
+var arts_focus := false
+var arts_index := 0
+## How many Arts are still undiscovered (counted, never named).
+var arts_hidden := 0
+## While a hidden Art reveals itself mid-combo: its name and the banner's
+## progress (0 -> 1).
+var reveal_name := ""
+var reveal_progress := 0.0
 
 var _panel_style: StyleBoxFlat
 
@@ -168,7 +180,7 @@ func _draw_move_list(font: Font) -> void:
 		var row := Rect2(panel.position + Vector2(8, 8 + i * row_height), Vector2(width - 16, row_height - 2))
 		var usable := i >= move_usable.size() or move_usable[i]
 		var fits := float(move["cost"]) <= room and usable
-		if i == move_index:
+		if i == move_index and not (mode == Mode.COMBO and arts_focus):
 			draw_rect(row, Color(GOLD, 0.22))
 			_text(font, row.position + Vector2(6, 21), ">", 18, GOLD)
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
@@ -180,6 +192,48 @@ func _draw_move_list(font: Font) -> void:
 			desc = move_notes[i]
 		_text(font, row.position + Vector2(270, 21), desc, 15, color.darkened(0.15))
 		_timing_badge(font, move, Vector2(row.end.x - 6, row.position.y + row.size.y / 2.0), not fits)
+	if mode == Mode.COMBO and (not arts.is_empty() or arts_hidden > 0):
+		_draw_arts(font, panel)
+
+
+## The Arts panel, right of the move list: known Arts with their recipes,
+## unknown ones as "???" with only the first move. Arts the moves at the end
+## of the bar are heading towards glow gold and say which move comes next.
+func _draw_arts(font: Font, beside: Rect2) -> void:
+	var row_height := 34.0
+	var x := beside.end.x + 12.0
+	var width := minf(340.0, size.x - x - 8.0)
+	if width < 220.0:
+		return  # no room on a narrow window
+	var extra := 22.0 if arts_hidden > 0 else 0.0
+	var panel := Rect2(x, beside.position.y, width, 34.0 + arts.size() * row_height + extra)
+	draw_style_box(_panel_style, panel)
+	_text(font, panel.position + Vector2(12, 24), "ARTS", 16, GOLD)
+	var tip := "choose one to add it whole" if arts_focus else "moves in this order merge"
+	_text(font, panel.position + Vector2(64, 24), tip, 12, Color(0.6, 0.62, 0.7))
+	for i in arts.size():
+		var art: Dictionary = arts[i]
+		var row := Rect2(panel.position + Vector2(6, 32 + i * row_height), Vector2(width - 12, row_height - 2))
+		var heading: bool = art["next"] != ""
+		if heading:
+			draw_rect(row, Color(GOLD, 0.18))
+		if arts_focus and i == arts_index:
+			draw_rect(row, Color(GOLD, 0.35))
+			draw_rect(row, GOLD, false, 2.0)
+		var name_color: Color = art["color"] if art["known"] else Color(0.55, 0.55, 0.6)
+		_text(font, row.position + Vector2(8, 14), art["name"], 15, name_color)
+		if art["finisher"]:
+			var name_w := font.get_string_size(art["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			_text(font, row.position + Vector2(14 + name_w, 14), "FINISHER", 10, GOLD)
+		_text(font, row.position + Vector2(8, 29), art["recipe"], 12, Color(0.75, 0.77, 0.85))
+		if heading:
+			var hint: String = "next: " + art["next"]
+			var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+			_text(font, Vector2(row.end.x - hint_w - 6, row.position.y + 14), hint, 12, GOLD)
+	if arts_hidden > 0:
+		var line := ("%d more still hidden" % arts_hidden) if not arts.is_empty() \
+				else ("%d Arts to discover: try new move orders" % arts_hidden)
+		_text(font, Vector2(panel.position.x + 12, panel.end.y - 9), line, 12, Color(0.6, 0.62, 0.7))
 
 
 func _draw_combo_bar(font: Font) -> void:
@@ -296,6 +350,8 @@ func _draw_combo_bar(font: Font) -> void:
 			draw_line(Vector2(lx, lead.position.y - 5), Vector2(lx, lead.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 			draw_line(Vector2(lx, lead.position.y - 5), Vector2(lx, lead.end.y + 5), Color.WHITE, 3.0)
 
+	if mode == Mode.EXECUTING and reveal_name != "":
+		_draw_reveal(font, bar)
 	if mode == Mode.EXECUTING and executing_slot >= 0 and lead_in_progress < 0.0:
 		# Playhead: where in the combo we are right now.
 		var x := cursor  # past the last move = finished
@@ -307,6 +363,34 @@ func _draw_combo_bar(font: Font) -> void:
 			x = start + width * slot_progress
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color.WHITE, 3.0)
+
+
+## A hidden Art revealing itself: its block flashes white, and a "NEW ART!"
+## banner with the Art's name pops up over the field, then fades.
+func _draw_reveal(font: Font, bar: Rect2) -> void:
+	var t := reveal_progress
+	var start := bar.position.x
+	for slot in executing_slot:
+		start += float(plan[slot]["cost"]) * PX_PER_AP
+	if executing_slot < plan.size():
+		var seg := Rect2(start, bar.position.y - 4, float(plan[executing_slot]["cost"]) * PX_PER_AP, bar.size.y + 8)
+		var flash := 1.0 - t
+		draw_rect(seg, Color(1, 1, 1, 0.75 * flash))
+		draw_rect(seg.grow(4.0 * flash), Color(1.0, 0.9, 0.5, flash), false, 3.0)
+	var appear := clampf(t / 0.15, 0.0, 1.0)
+	var fade := clampf((1.0 - t) / 0.2, 0.0, 1.0)
+	var alpha := minf(appear, fade)
+	var y := size.y * 0.3
+	var band := Rect2(0, y - 58, size.x, 92)
+	draw_rect(band, Color(0, 0, 0, 0.55 * alpha))
+	draw_line(Vector2(0, band.position.y), Vector2(size.x, band.position.y), Color(GOLD, alpha), 2.0)
+	draw_line(Vector2(0, band.end.y), Vector2(size.x, band.end.y), Color(GOLD, alpha), 2.0)
+	var small := "NEW ART!"
+	var small_w := font.get_string_size(small, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	_text(font, Vector2((size.x - small_w) / 2.0, y - 30), small, 20, Color(GOLD, alpha))
+	var big_size := int(lerpf(30.0, 46.0, appear))
+	var big_w := font.get_string_size(reveal_name, HORIZONTAL_ALIGNMENT_LEFT, -1, big_size).x
+	_text(font, Vector2((size.x - big_w) / 2.0, y + 18), reveal_name, big_size, Color(1, 1, 1, alpha))
 
 
 func _result_fill(result: int) -> Color:

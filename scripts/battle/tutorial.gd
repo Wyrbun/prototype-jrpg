@@ -193,7 +193,7 @@ func _build_steps() -> void:
 	_note(3, "Your turn",
 		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo (greyed out when no enemy is in reach, or the party can't afford a move that reaches one)\n- Abilities: use one skill\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.")
 	_goal(3, "Combos",
-		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.",
+		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.\n\nSome moves in the right order form ARTS, stronger than their parts. They're secret until you find one: put moves in an order that hides an Art, and it reveals itself mid-combo. From then on it merges on the bar as you build it and appears in the Arts list ({swap} in the combo bar picks one from there and adds it whole).",
 		"Build a combo and press {begin}",
 		func(): return _stat("combos") >= 1,
 		func(): _top_up_ap(60.0))
@@ -242,7 +242,7 @@ func _build_steps() -> void:
 		"Every skill has a place in a triangle:\n- Attack beats Smash (it interrupts it)\n- Smash breaks Defense\n- Defense blocks Attack\n- Counter punishes anything that hits it\n\nIt works both ways: what the enemy prepares changes which of your moves work.",
 		func(): knight.hold = false)
 	_goal(6, "Defense",
-		"The Golem raises its Defense stance, and basic moves like Slash bounce off. Thrust ignores Defense, and Smash breaks it.",
+		"The Golem raises its Defense stance, and basic moves like Slash bounce off. Thrust ignores Defense, and Smash (the Art Thrust + Thrust + Slash) breaks it.",
 		"Hit through the Defense with Thrust or Smash",
 		func(): return _stat("guard_breaks") >= 1,
 		func():
@@ -272,12 +272,12 @@ func _build_steps() -> void:
 			_golem_rest()
 			battle.add_party_member(ARCHER))
 	_goal(7, "Abilities",
-		"Abilities lists a class's skills. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. Using a skill ends the turn.",
+		"Abilities lists a class's skills. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. You can use one skill per turn: after it, Abilities greys out but you can still Attack or Wait.",
 		"Use an Ability with anyone",
 		func(): return _stat("skills") >= 1,
 		func(): _top_up_ap(80.0))
 	_note(7, "The Mage and the Cleric",
-		"Two more join.\n\nThe Mage's attacks hit areas: Energy Blast catches enemies near the target, Firebolt runs through a line, and Meteor Strike hits every enemy. These are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press. Its Concentrate skill doubles AP recharge for a while (the AP meter shows it).\n\nThe Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit, though each hit is weaker.",
+		"Two more join.\n\nThe Mage's attacks hit areas: Energy Blast catches enemies near the target, Firebolt runs through a line, and Meteor Strike hits every enemy. These are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press. Its Concentrate skill doubles AP recharge for a while (the AP meter shows it).\n\nThe Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit, though each hit is weaker. Its Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
 		func():
 			battle.add_party_member(MAGE)
 			battle.add_party_member(CLERIC))
@@ -294,7 +294,7 @@ func _build_steps() -> void:
 
 	# 8. Max AP
 	_note(8, "Max AP",
-		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Taking a hit you could have avoided costs one segment: the meter pulses red while someone stands in harm's way. Skipping timed hits slowly drains the bonus too.")
+		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and never past 500. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Taking a hit you could have avoided costs one segment: the meter pulses red while someone stands in harm's way. Skipping timed hits slowly drains the bonus too.")
 	_goal(8, "Max AP",
 		"Land Perfect hits or Parry the Golem's strikes. It's attacking again.",
 		"Raise max AP above 100",

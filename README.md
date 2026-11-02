@@ -91,8 +91,8 @@ their letter on the timeline, and the enemy you're aiming at gets a gold
 ring there.
 
 **Your turn.** The fighter whose turn it is is locked in place, and a menu
-opens: **Attack** (needs an enemy in reach), **Abilities** (one skill, then
-the turn ends), or **Wait** (spends no AP and brings the next turn sooner).
+opens: **Attack** (needs an enemy in reach), **Abilities** (one skill per
+turn; afterwards Abilities greys out and you can still Attack or Wait), or **Wait** (spends no AP and brings the next turn sooner).
 
 **Combos.** Attack asks which enemy to hit when more than one is in reach
 (W / S, then J), then opens a Legaia-style combo bar with the class's own
@@ -104,12 +104,24 @@ normal hit. There are three kinds:
 
 - **Press** (white square boxes): press **J** inside the box. A press at the
   wrong moment ends the combo.
-- **Hold** (blue, rounded; Archer): press in the first box, hold, let go in
+- **Hold** (blue, rounded; Archer, Cleric): press in the first box, hold, let go in
   the last. A bad let-go only loses the Perfect.
 - **Tap** (pink, diamonds; Mage): tap **J** exactly the shown number of
   times. One tap too many is a miss.
 
 The Assassin's hits land at random moments in their boxes.
+
+**Arts (Knight, so far).** Basic moves in the right order merge into a named
+Art on the bar, Legend of Legaia style: Slash + Slash becomes Double Slash,
+Thrust + Thrust + Slash becomes Smash, and four moves make the finisher
+Crusader's Edge. Arts hit harder than their parts, and longer ones add
+effects. Arts you haven't found are secret: put moves in an order that hides
+one, and when the combo reaches it the blocks merge on a **NEW ART!** banner.
+After that it merges as you build it and appears in the Arts panel, which
+also tells you the next move for any known Art you're on the way to. **Tab**
+in the combo bar opens the list: pick a known Art and its whole recipe goes
+on the bar as that Art. **Forget Arts** on the title screen makes them all
+secret again.
 
 **Enemy strikes.** When an enemy attacks, a ring shrinks onto the target
 (one ring per hit for multi-hit attacks), and the floor areas hide so the
@@ -122,10 +134,10 @@ the Assassin parries automatically while it has Marks out.
 
 | Class | HP | AP | Block / Parry | Attacks | Skills |
 |---|---|---|---|---|---|
-| Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Double Slash, Smash (breaks Defense) | Light Heal, Brace, Shield Bash, Taunt |
+| Knight | 200 | 60 | both | Slash, Thrust (ignores Defense), Guard Strike (delays its turn), and Arts made from them: Double Slash, Lunge, Shield Rush, Smash, Crusader's Edge | Light Heal, Brace, Shield Bash, Taunt |
 | Archer | 150 | 70 | neither | Shoot, Triple Shot, Stunning Arrow (Hold), Gale Shot (Hold) | Jump, Riposte, True Sight, Agility |
 | Mage | 100 | 90 | Parry only | Energy Blast (Tap 3), Firebolt (Tap 5), Tempest, Meteor Strike (Tap 8) | Arcane Barrier, Concentrate, Teleport |
-| Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Divine Barrier, Holy Light | Healing, Shielding, Haste, Full Cure |
+| Cleric | 130 | 60 | Block only | Bash (more hits each time, each weaker), Divine Barrier (Hold: Perfect = bigger barrier), Holy Light | Healing, Shielding, Haste, Full Cure |
 | Assassin | 170 | 50 | auto-parry with Marks | Stab, Shadowstep, Backstab, Execute (all stronger from behind) | Hook, Death Sentence, Shadow Cloak, Vanish |
 
 **The Assassin** puts **Assassin's Marks** on enemies (Backstab from behind,
@@ -144,8 +156,8 @@ blocks Attack, and Counter punishes anything that hits it. It applies both to
 what enemies throw at you and to what you throw at them.
 
 **AP and risk.** AP is one shared party pool that recharges over time. Every
-Parry and Perfect hit raises the party's **max AP** for the rest of the fight,
-and a bigger max AP also recharges faster. Missing a Parry or a timed hit
+Parry and Perfect hit raises the party's **max AP** for the rest of the fight
+(100 per member plus 100, at most 500), and a bigger max AP also recharges faster. Missing a Parry or a timed hit
 drops AP to 0 and resets max AP to 100, so the better you play, the more you
 have to lose.
 
@@ -183,7 +195,7 @@ them. Esc (pause) and O (open reports) stay fixed.
 ## Project layout
 
 ```
-scenes/ui/title_menu.tscn         the title screen (main scene): Continue, Boss Rush, Tutorial, Round Select, Controls, Change Keys
+scenes/ui/title_menu.tscn         the title screen (main scene): Continue, Boss Rush, Tutorial, Round Select, Controls, Change Keys, Forget Arts
 scenes/battle/battle_arena.tscn   the battle scene; loads the current round or the tutorial
 scripts/keybinds.gd               rebindable keys: saving them and filling key names into hints
 scripts/save_game.gd              Boss Rush auto-save (Continue)

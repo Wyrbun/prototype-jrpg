@@ -3,6 +3,74 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Arts stay secret until found (Legend of Legaia style)
+
+- Undiscovered Arts no longer show anywhere: no "???" rows, no recipe hints,
+  and they don't merge while you build. The Arts panel lists the Arts you've
+  found plus how many are still hidden.
+- **Discovery happens mid-combo:** when the playhead reaches moves that spell
+  a hidden Art, their blocks merge with a flash, the combo pauses on a
+  **NEW ART!** banner with the Art's name, and then the Art plays. From then
+  on it merges on the bar and can be picked from the list.
+- This works even when a hidden Art contains one you already know (Crusader's
+  Edge starts with Double Slash).
+- **Forget Arts** on the title screen (shown once any Art is found; press
+  twice to confirm) hides every discovered Art again, to replay the reveals
+  or hand the game to a friend.
+
+## Arts list picking; one Ability per turn
+
+- **Tab in the combo bar opens the Arts list:** pick any known Art and its
+  whole recipe goes on the bar at once, as that Art (moves before it can't
+  steal part of it). Building it move by move still works and merges the
+  same way.
+- **Abilities no longer end the turn.** One Ability per turn: after it, the
+  command menu comes back with Abilities greyed out, and you can still
+  Attack or Wait. Shield Bash's sooner next turn still applies.
+
+## Arts: the combo bar becomes a combo system (Knight first)
+
+- The Knight's menu now has three **basic moves**: Slash, Thrust (15 AP,
+  pierces) and the new Guard Strike (pushes the enemy back on the timeline).
+- In the right order they merge into **Arts**: Double Slash (Slash, Slash),
+  Lunge (Slash, Thrust), Shield Rush (Guard Strike, Slash), Smash (Thrust,
+  Thrust, Slash) and the finisher Crusader's Edge (Slash, Slash, Thrust,
+  Guard Strike). An Art costs what its moves cost but hits 25-50% harder,
+  and longer ones add effects (pierce, break, delay, stun, knockback). The
+  bar takes the longest recipe it can, and splits back if you remove a move.
+- **Discovery:** an **Arts panel** beside the move list shows known recipes;
+  unknown ones read "???" with only the first move, and the panel says which
+  move comes next for any Art you're on the way to. Performing one the first
+  time pops "NEW ART" and reveals it for good (`user://arts.cfg`).
+- The tutorial's combo lesson explains Arts. Other classes keep their
+  current moves for now.
+
+## Cleric: Divine Barrier is a Hold move
+
+- **Divine Barrier** now uses Hold and Release (1.5 s, the same feel as the
+  Archer's Hold moves). A Perfect let-go gives a **bigger barrier**: 15% of
+  max HP instead of 10%, to allies within 5.5 m instead of 4 m. Missing the
+  timing still gives the normal barrier. The combo preview shows the normal
+  circle plus a faint outer ring for the Perfect reach.
+- Every class now has its own timing flavour: Knight presses, Archer and
+  Cleric hold, Mage taps, Assassin reacts to random timings.
+
+## Max AP capped at 500
+
+- Max AP still grows to 100 per party member plus 100 (200 solo, 300 for
+  two, 400 for three, 500 for four), but now never past **500**, so parties
+  of five or six stop at 500 too (they would have reached 600 / 700).
+  `max_ap_limit` sets the cap, and `max_ap_limit_bonus` is ready for skills
+  or items that raise it later.
+
+## HP panels fit up to six
+
+- The party and enemy HP panels now stack up from the bottom and have room
+  for six rows, so the tutorial's five-member party (and any party of 4 to
+  6) sits neatly above the AP meter instead of running off the bottom.
+- The AP meter never grows wider than the gap between the two panels, so a
+  big party's longer meter no longer runs into the enemy names.
+
 ## Fixes and timing tweaks
 
 - **Quit to title no longer crashes** (pause menu, and Esc on the party

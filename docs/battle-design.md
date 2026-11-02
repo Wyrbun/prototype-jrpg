@@ -382,8 +382,10 @@ Stances still work for any enemy that lists them.
 - **Attacks spend AP** (milestone 6). Swapping and Defend cost AP too.
 - **Max AP grows with skill:** every successful **Parry (+10)** or
   **Perfect combo hit (+5)** raises the party's max AP **for the rest of
-  the fight** (up to 100 per party member plus 100: 200 solo, 500 with
-  four; `max_ap_ceiling_per_member`). **Missing a Parry or a Perfect
+  the fight** (up to 100 per party member plus 100: 200 solo, 300 for two,
+  400 for three, 500 for four; `max_ap_ceiling_per_member`), never past
+  500 (`max_ap_limit`), so five or six also stop at 500.
+  `max_ap_limit_bonus` is there for future skills or items that raise it. **Missing a Parry or a Perfect
   drops AP to 0 and resets max AP to 100**.
 - **AP gain scales with max AP:** the recharge is multiplied by current max AP / 100 (1.5x at 150, 2x at 200), capped at 2x (`ap_regen_max_multiplier`) even when max AP goes higher. A big bank
   refills fast, but one missed timing drops it all back to 100.
@@ -407,7 +409,7 @@ Stances still work for any enemy that lists them.
 
 Numbers (BattleArena node): `max_ap` 100 (starting cap), `starting_ap` 50,
 `ap_regen_per_second` 6, `parry_max_ap_gain` 10, `perfect_max_ap_gain` 5,
-`skipped_hit_max_ap_loss` 5, `max_ap_ceiling_per_member` 100, `turn_start_ap` 30. Enemies turn slowly toward
+`skipped_hit_max_ap_loss` 5, `max_ap_ceiling_per_member` 100, `max_ap_limit` 500, `turn_start_ap` 30. Enemies turn slowly toward
 the nearest party member and only walk when roughly facing them; their base
 area is a 120-degree cone in front, so the back is the safe side.
 
@@ -465,7 +467,7 @@ down, which can:
   max AP).
 - **Timing types** (`timing` in `moves.gd`, applied to a move's last hit):
   - **Press** (default): the box above.
-  - **Hold** (Archer: Stunning Arrow, Gale Shot): press in the first box
+  - **Hold** (Archer: Stunning Arrow, Gale Shot; Cleric: Divine Barrier): press in the first box
     (ending at `hold_start` of the block), keep holding through the tail,
     let go in the box at the hit = Perfect. Let go early, still holding at
     the hit, or a late start = **partial**: no Perfect, no penalty, normal
@@ -502,16 +504,52 @@ down, which can:
 
 ## Classes (built)
 
+- **One Ability per turn:** using a skill no longer ends the turn. The
+  command menu comes back with Abilities greyed out ("used this turn"), so
+  you can still Attack or Wait. A turn head start an Ability gives (Shield
+  Bash) is applied when the turn ends.
+
 All numbers are in `scripts/battle/moves.gd`. Damage = the fighter's
 attack_power x the hit's multiplier.
 
 ### Knight (200 HP, 60 AP, can Block and Parry)
+Basic moves (the only ones in the menu):
+
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Slash | 10 | 1.0 | basic |
-| Thrust | 20 | 1.2 | ignores Defense |
-| Double Slash | 15 | 0.7 x2 | basic |
-| Smash | 30 | 2.2 | Smash-type, breaks Defense |
+| Thrust | 15 | 1.1 | ignores Defense |
+| Guard Strike | 15 | 0.9 | pushes the enemy 8 back on the timeline (out of the casting zone = its cast is lost) |
+
+**Arts** (`Moves.arts()`): when the moves on the bar spell a recipe, they
+merge into the Art. The bar reads left to right and takes the longest
+recipe that fits; an Art costs what its moves cost but hits harder, and the
+longer ones add effects. Each plays as one block with its own hits and
+timing boxes.
+
+| Recipe | Art | AP | Hits (parts) | Effect |
+|---|---|---|---|---|
+| Slash + Slash | Double Slash | 20 | 1.25 x2 = 2.5 (2.0) | basic |
+| Slash + Thrust | Lunge | 25 | 2.6 (2.1) | ignores Defense |
+| Guard Strike + Slash | Shield Rush | 25 | 1.2 x2 = 2.4 (1.9) | pushes its turn 18 back |
+| Thrust + Thrust + Slash | Smash | 40 | 4.2 (3.2) | Smash type, breaks Defense |
+| Slash + Slash + Thrust + Guard Strike | Crusader's Edge (finisher) | 50 | 1.4 + 1.4 + 3.2 = 6.0 (4.0) | breaks Defense, cancels its turn, knocks it 3 m back |
+
+**Discovery** (`scripts/arts_book.gd`, `user://arts.cfg`): undiscovered Arts
+are a surprise. They don't merge while building and aren't named anywhere;
+the **Arts panel** lists only discovered Arts (recipe, and "next: X" when the
+end of the bar is heading towards one) plus a count of how many are still
+hidden. When a combo plays, the bar is also read with the hidden recipes
+(`_find_hidden_arts`); when the playhead reaches the first block of one, its
+blocks merge with a white flash, the combo pauses (`art_reveal_seconds`,
+1.4 s) on a **NEW ART!** banner with the Art's name, then the Art plays. From
+then on it merges while building and appears in the list. Reports count
+`arts` and `art_<name>`.
+**Picking from the list:** Tab (`swap_character`) in the combo bar moves the
+cursor into the Arts panel (known Arts only); Confirm adds the whole recipe
+at once, locked as that Art (`_combo_locks`), so moves before it can't
+steal part of it. Removing one of its moves unlocks it.
+Other classes have no Arts yet (their lists are unchanged).
 
 | Skill | AP | Effect |
 |---|---|---|
@@ -553,7 +591,7 @@ attack_power x the hit's multiplier.
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Bash | 10 | 0.8 per hit, x0.75 per earlier Bash | the 1st Bash has 1 hit, the 2nd 2 hits, and so on, but each hit is weaker (0.8, 0.6, 0.45, 0.34...): six Bashes deal 7.1x attack in 21 timed hits (was 16.8x); from the 4th Bash the hits land at random moments |
-| Divine Barrier | 25 | 1.0 | also gives allies within 4 m a barrier of 10% of their max HP |
+| Divine Barrier | 25 | 1.0 | Hold (1.5 s): gives allies within 4 m a barrier of 10% of their max HP; a Perfect let-go makes it 15% within 5.5 m (the preview shows both circles) |
 | Holy Light | 30 | 1.4 | reach 9 m; breaks Defense |
 
 | Skill | AP | Effect |

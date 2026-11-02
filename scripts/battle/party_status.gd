@@ -1,12 +1,18 @@
 class_name PartyStatus
 extends Control
-## Draws the party's HP bars in the bottom-left corner.
+## Draws the party's HP bars in the bottom-left corner (the enemy panel
+## uses it too, bottom-right).
+##
+## Rows stack up from the bottom edge, so 1 to 6 fighters all sit right
+## above the AP meter; with more than MAX_ROWS the rows squeeze together.
 ##
 ## Green is current HP. The pale chunk right after it is recoverable HP:
 ## damage taken while defending, which comes back at that fighter's next
 ## turn if they don't get hit again first.
 
 const ROW_HEIGHT := 30.0
+## Rows that fit at full height (the control is sized for six).
+const MAX_ROWS := 6
 ## Where bars start at the least; pushed right for long names.
 const BAR_X := 84.0
 const BAR_WIDTH := 170.0
@@ -29,9 +35,11 @@ func _draw() -> void:
 	var bar_x := BAR_X
 	for c in party:
 		bar_x = maxf(bar_x, font.get_string_size(c.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 12.0)
+	var row_height := ROW_HEIGHT if party.size() <= MAX_ROWS else size.y / party.size()
+	var top := size.y - party.size() * row_height
 	for i in party.size():
 		var c := party[i]
-		var y := i * ROW_HEIGHT
+		var y := top + i * row_height
 		var name_color := Color(0.5, 0.5, 0.5) if c.is_down else (Color(1.0, 0.82, 0.2) if c == controlled else Color.WHITE)
 		_text(font, Vector2(0, y + 17), c.display_name, 17, name_color)
 

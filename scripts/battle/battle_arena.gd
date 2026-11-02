@@ -83,9 +83,13 @@ enum Reaction { NONE, PARRY, PARRY_MISSED, DEFEND }
 ## The most AP the party can hold at the start of the fight. Parries and
 ## Perfects raise it; missing one resets it back to this.
 @export var max_ap: float = 100.0
-## Max AP can't grow beyond this much per party member, plus one more
-## share (100 x (party size + 1): 200 solo, 500 with four).
+## Max AP grows up to this much per party member, plus one more share
+## (200 solo, 300 for two, 400 for three, 500 for four)...
 @export var max_ap_ceiling_per_member: float = 100.0
+## ...but never past this, so five or six members also stop at 500.
+@export var max_ap_limit: float = 500.0
+## Extra room above max_ap_limit (for future skills or items that raise it).
+var max_ap_limit_bonus := 0.0
 ## Unavoidable strikes skip the Parry/Defend ring: they land after this
 ## short beat.
 @export var unavoidable_impact_seconds: float = 0.45
@@ -265,6 +269,22 @@ var _telegraph_time := 0.0
 
 ## True while picking which enemy a combo will hit (TARGET mode for Attack).
 var _choosing_attack_target := false
+## One Ability per turn: used already this turn? (Abilities greys out.)
+var _skill_used := false
+## Turn head start earned by an Ability this turn (Shield Bash), applied
+## when the turn ends.
+var _turn_head_start := 0.0
+## Arts picked from the Arts list: {start index on the bar: Art name}. That
+## group always stays that Art, whatever comes before or after it.
+var _combo_locks := {}
+## Per combo slot: [first basic move on the bar, how many it covers].
+var _plan_spans: Array = []
+## Undiscovered Arts waiting in the playing combo (see _find_hidden_arts).
+var _pending_reveals := {}
+## Seconds left on the "NEW ART!" pause.
+var _exec_reveal_left := 0.0
+## How long the combo pauses when a new Art reveals itself.
+@export var art_reveal_seconds := 1.4
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
@@ -284,6 +304,8 @@ var _exec_timings: Array[int] = []
 var _exec_holding := false
 ## Tap timings: taps counted so far for the current slot's last hit.
 var _exec_taps := 0
+## True while a Perfect hit is being applied (Divine Barrier's bigger barrier).
+var _exec_hit_perfect := false
 ## Counts down after the last move before the turn ends.
 var _exec_outro := -1.0
 ## Counts down the lead-in before the first move starts.
@@ -693,6 +715,8 @@ func _begin_active_turn() -> void:
 		ap = minf(ap + turn_start_ap, current_max_ap)
 		if ap_meter:
 			ap_meter.gain(ap - before)
+		_skill_used = false
+		_turn_head_start = 0.0
 		_open_commands()
 	else:
 		_run_enemy_turn(fighter)
@@ -721,6 +745,9 @@ func _end_turn() -> void:
 	if active != controlled:
 		active.set_highlighted(false)
 	_send_to_start(active)
+	if _turn_head_start > 0.0:
+		active.timeline_pos += _turn_head_start  # Shield Bash: next turn comes sooner
+		_turn_head_start = 0.0
 	var was_party := active.team == Combatant.Team.PARTY
 	active = null
 	# After an ally's turn, go back to whoever you were steering before it.
@@ -2434,6 +2461,8 @@ func _open_commands() -> void:
 					reachable = true
 		note = "not enough AP" if reachable else "no enemy in reach"
 	battle_menu.command_notes[0] = note
+	battle_menu.command_enabled[1] = not _skill_used
+	battle_menu.command_notes[1] = "used this turn" if _skill_used else ""
 
 
 ## Keys while a menu is open. W/S move the cursor, J confirms, K goes back,
@@ -2452,9 +2481,13 @@ func _menu_input(event: InputEvent) -> void:
 	var confirm := event.is_action_pressed("confirm")
 	var cancel := event.is_action_pressed("cancel")
 	var begin := event.is_action_pressed("end_turn")
-	if not (up or down or confirm or cancel or begin):
+	var arts_key := _menu_mode == BattleMenu.Mode.COMBO and event.is_action_pressed("swap_character")
+	if not (up or down or confirm or cancel or begin or arts_key):
 		return
 	get_viewport().set_input_as_handled()
+	if _menu_mode == BattleMenu.Mode.COMBO and (battle_menu.arts_focus or arts_key):
+		_arts_list_input(up, down, confirm, cancel or (arts_key and battle_menu.arts_focus), arts_key, begin)
+		return
 
 	match _menu_mode:
 		BattleMenu.Mode.COMMANDS:
@@ -2506,9 +2539,7 @@ func _menu_input(event: InputEvent) -> void:
 				if _plan.is_empty():
 					_menu_mode = BattleMenu.Mode.COMMANDS
 				else:
-					_plan.pop_back()
-					battle_menu.combo.pop_back()
-					_refresh_combo_reach()
+					_remove_last_move()
 			elif begin:
 				if _plan.is_empty():
 					_flash(Keybinds.fill("Add at least one move first ({confirm})"))
@@ -2578,6 +2609,9 @@ func _open_combo_bar(target: Combatant = null) -> void:
 	battle_menu.move_notes = notes
 	battle_menu.plan = _plan
 	battle_menu.combo.clear()
+	_combo_locks.clear()
+	battle_menu.arts_focus = false
+	_update_arts_list()
 	battle_menu.move_index = 0
 	battle_menu.executing_slot = -1
 	battle_menu.slot_results.clear()
@@ -2591,17 +2625,235 @@ func _add_to_combo(index: int) -> void:
 	if not battle_menu.move_usable[index]:
 		_flash(battle_menu.move_notes[index])
 		return
-	var entry := _plan_slot(_moves[index])
-	var cost := float(entry["cost"])
+	var cost := float(_moves[index]["cost"])
 	var used := battle_menu.combo_cost()
 	if used + cost > controlled.combo_limit:
 		_flash("%s's combo bar is full" % controlled.display_name)
 	elif used + cost > ap:
 		_flash("Not enough AP (%d left)" % floori(ap - used))
 	else:
-		_plan.append(entry)
 		battle_menu.combo.append(index)
+		_rebuild_plan()
 		_refresh_combo_reach()
+
+
+## Turns the basic moves on the bar (battle_menu.combo, in order) into combo
+## slots, merging every recipe it finds into its Art: left to right, always
+## the longest recipe that fits. Slots that didn't change keep their worked-
+## out hits and timings (random timings don't reroll while you build).
+func _rebuild_plan() -> void:
+	var old := _plan.duplicate()
+	_plan.clear()
+	_plan_spans.clear()
+	for group in _parse_combo(false):
+		var move: Dictionary = group["move"]
+		var slot := _plan.size()
+		if slot < old.size() and old[slot]["name"] == move["name"] and int(old[slot]["cost"]) == int(move["cost"]):
+			_plan.append(old[slot])
+		else:
+			_plan.append(_plan_slot(move))
+		_plan_spans.append([group["start"], group["length"]])
+	_update_arts_list()
+
+
+## Reads the basic moves on the bar into groups: [{start, length, move}],
+## where move is an Art (cost = what its moves cost) or the basic move.
+## Left to right, longest recipe first; picked Arts stay themselves.
+## with_unknown: also match Arts not discovered yet (used when the combo
+## plays, so they can reveal themselves); otherwise only known ones merge,
+## and undiscovered recipes stay a surprise.
+func _parse_combo(with_unknown: bool) -> Array:
+	var arts: Array = Moves.arts(controlled.class_id).filter(
+			func(art): return with_unknown or ArtsBook.known(controlled.class_id, art["name"]))
+	arts.sort_custom(func(x, y): return (x["recipe"] as Array).size() > (y["recipe"] as Array).size())
+	var names: Array = battle_menu.combo.map(func(k): return _moves[k]["name"])
+	var groups: Array = []
+	var i := 0
+	while i < names.size():
+		var move: Dictionary = _moves[battle_menu.combo[i]]
+		var length := 1
+		for art in arts:
+			var recipe: Array = art["recipe"]
+			if _combo_locks.has(i) and art["name"] != _combo_locks[i]:
+				continue  # an Art picked from the list stays that Art
+			if not _combo_locks.has(i) and _crosses_lock(i, recipe.size()):
+				continue  # can't swallow part of a picked Art
+			if i + recipe.size() <= names.size() and names.slice(i, i + recipe.size()) == recipe:
+				move = art.duplicate(true)
+				var cost := 0
+				for k in recipe.size():
+					cost += int(_moves[battle_menu.combo[i + k]]["cost"])  # what its moves cost (doubled too)
+				move["cost"] = cost
+				length = recipe.size()
+				break
+		groups.append({"start": i, "length": length, "move": move})
+		i += length
+	return groups
+
+
+## When the combo starts: finds undiscovered Arts hidden in the bar. Each
+## one reveals itself when the playhead reaches its first block (see
+## _reveal_art): {first plan slot: {"move": Art, "slots": how many}}.
+func _find_hidden_arts() -> void:
+	_pending_reveals.clear()
+	for group in _parse_combo(true):
+		var art: Dictionary = group["move"]
+		if not art.has("recipe") or ArtsBook.known(controlled.class_id, art["name"]):
+			continue
+		# The plan slots that tile exactly this group (basics or smaller Arts).
+		var first := -1
+		var count := 0
+		var covered := 0
+		for s in _plan_spans.size():
+			var span: Array = _plan_spans[s]
+			if span[0] == group["start"]:
+				first = s
+			if first >= 0 and s >= first and covered < group["length"]:
+				covered += span[1]
+				count += 1
+		if first >= 0 and covered == group["length"]:
+			_pending_reveals[first] = {"move": art, "slots": count}
+
+
+## The playhead reached a hidden Art: its blocks merge into the Art with a
+## flash, the combo pauses on a "NEW ART!" banner, then the Art plays.
+func _reveal_art(slot: int) -> void:
+	var info: Dictionary = _pending_reveals[slot]
+	_pending_reveals.erase(slot)
+	var count: int = info["slots"]
+	var art: Dictionary = info["move"].duplicate(true)
+	var cost := 0
+	for k in count:
+		cost += int(_plan[slot + k]["cost"])
+	art["cost"] = cost
+	for k in count:
+		_plan.remove_at(slot)
+		battle_menu.slot_results.remove_at(slot)
+	var entry := _plan_slot(art)
+	_plan.insert(slot, entry)
+	var per_hit: Array[int] = []
+	per_hit.resize((entry["hits"] as Array).size())
+	per_hit.fill(Timing.NONE)
+	battle_menu.slot_results.insert(slot, per_hit)
+	# Later hidden Arts move up by the slots that just merged.
+	var shifted := {}
+	for key in _pending_reveals:
+		shifted[key - (count - 1) if key > slot else key] = _pending_reveals[key]
+	_pending_reveals = shifted
+	_exec_reveal_left = art_reveal_seconds
+	battle_menu.reveal_name = String(art["name"]).to_upper()
+	battle_menu.reveal_progress = 0.0
+
+
+## True if a recipe starting at `start` would run into an Art picked from
+## the list.
+func _crosses_lock(start: int, length: int) -> bool:
+	for lock in _combo_locks:
+		if lock > start and lock < start + length:
+			return true
+	return false
+
+
+## K / Backspace in the combo bar: removes the last basic move (an Art
+## built from it splits back into its moves; a picked Art loses its lock).
+func _remove_last_move() -> void:
+	battle_menu.combo.pop_back()
+	for lock in _combo_locks.keys():
+		var art_len := 0
+		for art in Moves.arts(controlled.class_id):
+			if art["name"] == _combo_locks[lock]:
+				art_len = (art["recipe"] as Array).size()
+		if lock + art_len > battle_menu.combo.size():
+			_combo_locks.erase(lock)
+	_rebuild_plan()
+	_refresh_combo_reach()
+
+
+## The Arts list (Tab in the combo bar): pick a known Art and its whole
+## recipe goes on the bar at once.
+func _arts_list_input(up: bool, down: bool, confirm: bool, back: bool, toggle: bool, begin: bool) -> void:
+	var known: Array = []
+	for i in battle_menu.arts.size():
+		if battle_menu.arts[i]["known"]:
+			known.append(i)
+	if not battle_menu.arts_focus:
+		if known.is_empty():
+			_flash("No Arts known yet: put moves in the right order and one may reveal itself")
+			return
+		battle_menu.arts_focus = true
+		if not known.has(battle_menu.arts_index):
+			battle_menu.arts_index = known[0]
+		return
+	if back:
+		battle_menu.arts_focus = false
+	elif begin:
+		battle_menu.arts_focus = false
+		if _plan.is_empty():
+			_flash(Keybinds.fill("Add at least one move first ({confirm})"))
+		else:
+			_execute_combo()
+	elif up or down:
+		var at := known.find(battle_menu.arts_index)
+		at = (at + (1 if down else -1) + known.size()) % known.size()
+		battle_menu.arts_index = known[at]
+	elif confirm:
+		_add_art(battle_menu.arts_index)
+
+
+func _add_art(row: int) -> void:
+	var art: Dictionary = Moves.arts(controlled.class_id)[int(battle_menu.arts[row]["index"])]
+	var indices: Array = []
+	var cost := 0.0
+	for move_name in art["recipe"]:
+		var index := -1
+		for k in _moves.size():
+			if _moves[k]["name"] == move_name:
+				index = k
+		if index < 0 or not battle_menu.move_usable[index]:
+			_flash("%s: %s can't reach the target" % [art["name"], move_name])
+			return
+		indices.append(index)
+		cost += float(_moves[index]["cost"])
+	var used := battle_menu.combo_cost()
+	if used + cost > controlled.combo_limit:
+		_flash("%s needs %d AP of bar: there's room for %d" % [art["name"], cost, controlled.combo_limit - used])
+		return
+	if used + cost > ap:
+		_flash("Not enough AP for %s (%d left)" % [art["name"], floori(ap - used)])
+		return
+	_combo_locks[battle_menu.combo.size()] = art["name"]
+	for index in indices:
+		battle_menu.combo.append(index)
+	_rebuild_plan()
+	_refresh_combo_reach()
+
+
+## Fills the Arts panel beside the move list: the Arts already discovered,
+## with their recipes and, for any the moves at the end of the bar are
+## heading towards, the move that comes next. Undiscovered ones are only
+## counted ("2 still hidden").
+func _update_arts_list() -> void:
+	var rows: Array = []
+	var names: Array = battle_menu.combo.map(func(k): return _moves[k]["name"])
+	var all := Moves.arts(controlled.class_id)
+	var hidden := 0
+	for index in all.size():
+		var art: Dictionary = all[index]
+		if not ArtsBook.known(controlled.class_id, art["name"]):
+			hidden += 1  # undiscovered Arts stay a surprise: no name, no recipe, no hint
+			continue
+		var recipe: Array = art["recipe"]
+		# Heading towards it: the last few moves are the start of its recipe.
+		var next := ""
+		for start in range(maxi(names.size() - recipe.size() + 1, 0), names.size()):
+			var tail: Array = names.slice(start)
+			if tail.size() < recipe.size() and recipe.slice(0, tail.size()) == tail:
+				next = recipe[tail.size()]
+				break
+		rows.append({"name": art["name"], "recipe": " + ".join(recipe), "known": true, "index": index,
+				"next": next, "color": art["color"], "finisher": art.get("finisher", false)})
+	battle_menu.arts = rows
+	battle_menu.arts_hidden = hidden
 
 
 ## After a Shadowstep on the bar, everything after it reaches the target
@@ -2693,13 +2945,19 @@ func _execute_combo() -> void:
 		per_hit.fill(Timing.NONE)
 		battle_menu.slot_results.append(per_hit)
 	_exec_outro = -1.0
+	_exec_reveal_left = 0.0
+	battle_menu.reveal_name = ""
+	_pending_reveals.clear()
 	_start_combo_slot(0)
+	_find_hidden_arts()  # an Art hidden at the very start reveals when the lead-in ends
 	# A short lead-in so the player can get ready for the timing.
 	_exec_lead_in = combo_lead_in
 	battle_menu.lead_in_progress = 0.0
 
 
 func _start_combo_slot(slot: int) -> void:
+	if _pending_reveals.has(slot):
+		_reveal_art(slot)
 	_exec_slot = slot
 	_exec_time = 0.0
 	_exec_hits_done = 0
@@ -2712,6 +2970,14 @@ func _start_combo_slot(slot: int) -> void:
 	battle_menu.exec_taps = 0
 	battle_menu.executing_slot = slot
 	battle_menu.slot_progress = 0.0
+	var art_move: Dictionary = _plan[slot]["move"]
+	if art_move.has("recipe"):
+		# An Art: its name pops up, and the first time it's discovered.
+		_count("arts")
+		_count("art_" + String(art_move["name"]).to_lower().replace(" ", "_").replace("'", ""))
+		if not ArtsBook.discover(_exec_attacker.class_id, art_move["name"]):
+			_popup(_exec_attacker, String(art_move["name"]).to_upper(), art_move["color"])
+		# (a newly found Art already has its "NEW ART!" banner)
 
 
 ## Moves the playhead through the current block at that move's own speed,
@@ -2722,6 +2988,14 @@ func _update_combo(delta: float) -> void:
 		battle_menu.lead_in_progress = clampf(1.0 - _exec_lead_in / combo_lead_in, 0.0, 1.0)
 		if _exec_lead_in <= 0.0:
 			battle_menu.lead_in_progress = -1.0
+			if _pending_reveals.has(0):
+				_start_combo_slot(0)
+		return
+	if _exec_reveal_left > 0.0:
+		_exec_reveal_left -= delta
+		battle_menu.reveal_progress = clampf(1.0 - _exec_reveal_left / art_reveal_seconds, 0.0, 1.0)
+		if _exec_reveal_left <= 0.0:
+			battle_menu.reveal_name = ""
 		return
 	if _exec_outro >= 0.0:
 		_exec_outro -= delta
@@ -2747,7 +3021,9 @@ func _update_combo(delta: float) -> void:
 		if perfect:
 			multiplier *= 1.0 + perfect_damage_bonus
 		_exec_attacker.play_lunge()
+		_exec_hit_perfect = perfect  # Divine Barrier grows on a Perfect
 		var keep_going := _land_hit(_exec_attacker, entry["move"], multiplier, _exec_hits_done == 0)
+		_exec_hit_perfect = false
 		if combo_counter:
 			combo_counter.hit(perfect)
 		_exec_hits_done += 1
@@ -2846,7 +3122,7 @@ func _judge_release() -> void:
 ## the let-go. Tap hits: every press inside the tap stretch counts, and
 ## presses outside it are simply ignored.
 func _judge_timing() -> void:
-	if _exec_outro >= 0.0 or _exec_lead_in > 0.0:  # presses during the lead-in are ignored
+	if _exec_outro >= 0.0 or _exec_lead_in > 0.0 or _exec_reveal_left > 0.0:  # presses during the lead-in / reveal are ignored
 		return
 	var entry := _plan[_exec_slot]
 	var duration: float = entry["duration"]
@@ -2900,9 +3176,10 @@ func _timing_miss(hit: int, why: String) -> void:
 	_stop_combo()
 
 
-## The highest max AP can grow to: 100 per party member, plus 100.
+## The highest max AP can grow to: 100 per party member plus 100, capped at
+## max_ap_limit (500), plus any bonus from skills or items.
 func max_ap_ceiling() -> float:
-	return max_ap_ceiling_per_member * (party.size() + 1)
+	return minf(max_ap_ceiling_per_member * (party.size() + 1), max_ap_limit) + max_ap_limit_bonus
 
 
 ## Raises the party's max AP for the rest of the fight. Returns a message.
@@ -3085,6 +3362,12 @@ func _update_move_preview() -> void:
 		for ally in _standing(party):
 			if ally.global_position.distance_to(controlled.global_position) <= float(move["barrier_radius"]):
 				_add_preview_mark(ally, Color(0.55, 0.8, 1.0, 0.9))
+		if move.has("perfect_barrier_radius"):
+			# A faint outer ring: how far a Perfect barrier reaches.
+			var reach := _make_ring(float(move["perfect_barrier_radius"]), 0.08, Color(0.55, 0.8, 1.0, 0.45))
+			add_child(reach)
+			reach.global_position = Vector3(controlled.global_position.x, 0.05, controlled.global_position.z)
+			_preview_marks.append(reach)
 	if not usable:
 		return
 	for victim in _hit_victims(controlled, move):
@@ -3188,9 +3471,16 @@ func _clear_move_preview() -> void:
 
 ## Cleric's Divine Barrier: allies near the user get barrier HP.
 func _give_barrier(user: Combatant, move: Dictionary) -> void:
+	var share := float(move["barrier"])
+	var radius := float(move["barrier_radius"])
+	if _exec_hit_perfect and move.has("perfect_barrier"):
+		# A perfect Hold: a stronger barrier over a wider circle.
+		share = float(move["perfect_barrier"])
+		radius = float(move.get("perfect_barrier_radius", radius))
+		_popup(user, "BIG BARRIER", Color(0.55, 0.8, 1.0))
 	for ally in _standing(party):
-		if ally.global_position.distance_to(user.global_position) <= float(move["barrier_radius"]):
-			var gained := ally.add_shield(ceili(ally.max_hp * float(move["barrier"])))
+		if ally.global_position.distance_to(user.global_position) <= radius:
+			var gained := ally.add_shield(ceili(ally.max_hp * share))
 			if gained > 0:
 				_popup(ally, "+%d BARRIER" % gained, Color(0.55, 0.8, 1.0))
 
@@ -3330,6 +3620,10 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		note = "Stunned! Turn cancelled"
 	if float(move["knockback"]) > 0.0 and not target.is_down:
 		_knock_away(target, attacker.global_position, move["knockback"])
+	if float(move.get("delay", 0.0)) > 0.0 and not target.is_down:
+		# Guard Strike / Shield Rush: its turn comes later (out of the casting
+		# zone means it loses what it was preparing).
+		_knock_back_enemy(target, float(move["delay"]))
 
 	if note != "":
 		_popup(target, note.to_upper(), Color(1.0, 0.85, 0.2))
@@ -3532,7 +3826,8 @@ func _clear_target_marker() -> void:
 		_target_marker = null
 
 
-## Carries out a skill, then the turn ends.
+## Carries out a skill. One per turn: afterwards the command menu comes
+## back with Abilities greyed out, so you can still Attack or Wait.
 func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 	var user := controlled
 	ap -= float(skill["cost"])
@@ -3628,9 +3923,14 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			message += " on %s" % target.display_name
 	_flash(message)
 	print(message)
-	_menu_mode = BattleMenu.Mode.HIDDEN
-	_end_turn()
-	user.timeline_pos += head_start
+	_skill_used = true
+	_turn_head_start += head_start
+	if user.is_down or _game_over or active != user:
+		_menu_mode = BattleMenu.Mode.HIDDEN
+		if active == user:
+			_end_turn()
+		return
+	_open_commands()
 
 
 ## A free spot right beside a fighter (for Teleport).
@@ -3862,7 +4162,9 @@ func _update_ui(delta: float) -> void:
 		turn_label.text = "Positioning: %s" % controlled.display_name if controlled != null else ""
 	elif _menu_mode == BattleMenu.Mode.EXECUTING:
 		turn_label.text = "%s attacks!" % controlled.display_name
-		if _flash_time_left <= 0.0:
+		if battle_menu.reveal_name != "":
+			warning_label.text = ""  # the NEW ART! banner has the stage
+		elif _flash_time_left <= 0.0:
 			warning_label.text = _timing_prompt()
 	elif party_turn:
 		turn_label.text = "%s's turn" % active.display_name
@@ -3921,9 +4223,12 @@ func _controls_hint() -> String:
 		BattleMenu.Mode.COMMANDS:
 			return Keybinds.fill("{up} / {down}: choose     {confirm} / Enter: select")
 		BattleMenu.Mode.COMBO:
-			return Keybinds.fill("{up} / {down}: choose move     {confirm} / Enter: add     {cancel} / Backspace: remove last     {begin}: begin")
+			if battle_menu.arts_focus:
+				return Keybinds.fill("{up} / {down}: choose Art     {confirm} / Enter: add it     {swap} / {cancel}: back to moves")
+			var arts_hint := Keybinds.fill("     {swap}: Arts list") if not Moves.arts(controlled.class_id).is_empty() else ""
+			return Keybinds.fill("{up} / {down}: choose move     {confirm} / Enter: add     {cancel} / Backspace: remove last     {begin}: begin") + arts_hint
 		BattleMenu.Mode.SKILLS:
-			return Keybinds.fill("{up} / {down}: choose skill     {confirm} / Enter: use (ends the turn)     {cancel} / Backspace: back")
+			return Keybinds.fill("{up} / {down}: choose skill     {confirm} / Enter: use (one per turn)     {cancel} / Backspace: back")
 		BattleMenu.Mode.TARGET:
 			return ""
 	var standing := _standing(party)
