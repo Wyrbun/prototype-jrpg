@@ -50,10 +50,12 @@ func _rebuild() -> void:
 		var hole := CylinderMesh.new()
 		hole.top_radius = radius
 		hole.bottom_radius = radius
-		hole.height = 0.04
+		# A thin disc just above the floor, well under the enemy areas (drawn
+		# at 3 cm): at the same height they'd flicker over each other.
+		hole.height = 0.006
 		hole.radial_segments = 48
 		_visual.mesh = hole
-		_visual.position.y = 0.01
+		_visual.position.y = 0.008
 		material.albedo_color = Color(0.02, 0.02, 0.03)
 		_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_visual.material_override = material

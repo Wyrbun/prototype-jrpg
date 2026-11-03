@@ -30,6 +30,10 @@ var _walked := 0.0
 var _last_knight_position := Vector3.ZERO
 ## Counts down after a goal is met, before the next step.
 var _done_timer := -1.0
+## Who's in the fight: each class lesson features only that class.
+## Party members by class_id, and the lineup waiting to be applied.
+var _members := {}
+var _pending_party: Array = []
 ## Combos played before the Arts list step (it needs a new one).
 var _combos_before_list := 0
 ## Free practice: the Golem fights normally and can be defeated.
@@ -39,6 +43,7 @@ var _practice := false
 func _ready() -> void:
 	golem = battle.enemies[0]
 	knight = battle.party[0]
+	_members["knight"] = knight
 	_last_knight_position = knight.global_position
 	panel = TutorialPanel.new()
 	battle.get_node("UI").add_child(panel)
@@ -55,7 +60,10 @@ func _process(delta: float) -> void:
 	if not _practice and golem.hp < golem.max_hp * 0.3:
 		golem.hp = golem.max_hp  # the Golem never falls before free practice
 
+	_apply_party()
 	var step := steps[index]
+	var menu: int = battle._menu_mode
+	panel.compact = battle._party_turn() and menu != BattleMenu.Mode.HIDDEN and menu != BattleMenu.Mode.COMMANDS
 	if step.has("tick") and not battle.tutorial_pause:
 		(step["tick"] as Callable).call()
 	if step["goal"] != "" and _done_timer < 0.0 and (step["done"] as Callable).call():
@@ -161,6 +169,50 @@ func _top_up_ap(amount: float) -> void:
 	battle.ap = maxf(battle.ap, minf(amount, battle.current_max_ap))
 
 
+## Sets who's in the fight (class ids). Applied at once, or as soon as no
+## turn is being played.
+func _set_party(ids: Array) -> void:
+	_pending_party = ids
+	_apply_party()
+
+
+func _apply_party() -> void:
+	if _pending_party.is_empty() or battle._strike != null:
+		return
+	if battle.active != null:
+		if battle.active.team == Combatant.Team.PARTY and not _pending_party.has(battle.active.class_id) \
+				and battle._menu_mode == BattleMenu.Mode.COMMANDS:
+			battle._menu_mode = BattleMenu.Mode.HIDDEN
+			battle._end_turn()  # its lesson is over: the turn passes quietly
+		if battle.active != null:
+			return
+	var scenes := {"knight": null, "archer": ARCHER, "mage": MAGE, "cleric": CLERIC, "assassin": ASSASSIN}
+	for member in battle.party.duplicate():
+		if not _pending_party.has(member.class_id):
+			battle.bench_member(member)
+	for id in _pending_party:
+		if _members.has(id):
+			battle.unbench_member(_members[id])
+		else:
+			_members[id] = battle.add_party_member(scenes[id])
+	if id_member(String(_pending_party[0])) != null and (battle.controlled == null or not battle.party.has(battle.controlled)):
+		battle._set_controlled(id_member(String(_pending_party[0])))
+	if _members.has("assassin"):
+		assassin = _members["assassin"]
+	_pending_party = []
+
+
+func id_member(id: String) -> Combatant:
+	return _members.get(id, null)
+
+
+## Brings a party member's next turn close.
+func _soon(id: String) -> void:
+	var member := id_member(id)
+	if member != null and battle.active != member and member.timeline_pos < 70.0:
+		member.timeline_pos = 70.0
+
+
 # --- The lessons ------------------------------------------------------------
 
 func _build_steps() -> void:
@@ -193,7 +245,7 @@ func _build_steps() -> void:
 
 	# 3. Your turn
 	_note(3, "Your turn",
-		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo (greyed out when no enemy is in reach, or the party can't afford a move that reaches one)\n- Abilities: use one skill\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.")
+		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo (greyed out when no enemy is in reach, or the party can't afford a move that reaches one)\n- Abilities: use one Ability (a class's special actions)\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.")
 	_goal(3, "Combos",
 		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.",
 		"Build a combo and press {begin}",
@@ -285,35 +337,43 @@ func _build_steps() -> void:
 			_top_up_ap(60.0))
 
 	# 7. More party members and Abilities
-	_note(7, "The Archer joins",
-		"Between turns, {swap} switches who you steer. The others move on their own: they stay out of danger, stand near their attack range, and stack up or spread out when an enemy skill calls for it.\n\nEach class has its own attacks, skills and reactions. The Archer can't Block or Parry, but its Riposte skill counters a strike instead.\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
+	_note(7, "The Archer",
+		"Each class has its own attacks, Abilities and reactions. Meet them one at a time, starting with the Archer.\n\nThe Archer can't Block or Parry, but its Riposte Ability counters a strike instead.\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
 		func():
 			_golem_rest()
-			battle.add_party_member(ARCHER))
+			_set_party(["archer"]))
 	_goal(7, "Abilities",
-		"Abilities lists a class's skills. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. You can use one skill per turn: after it, Abilities greys out but you can still Attack or Wait.",
-		"Use an Ability with anyone",
-		func(): return _stat("skills") >= 1,
-		func(): _top_up_ap(80.0))
-	_note(7, "The Mage and the Cleric",
-		"Two more join.\n\nThe Mage's spells hit areas: Fire runs through a line, Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage. Fire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press. Its Concentrate skill doubles AP recharge for a while (the AP meter shows it).\n\nThe Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit, though each hit is weaker. Its Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
+		"Abilities lists a class's special actions. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. You can use one Ability per turn: after it, Abilities greys out but you can still Attack or Wait.",
+		"Use an Ability with the Archer",
+		func(): return _stat("skills_archer") >= 1,
 		func():
-			battle.add_party_member(MAGE)
-			battle.add_party_member(CLERIC))
+			_soon("archer")
+			_top_up_ap(80.0))
+	_note(7, "The Mage",
+		"The Mage's spells hit areas: Fire runs through a line, Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage.\n\nFire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press.\n\nIts Concentrate Ability doubles AP recharge for a while (the AP meter shows it).",
+		func(): _set_party(["mage"]))
 	_goal(7, "The Mage",
-		"Steer the Mage into range between turns ({swap}), then attack on its turn.",
+		"Walk the Mage into range between turns ({move}): Fire reaches 4.5 m, the other spells 3 m. Then attack on its turn.",
 		"Attack with the Mage",
 		func(): return _stat("combos_mage") >= 1,
-		func(): _top_up_ap(80.0))
+		func():
+			_soon("mage")
+			_top_up_ap(80.0))
+	_note(7, "The Cleric",
+		"The Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit and costs 10 AP more (10, 20, 30).\n\nIts Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
+		func(): _set_party(["cleric"]))
 	_goal(7, "The Cleric",
 		"Healing, Shielding, Haste or Full Cure: any of them counts.",
-		"Use one of the Cleric's skills",
+		"Use one of the Cleric's Abilities",
 		func(): return _stat("skills_cleric") >= 1,
-		func(): _top_up_ap(80.0))
+		func():
+			_soon("cleric")
+			_top_up_ap(80.0))
 
 	# 8. Max AP
 	_note(8, "Max AP",
-		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and never past 500. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Taking a hit you could have avoided costs one segment: the meter pulses red while someone stands in harm's way. Skipping timed hits slowly drains the bonus too.")
+		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and never past 500. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Taking a hit you could have avoided costs one segment: the meter pulses red while someone stands in harm's way. Skipping timed hits slowly drains the bonus too.",
+		func(): _set_party(["knight"]))
 	_goal(8, "Max AP",
 		"Land Perfect hits or Parry the Golem's strikes. It's attacking again.",
 		"Raise max AP above 100",
@@ -361,9 +421,11 @@ func _build_steps() -> void:
 		"One more class: the Assassin. It can't Block or Parry, and most of its damage depends on WHERE it stands: behind an enemy means within 60 degrees of its back (the side away from its nose).\n\nSmall enemies like Goblins and Kobolds have no back to find: their ring is a full violet circle, and every hit counts as from behind.\n\nEnemies turn to face whoever they're after. The Golem is Taunted by the Knight now, so it keeps facing the Knight and leaves its back open. In real fights, the Knight's Taunt does exactly this for the Assassin.",
 		func():
 			_golem_rest()
-			assassin = battle.add_party_member(ASSASSIN)
-			assassin.global_position = knight.global_position + Vector3(2.5, 0.0, 0.0)
-			battle._keep_in_arena(assassin)
+			_set_party(["knight", "assassin"])  # the Knight's Taunt keeps the Golem's back turned
+			if assassin != null and battle.party.has(assassin):
+				assassin.global_position = knight.global_position + Vector3(2.5, 0.0, 0.0)
+				battle._keep_in_arena(assassin)
+				battle._set_controlled(assassin)
 			golem.add_status("taunt", 99, knight))
 	_goal(11, "Get behind",
 		"Between turns, switch to the Assassin ({swap}) and walk round to the Golem's back. While you steer the Assassin, every enemy has a ring on the floor: the arrow is its front, and the violet arc is its back, glowing when you stand in it. On the Assassin's turn, attack: Stab deals 1.5x from behind, and FROM BEHIND pops up when it counts.",
@@ -416,8 +478,9 @@ func _build_steps() -> void:
 
 	# 12. Free practice
 	_note(12, "Free practice",
-		"That's everything! The Training Golem now fights freely and can be defeated. Experiment as long as you like.\n\nEsc pauses; quit to the menu from there, where the Boss Rush is waiting.",
+		"That's everything! For the final test, the Knight, Archer, Mage and Cleric fight the Training Golem together, and it can be defeated.\n\nWith a full party, {swap} switches who you steer between turns. The others move on their own: they stay out of danger, stand near their attack range, and stack up or spread out when an enemy skill calls for it.\n\nEsc pauses; quit to the menu from there, where the Boss Rush is waiting.",
 		func():
+			_set_party(["knight", "archer", "mage", "cleric"])
 			_practice = true
 			golem.statuses.erase("taunt")
 			golem.forced_skill = null

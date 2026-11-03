@@ -291,6 +291,10 @@ var _pending_reveals := {}
 var _exec_reveal_left := 0.0
 ## How long the combo pauses when a new Art reveals itself.
 @export var art_reveal_seconds := 1.4
+## How fast the playhead crosses the combo bar, in AP of bar per second. The
+## same for every move: a block lasts as long as it is wide (Bash's growing
+## chains are the one exception, see _plan_slot).
+@export var playhead_ap_per_second: float = 15.0
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
@@ -537,6 +541,34 @@ func add_party_member(scene: PackedScene) -> Combatant:
 	fighter.timeline_pos = randf_range(10.0, 40.0)
 	_keep_in_arena(fighter)
 	return fighter
+
+
+## The tutorial: takes a party member out of the fight for a while (hidden,
+## off the timeline and the HP panel) without freeing it.
+func bench_member(fighter: Combatant) -> void:
+	party.erase(fighter)
+	combatants.erase(fighter)
+	fighter.visible = false
+	fighter.process_mode = Node.PROCESS_MODE_DISABLED
+	fighter.set_highlighted(false)
+	if _steer_before_turn == fighter:
+		_steer_before_turn = null
+	if controlled == fighter:
+		controlled = null
+
+
+## Brings a benched party member back, near the party's start spot.
+func unbench_member(fighter: Combatant) -> void:
+	if party.has(fighter):
+		return
+	party.append(fighter)
+	combatants.append(fighter)
+	fighter.visible = true
+	fighter.process_mode = Node.PROCESS_MODE_INHERIT
+	var spot := arena.spawn_points(false, 1)[0]
+	fighter.global_position = spot.origin + Vector3(2.0 * (party.size() - 2), 0, 1.5)
+	fighter.timeline_pos = randf_range(10.0, 40.0)
+	_keep_in_arena(fighter)
 
 
 ## N / P: jump to the next or previous round (restarts the scene).
@@ -2533,6 +2565,9 @@ func _try_parry() -> void:
 		_strike.reaction = Reaction.PARRY
 	else:
 		_strike.reaction = Reaction.PARRY_MISSED
+		for target in _strike.targets:
+			if target.can_parry:
+				_popup(target, "MISS", Color(1.0, 0.35, 0.3))  # too early: said at once, over their head
 
 
 ## Q: Defend. Costs AP, can't be combined with a parry attempt.
@@ -2985,8 +3020,13 @@ func _choose_attack_target() -> void:
 	if first != null:
 		choices.erase(first)
 		choices.push_front(first)  # the default pick: nearest in normal reach
+	if first == null and choices.is_empty():
+		# Nobody in reach any more (something moved while the menu was open).
+		_flash("No enemy in reach")
+		_open_commands()
+		return
 	if choices.size() <= 1:
-		_open_combo_bar(first)
+		_open_combo_bar(first if first != null else choices[0])
 		return
 	_target_choices = choices
 	_target_index = 0
@@ -3015,6 +3055,7 @@ func _open_combo_bar(target: Combatant = null) -> void:
 	_menu_mode = BattleMenu.Mode.COMBO
 	_plan.clear()
 	battle_menu.moves = _moves
+	_refresh_next_costs()
 	battle_menu.move_usable = usable
 	battle_menu.move_notes = notes
 	battle_menu.plan = _plan
@@ -3035,7 +3076,7 @@ func _add_to_combo(index: int) -> void:
 	if not battle_menu.move_usable[index]:
 		_flash(battle_menu.move_notes[index])
 		return
-	var cost := float(_moves[index]["cost"])
+	var cost := _next_cost(index)
 	var used := battle_menu.combo_cost()
 	if used + cost > controlled.combo_limit:
 		_flash("%s's combo bar is full" % controlled.display_name)
@@ -3064,6 +3105,33 @@ func _rebuild_plan() -> void:
 			_plan.append(_plan_slot(move))
 		_plan_spans.append([group["start"], group["length"]])
 	_update_arts_list()
+	_refresh_next_costs()
+
+
+## Plain Bash slots in a row at the end of the bar (Arts made with Bash
+## don't count).
+func _bash_chain() -> int:
+	var count := 0
+	for i in range(_plan.size() - 1, -1, -1):
+		if _plan[i]["move"].get("escalating", false) and not _plan[i]["move"].has("recipe"):
+			count += 1
+		else:
+			break
+	return count
+
+
+## What adding this move would cost now (Bash: more for each in a row).
+func _next_cost(index: int) -> float:
+	var move: Dictionary = _moves[index]
+	if move.get("escalating", false):
+		return float(move["cost"]) * (_bash_chain() + 1)
+	return float(move["cost"])
+
+
+## The move list shows what each move would cost if added next.
+func _refresh_next_costs() -> void:
+	for i in _moves.size():
+		_moves[i]["shown_cost"] = _next_cost(i)
 
 
 ## Reads the basic moves on the bar into groups: [{start, length, move}],
@@ -3311,20 +3379,20 @@ func _refresh_combo_reach() -> void:
 func _plan_slot(move: Dictionary) -> Dictionary:
 	var hits: Array = (move["hits"] as Array).duplicate()
 	var times: Array = (move.get("times", []) as Array).duplicate()
-	var duration: float = move["duration"]
+	# One playhead speed for every move: a block takes as long as it is wide.
+	var duration: float = maxf(float(move["cost"]), 1.0) / playhead_ap_per_second
+	var cost := float(move["cost"])
 	if move["escalating"]:
-		var count := 1
-		for entry in _plan:
-			if entry["name"] == move["name"]:
-				count += 1
-		# Each Bash in a row has one more hit, but every hit of it is weaker
-		# (escalate_falloff per earlier Bash): more timed hits, so more
-		# Perfects and max AP, without the damage running away.
+		var count := _bash_chain() + 1
+		# Each Bash in a row has one more hit and costs one more step of AP
+		# (10, 20, 30...), so a chain can't grow forever; each hit is a little
+		# weaker (escalate_falloff per earlier Bash).
 		var per_hit: float = float(move["hits"][0]) * pow(float(move.get("escalate_falloff", 1.0)), count - 1)
 		hits = []
 		for i in count:
 			hits.append(per_hit)
-		duration = 0.3 + 0.22 * count
+		cost = float(move["cost"]) * count
+		duration = cost / playhead_ap_per_second  # same playhead speed as every move
 		if count > 3:
 			# From the fourth Bash on, the hits land at random moments.
 			var spacing := 1.0 / count
@@ -3362,7 +3430,7 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 		for i in hits.size():
 			times.append(float(i + 1) / hits.size())
 	return {
-		"move": move, "name": move["name"], "color": move["color"], "cost": move["cost"],
+		"move": move, "name": move["name"], "color": move["color"], "cost": cost,
 		"hits": hits, "times": times, "duration": duration,
 		"window": float(move["window"]) / duration,
 		"timing": int(move.get("timing", Moves.TimingType.PRESS)),
@@ -3492,9 +3560,15 @@ func _update_combo(delta: float) -> void:
 			_stop_combo()
 			return
 
-	if _exec_hits_done >= hits.size():
+	# The playhead always crosses the whole block, even when its last hit
+	# lands early (Hold moves at 85%, the Assassin's random hits): the next
+	# block starts on time, so its boxes come exactly where they're drawn.
+	if _exec_hits_done >= hits.size() and _exec_time >= duration:
 		if _exec_slot + 1 < _plan.size():
+			var overshoot := _exec_time - duration
 			_start_combo_slot(_exec_slot + 1)
+			if _exec_reveal_left <= 0.0:
+				_exec_time = overshoot  # keep the rhythm frame-exact
 		else:
 			battle_menu.executing_slot = _plan.size()  # playhead to the end
 			_exec_outro = 0.4

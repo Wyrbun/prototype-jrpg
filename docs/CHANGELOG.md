@@ -3,6 +3,43 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## Tutorial, combo bar and parry feedback
+
+- **Tutorial:** each class lesson now features only that class (Archer,
+  Mage, Cleric alone; the Mage and Cleric lessons are split into their own
+  notes); Max AP and Rocks go back to the Knight alone; the Assassin lesson
+  has only the Knight (whose Taunt keeps the Golem's back turned) and the
+  Assassin. Free practice brings the Knight, Archer, Mage and Cleric together,
+  and that's where switching who you steer is explained. Party members step
+  out between lessons instead of piling up.
+- Tutorial text says Abilities (not skills) for the party's special actions.
+- **Combo bar:** the playhead always crosses the whole block, even when the
+  last hit lands early (Hold moves at 85%, the Assassin's random hits); it
+  used to jump to the next block. And it moves at one speed for every move
+  (`playhead_ap_per_second`, 15 AP of bar per second): a block lasts as long
+  as it is wide.
+- **Bash costs more in a row:** each Bash in a row adds a hit and costs 10 AP
+  more (10, 20, 30), so a chain can't grow forever; three fill the Cleric's
+  bar. Each hit loses 10% per earlier Bash (was 25%). The list shows what the
+  next Bash would cost. Divine Judgment's recipe is now Bash, Holy Light,
+  Bash, Divine Barrier, so it still fits the bar before you've found it.
+- **Parry:** pressing too early shows MISS over the fighter's head at once.
+- Fix: choosing Attack after the only enemy in reach moved away (while the
+  menu was open) crashed opening the combo bar; now it says so and goes back.
+
+## Tutorial panel out of the way of the Arts list
+
+- While the combo bar (or any turn menu after the commands) is open, the
+  tutorial panel shrinks to its title and goal, so it no longer covers the
+  move list and the Arts panel.
+- The Arts panel's "Hidden: ..." line wraps instead of running off the edge.
+
+## Fix: areas flickering over the pit
+
+- The pit's surface sat at the same height as enemy areas (3 cm), so where
+  a cone or line crossed it they z-fought (jagged black spikes). The pit is
+  now a thin disc just above the floor, under every area.
+
 ## New boss skills: Golem Smash, Ceiling Burst, Doom Gaze
 
 - **Stone Golem: Right / Left Golem Smash.** Half the room, out to the

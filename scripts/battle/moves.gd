@@ -27,7 +27,8 @@ class_name Moves
 ##             {"effect": PIERCE} (Triple Shot) or {"add_marks": 2}
 ##   add_marks Assassin's Marks this hit puts on the target
 ##   stun      cancels the target's turn if it's preparing an attack
-##   escalating Bash: each new Bash in the chain has one more hit
+##   escalating Bash: each Bash in a row has one more hit and costs one
+##             more step of its AP (10, 20, 30)
 ##   escalate_falloff  escalating only: each hit is this much weaker per
 ##             earlier Bash in the chain (0.75: 0.8, then 0.6, 0.45...)
 ##   barrier   share of max HP given as a barrier to allies near the user
@@ -113,8 +114,9 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 		"cleric":
 			list = [
 				# Basic moves: in the right order they become Arts (see arts()).
-				# No Art is Bash + Bash alone, so Bash chains keep growing.
-				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "+1 hit per Bash in the chain, each weaker", {"escalating": true, "escalate_falloff": 0.75}),
+				# No Art is Bash + Bash, so Bash chains keep growing: each Bash in a
+				# row adds a hit and costs 10 AP more (10, 20, 30).
+				_attack("Bash", 10, [0.8], 0.5, 0.15, BLUE, "Each Bash in a row: +1 hit, +10 AP", {"escalating": true, "escalate_falloff": 0.9}),
 				_attack("Holy Light", 20, [1.2], 1.0, 0.16, Color(1.0, 0.95, 0.7), "Long range, breaks Defense",
 						{"effect": Effect.BREAK, "reach": 9.0}),
 				_attack("Divine Barrier", 20, [1.0], 1.5, 0.18, GOLD, "Barrier to allies near you; Perfect: bigger",
@@ -226,7 +228,7 @@ static func arts(class_id: String) -> Array[Dictionary]:
 				_art(["Divine Barrier", "Divine Barrier"], "Sanctuary", [1.5], 1.7, 0.2, Color(0.55, 0.8, 1.0), "Hold: big barrier 15% in 5 m (Perfect 22% in 6.5 m)",
 						{"barrier": 0.15, "barrier_radius": 5.0, "perfect_barrier": 0.22, "perfect_barrier_radius": 6.5,
 						"timing": TimingType.HOLD, "hold_start": 0.3, "times": [0.85]}),
-				_art(["Bash", "Bash", "Holy Light", "Divine Barrier"], "Divine Judgment", [1.2, 1.2, 2.6], 1.8, 0.18, GOLD,
+				_art(["Bash", "Holy Light", "Bash", "Divine Barrier"], "Divine Judgment", [1.2, 1.2, 2.6], 1.8, 0.18, GOLD,
 						"Finisher: breaks Defense; whole party healed 15% + 10% barrier",
 						{"effect": Effect.BREAK, "heal_allies": 0.15, "heal_radius": UNLIMITED,
 						"barrier": 0.10, "barrier_radius": UNLIMITED, "times": [0.3, 0.55, 1.0], "finisher": true}),

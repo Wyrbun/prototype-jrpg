@@ -188,12 +188,15 @@ end-of-fight screen to open the folder.
 - Lessons: 1 Moving, 2 The timeline (reach ring, your turn), 3 Combos, timed
   hits, Wait and Arts (find Double Slash, then add an Art from the list), 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
   Defend, 6 The skill triangle (Thrust/Smash through Defense, Wait out
-  Counter, interrupt Smash), 7 Abilities (Archer joins, then Mage and
-  Cleric), 8 Max AP, 9 Rocks (the Golem waits with Long Strike revealed and
+  Counter, interrupt Smash), 7 The classes, one at a time and alone
+  (Archer: Hold moves and Abilities; Mage: Tap spells; Cleric: heals), 8 Max AP
+  (the Knight alone again), 9 Rocks (the Golem waits with Long Strike revealed and
   strikes once you're hidden behind the rock), 10 Special skills (notes),
-  11 The Assassin (joins; the Golem is Taunted by the Knight so its back
+  11 The Assassin (with only the Knight; the Golem is Taunted by the Knight so its back
   stays open: hit it from behind, use Shadowstep, put 4 Marks on it,
   Execute, then let the Golem's Attack be auto-parried), 12 Free practice
+  (Knight, Archer, Mage and Cleric together; switching who you steer is
+  explained here)
   (the Golem fights normally and can be defeated).
 - **Positional rings** (`PositionalRing`, a child of each enemy so it turns
   with it): shown while a `flanks` fighter (the Assassin) is steered. Front
@@ -618,7 +621,7 @@ Order matters: Frost + Fire and Fire + Gust are just two spells.
 ### Cleric (130 HP, 60 AP, can Block, cannot Parry)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Bash | 10 | 0.8 per hit, x0.75 per earlier Bash | the 1st Bash has 1 hit, the 2nd 2 hits, and so on, but each hit is weaker (0.8, 0.6, 0.45, 0.34...): six Bashes deal 7.1x attack in 21 timed hits (was 16.8x); from the 4th Bash the hits land at random moments |
+| Bash | 10, 20, 30 | 0.8 per hit, x0.9 per earlier Bash in the row | each Bash in a row has one more hit and costs 10 AP more (10, 20, 30: three fill the Cleric's 60 AP bar, 6 timed hits); a Bash after another move starts a new row |
 | Holy Light | 20 | 1.2 | reach 9 m; breaks Defense |
 | Divine Barrier | 20 | 1.0 | Hold (1.5 s): gives allies within 4 m a barrier of 10% of their max HP; a Perfect let-go makes it 15% within 5.5 m (the preview shows both circles) |
 
@@ -631,7 +634,7 @@ effects come with the Art's last hit):
 | Holy Light + Holy Light | Judgment | 40 | 3.2 (2.4) | reach 9 m, everyone within 2 m of the target, breaks Defense |
 | Bash + Divine Barrier | Blessed Strike | 30 | 2.2 (1.8) | Hold; heals allies within 4 m by 8% of max HP (Perfect 12%) |
 | Divine Barrier + Divine Barrier | Sanctuary | 40 | 1.5 (2.0) | Hold; barrier 15% within 5 m (Perfect 22% within 6.5 m) |
-| Bash + Bash + Holy Light + Divine Barrier | Divine Judgment (finisher) | 60 | 1.2 + 1.2 + 2.6 = 5.0 (other reading: Bash + Smite + Divine Barrier = 4.2) | breaks Defense; heals the whole party 15% and gives everyone a 10% barrier |
+| Bash + Holy Light + Bash + Divine Barrier | Divine Judgment (finisher) | 60 | 1.2 + 1.2 + 2.6 = 5.0 (other reading: Smite + Blessed Strike = 4.6) | breaks Defense; heals the whole party 15% and gives everyone a 10% barrier |
 
 | Skill | AP | Effect |
 |---|---|---|

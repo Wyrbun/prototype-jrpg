@@ -15,6 +15,9 @@ var goal_done := false
 ## Lesson number and total, for "3 / 9".
 var lesson_number := 0
 var lesson_total := 0
+## While a combo bar or menu is open, only the title and goal show, so the
+## panel stays clear of the move list and the Arts panel below it.
+var compact := false
 
 var _style: StyleBoxFlat
 
@@ -40,10 +43,14 @@ func _draw() -> void:
 	var inner := WIDTH - PAD * 2.0
 	var text := Keybinds.fill(body)
 	var goal_text := Keybinds.fill(goal)
-	var body_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16)
+	if compact and goal_text != "":
+		text = ""
+	var body_size := Vector2.ZERO if text == "" else font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16)
 	var footer := "GOAL: " + goal_text if goal_text != "" else Keybinds.fill("{confirm} / Enter / {begin}: continue")
 	var footer_size := font.get_multiline_string_size(footer, HORIZONTAL_ALIGNMENT_LEFT, inner - 24.0, 17)
 	var height := PAD + 22.0 + 12.0 + body_size.y + 16.0 + footer_size.y + PAD
+	if text == "":
+		height -= 12.0
 	var box := Rect2(size.x - WIDTH - 20.0, 96.0, WIDTH, height)
 	draw_style_box(_style, box)
 
@@ -54,8 +61,9 @@ func _draw() -> void:
 		var count := "%d / %d" % [lesson_number, lesson_total]
 		var count_width := font.get_string_size(count, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 		_line(font, Vector2(box.end.x - PAD - count_width, title_baseline), count, 14, Color(0.6, 0.6, 0.65))
-	var body_top := title_baseline + 16.0
-	draw_multiline_string(font, Vector2(x, body_top + font.get_ascent(16)), text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16, -1, Color(0.92, 0.92, 0.95))
+	var body_top := title_baseline + (16.0 if text != "" else 4.0)
+	if text != "":
+		draw_multiline_string(font, Vector2(x, body_top + font.get_ascent(16)), text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16, -1, Color(0.92, 0.92, 0.95))
 	var y := body_top + body_size.y + 8.0
 	draw_line(Vector2(x, y), Vector2(box.end.x - PAD, y), Color(GOLD, 0.35), 1.0)
 	y += 6.0

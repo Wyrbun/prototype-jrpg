@@ -181,14 +181,15 @@ func _draw_move_list(font: Font) -> void:
 		var move := moves[i]
 		var row := Rect2(panel.position + Vector2(8, 8 + i * row_height), Vector2(width - 16, row_height - 2))
 		var usable := i >= move_usable.size() or move_usable[i]
-		var fits := float(move["cost"]) <= room and usable
+		var shown_cost := float(move.get("shown_cost", move["cost"]))  # Bash: its cost if added next
+		var fits := shown_cost <= room and usable
 		if i == move_index and not (mode == Mode.COMBO and arts_focus):
 			draw_rect(row, Color(GOLD, 0.22))
 			_text(font, row.position + Vector2(6, 21), ">", 18, GOLD)
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
 		draw_rect(Rect2(row.position + Vector2(24, 8), Vector2(12, 12)), move["color"] if fits else Color(0.35, 0.35, 0.4))
 		_text(font, row.position + Vector2(44, 21), move["name"], 17, color)
-		_text(font, row.position + Vector2(200, 21), "%d AP" % move["cost"], 17, GOLD if fits else color)
+		_text(font, row.position + Vector2(200, 21), "%d AP" % shown_cost, 17, GOLD if fits else color)
 		var desc: String = move["desc"]
 		if not usable and i < move_notes.size() and move_notes[i] != "":
 			desc = move_notes[i]
@@ -207,7 +208,12 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 	var width := minf(340.0, size.x - x - 8.0)
 	if width < 220.0:
 		return  # no room on a narrow window
-	var extra := 22.0 if arts_hidden > 0 else 0.0
+	var hidden_line := ""
+	var hidden_size := Vector2.ZERO
+	if arts_hidden > 0:
+		hidden_line = ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
+		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12)
+	var extra := hidden_size.y + 10.0 if arts_hidden > 0 else 0.0  # wraps on a narrow panel
 	var panel := Rect2(x, beside.position.y, width, 34.0 + arts.size() * row_height + extra)
 	draw_style_box(_panel_style, panel)
 	_text(font, panel.position + Vector2(12, 24), "ARTS", 16, GOLD)
@@ -233,8 +239,11 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 			var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 			_text(font, Vector2(row.end.x - hint_w - 6, row.position.y + 14), hint, 12, GOLD)
 	if arts_hidden > 0:
-		var line := ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
-		_text(font, Vector2(panel.position.x + 12, panel.end.y - 9), line, 12, Color(0.6, 0.62, 0.7))
+		var top := panel.end.y - hidden_size.y - 6.0
+		draw_multiline_string_outline(font, Vector2(panel.position.x + 12, top + font.get_ascent(12)), hidden_line,
+				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12, -1, 4, Color.BLACK)
+		draw_multiline_string(font, Vector2(panel.position.x + 12, top + font.get_ascent(12)), hidden_line,
+				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12, -1, Color(0.6, 0.62, 0.7))
 
 
 ## "2 two-move, 1 four-move": how many hidden Arts of each length.
