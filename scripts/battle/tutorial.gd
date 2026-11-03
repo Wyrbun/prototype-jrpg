@@ -30,6 +30,8 @@ var _walked := 0.0
 var _last_knight_position := Vector3.ZERO
 ## Counts down after a goal is met, before the next step.
 var _done_timer := -1.0
+## Combos played before the Arts list step (it needs a new one).
+var _combos_before_list := 0
 ## Free practice: the Golem fights normally and can be defeated.
 var _practice := false
 
@@ -193,7 +195,7 @@ func _build_steps() -> void:
 	_note(3, "Your turn",
 		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo (greyed out when no enemy is in reach, or the party can't afford a move that reaches one)\n- Abilities: use one skill\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.")
 	_goal(3, "Combos",
-		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.\n\nSome moves in the right order form ARTS, stronger than their parts. They're secret until you find one: put moves in an order that hides an Art, and it reveals itself mid-combo. From then on it merges on the bar as you build it and appears in the Arts list ({swap} in the combo bar picks one from there and adds it whole).",
+		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.",
 		"Build a combo and press {begin}",
 		func(): return _stat("combos") >= 1,
 		func(): _top_up_ap(60.0))
@@ -211,6 +213,23 @@ func _build_steps() -> void:
 		"Choose Wait on the Knight's next turn",
 		func(): return _stat("waits") >= 1,
 		func(): _knight_soon())
+	_note(3, "Arts",
+		"Some moves in the right order form ARTS: named attacks that hit harder than their parts, and the longer ones add effects. Every class has its own.\n\nThey're secret until you find one. Put moves in an order that hides an Art and start the combo: when the playhead reaches those moves, they merge into the Art with a NEW ART! banner. From then on they merge on the bar as you build them.\n\nThe ARTS panel beside the moves lists the Arts you've found, with their recipes, and how many are still hidden, by length (\"Hidden: 4 two-move, 1 four-move\"). The long ones are finishers, worth hunting for.")
+	_goal(3, "Your first Art",
+		"Put Slash on the bar, then Slash again, and press {begin}. Watch the bar when the playhead reaches them.\n\n(If you've found it before, the two Slashes already merge as you build them.)",
+		"Play Slash + Slash",
+		func(): return _stat("art_double_slash") >= 1,
+		func():
+			_knight_soon()
+			_top_up_ap(60.0))
+	_goal(3, "The Arts list",
+		"Known Arts can also go on the bar in one go. In the combo bar, press {swap} to move into the ARTS panel, choose an Art with {up} / {down}, and {confirm} adds its whole recipe. {swap} or {cancel} goes back to the moves.\n\nAn Art picked from the list stays itself even after other moves.",
+		"Add an Art from the list ({swap}) and play it",
+		func(): return _stat("arts_picked") >= 1 and _stat("combos") > _combos_before_list,
+		func():
+			_combos_before_list = _stat("combos")
+			_knight_soon()
+			_top_up_ap(60.0))
 
 	# 4. Reading the enemy
 	_note(4, "Reading the enemy",

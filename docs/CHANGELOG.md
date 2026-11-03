@@ -3,6 +3,31 @@
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 
+## New boss skills: Golem Smash, Ceiling Burst, Doom Gaze
+
+- **Stone Golem: Right / Left Golem Smash.** Half the room, out to the
+  arena's edges; the Golem can't turn while casting it, so whoever it faced
+  steps out. Dodge only.
+- **Stone Golem: Ceiling Burst.** 10 circles fall one by one, 0.5 s apart,
+  in a random order (one near each party member); each leaves a rock that
+  blocks the way for ~10 s.
+- **Stone Golem: Smash + Ceiling Burst.** The circles fall only on the safe
+  half, then the smash lands.
+- **Living Armor: Doom Gaze.** A slow, arena-wide instant-death circle full
+  of skulls. A rock crashes down at a compass point when the cast starts:
+  hide behind it. AI allies run behind it too.
+- New skill fields: `aim_offset_degrees`, `locks_facing`, `fills_arena`
+  (areas drawn and reaching up to the arena's edges), `ceiling_*`,
+  `lethal`, `cover_rock*`. AI allies step out of half-room cones towards
+  their back edge, and avoid circles about to fall.
+
+## Tutorial: Arts lesson
+
+- Lesson 3 gains an Arts note and two goals: play Slash + Slash (the first
+  NEW ART! moment, on purpose instead of by luck), then add an Art from the
+  list with Tab and play it. The Combos goal's text no longer explains Arts.
+- Reports count `arts_picked` (Arts added from the list).
+
 ## After a full Boss Rush play-test
 
 - **Finisher hint:** the Arts panel now counts hidden Arts by recipe length

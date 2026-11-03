@@ -56,7 +56,7 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var cannot_be_parried: bool = false
 ## Defend (Q) does nothing against this skill.
 @export var cannot_be_blocked: bool = false
-## Strikes several times in a row (one ring per hit); a Parry stops the rest.
+## Strikes several times in a row (one ring per hit, each can be Parried).
 @export_range(1, 5) var hits: int = 1
 ## The last hit throws its targets this many meters away (0 = no throw).
 @export var launch: float = 0.0
@@ -112,6 +112,47 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var spikes: int = 0
 @export var spike_damage: int = 15
 
+@export_group("Aim")
+## Turns the area away from where the enemy faces, in degrees: 90 = its
+## right side, -90 = its left (Right / Left Golem Smash).
+@export_range(-180.0, 180.0) var aim_offset_degrees: float = 0.0
+## The enemy doesn't turn at all while casting this (from the moment the
+## cast starts): whoever it faced can step out of the area.
+@export var locks_facing: bool = false
+## The area is drawn (and reaches) only up to the arena's edges: give it a
+## big radius and it covers "half the room" or "the whole room".
+@export var fills_arena: bool = false
+
+@export_group("Ceiling burst")
+## Circles that fall from the ceiling, one after another, at random spots
+## (Ceiling Burst). They show in grey when the cast starts, and from the
+## reveal they fall in a random order, ceiling_interval seconds apart; each
+## one's shrinking ring warns ceiling_warning seconds before it lands. The
+## enemy holds its turn until the last one has fallen; its own area (if it
+## has one: radius above 0) strikes right after.
+@export var ceiling_circles: int = 0
+@export var ceiling_radius: float = 2.0
+@export var ceiling_damage: int = 28
+@export var ceiling_interval: float = 0.5
+## Seconds from the reveal until the first circle lands.
+@export var ceiling_lead: float = 1.0
+@export var ceiling_warning: float = 1.0
+## Each circle leaves a rock where it lands (blocks movement and sight),
+## gone after ceiling_rock_seconds of fight time (0 radius = no rocks).
+@export var ceiling_rock_radius: float = 0.9
+@export var ceiling_rock_seconds: float = 10.0
+
+@export_group("Doom")
+## Kills anyone it hits (Doom Gaze). Can't be Parried or Defended: only a
+## rock between the enemy and you saves you.
+@export var lethal: bool = false
+## When the cast starts, a rock falls at one of the four compass points
+## around the enemy (always with room to hide behind it), and is gone once
+## the skill is over.
+@export var cover_rock: bool = false
+@export var cover_rock_distance: float = 5.0
+@export var cover_rock_radius: float = 1.5
+
 @export_group("Special")
 @export var special: Special = Special.NONE
 ## ON_EACH_TARGET / LINE_TO_EACH: the rule for anyone in 2+ areas.
@@ -129,7 +170,7 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 
 ## True for mechanic skills (always hit; the answer is a mechanic, not a dodge).
 func is_mechanic() -> bool:
-	return always_hits or always_hits_target or hits_everyone
+	return always_hits or always_hits_target or hits_everyone or lethal
 
 
 ## True if the enemy keeps facing its target exactly for the whole cast:

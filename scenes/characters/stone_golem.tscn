@@ -52,6 +52,91 @@ always_hits = true
 spikes = 4
 spike_damage = 16
 
+[sub_resource type="Resource" id="Skill_5"]
+script = ExtResource("2_skill")
+skill_name = "Right Golem Smash"
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = 90.0
+locks_facing = true
+fills_arena = true
+
+[sub_resource type="Resource" id="Skill_6"]
+script = ExtResource("2_skill")
+skill_name = "Left Golem Smash"
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = -90.0
+locks_facing = true
+fills_arena = true
+
+[sub_resource type="Resource" id="Skill_7"]
+script = ExtResource("2_skill")
+skill_name = "Ceiling Burst"
+kind = 4
+weight = 2
+shape = 1
+radius = 0.0
+angle = 360.0
+damage = 0
+ceiling_circles = 10
+ceiling_radius = 2.0
+ceiling_damage = 28
+
+[sub_resource type="Resource" id="Skill_8"]
+script = ExtResource("2_skill")
+skill_name = "Right Smash + Ceiling Burst"
+kind = 4
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+aim_offset_degrees = 90.0
+locks_facing = true
+fills_arena = true
+ceiling_circles = 8
+ceiling_radius = 2.0
+ceiling_damage = 28
+
+[sub_resource type="Resource" id="Skill_9"]
+script = ExtResource("2_skill")
+skill_name = "Left Smash + Ceiling Burst"
+kind = 4
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+aim_offset_degrees = -90.0
+locks_facing = true
+fills_arena = true
+ceiling_circles = 8
+ceiling_radius = 2.0
+ceiling_damage = 28
+
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.6, 1.6, 1.6)
 
@@ -67,7 +152,7 @@ interrupt_resist = 3
 move_speed = 3.5
 turn_speed_degrees = 90.0
 body_radius = 0.95
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)

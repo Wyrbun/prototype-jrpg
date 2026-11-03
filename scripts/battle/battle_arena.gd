@@ -263,6 +263,12 @@ var _target_index := 0
 var _target_marker: MeshInstance3D = null
 ## Lingering hazards (fire trails): {"area", "owner", "turns", "dps", "acc"}.
 var _hazards: Array[Dictionary] = []
+## Ceiling Burst circles still to land: {"area", "owner", "time_left",
+## "damage", "warning", "ring"}. They tick in world time (paused on turns).
+var _falls: Array[Dictionary] = []
+## Rocks Ceiling Burst left behind: {"rock", "time_left"} (world time).
+var _debris: Array[Dictionary] = []
+const FALLING_ROCK_COLOR := Color(1.0, 0.62, 0.25)
 ## Telegraph arrows being animated: {"node", "base", "dir"}.
 var _telegraph_arrows: Array[Dictionary] = []
 var _telegraph_time := 0.0
@@ -554,6 +560,7 @@ func _process(delta: float) -> void:
 				member.riposte_left = maxf(member.riposte_left - world_delta, 0.0)
 			_free_roam(delta, world_delta)
 			_tick_hazards(world_delta)
+			_tick_falls(world_delta)
 			_tick_stances(world_delta)
 			_advance_timeline(world_delta)
 		elif _turn_intro_left > 0.0:
@@ -638,6 +645,8 @@ func _advance_timeline(seconds: float) -> void:
 			continue
 		var before := c.timeline_pos
 		c.timeline_pos += c.speed * time_scale * seconds * _cast_speed(c)
+		if c.team == Combatant.Team.ENEMY and _falls_pending(c):
+			c.timeline_pos = minf(c.timeline_pos, TIMELINE_LENGTH - 0.01)  # Ceiling Burst: waits for the last circle
 
 		if c.team == Combatant.Team.ENEMY:
 			if before < cast_zone_start and c.timeline_pos >= cast_zone_start:
@@ -916,6 +925,17 @@ func _enemy_target(enemy: Combatant) -> Combatant:
 ##      contained), otherwise the nearest enemy.
 func _ally_step(ally: Combatant, delta: float) -> void:
 	var dangers := _ally_dangers(ally)
+	var hide_at: Variant = _hide_point(ally)
+	if hide_at != null:
+		var target: Vector3 = hide_at
+		if not arena.has_line_of_sight(ally.global_position, target):
+			target = _around_rock(ally, target)  # the rock is in the way: go round its side first
+		var to_hide: Vector3 = target - ally.global_position
+		to_hide.y = 0.0
+		if to_hide.length() > 0.25:
+			ally.step(arena.steer(ally.global_position, to_hide, ally.body_radius), delta)
+			_keep_in_arena(ally)
+		return
 	var stack_at: Variant = _stack_point(ally)
 	if stack_at != null:
 		var to_stack: Vector3 = stack_at - ally.global_position
@@ -931,6 +951,12 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 			var from_area := ally.global_position - area.global_position
 			from_area.y = 0.0
 			var out := from_area.normalized() if from_area.length() > 0.05 else Vector3.RIGHT
+			if area.shape == EnemySkill.Shape.CONE and area.angle_degrees >= 150.0 and area.angle_degrees < 360.0:
+				# Half the room (Golem Smash): away from its center stays inside;
+				# the way out is towards its back edge.
+				var forward := -area.global_basis.z
+				forward.y = 0.0
+				out = -forward.normalized()
 			if area.shape == EnemySkill.Shape.DONUT \
 					and from_area.length() - area.inner_radius < area.radius - from_area.length():
 				out = -out  # a ring: its safe middle is closer than its outer edge
@@ -997,6 +1023,9 @@ func _ally_dangers(ally: Combatant) -> Array[Dictionary]:
 			list.append({"area": area, "margin": margin})
 	for hazard in _hazards:
 		list.append({"area": hazard["area"], "margin": base})
+	for fall in _falls:
+		if float(fall["time_left"]) <= 1.6:  # only the ones about to land
+			list.append({"area": fall["area"], "margin": base})
 	return list
 
 
@@ -1174,8 +1203,14 @@ func _begin_cast(enemy: Combatant) -> void:
 	enemy.set_meta("smash_hits", 0)
 	enemy.contained = false
 	enemy.show_skill_text("...", Color(0.75, 0.75, 0.8))
+	if enemy.loaded_def.locks_facing:
+		enemy.set_meta("aim_locked", true)  # Golem Smash: it won't turn to follow anyone
 	# Its area shows up right away, in grey: where it will land, not what it is.
 	_build_cast_areas(enemy)
+	if enemy.loaded_def.ceiling_circles > 0:
+		_place_ceiling_circles(enemy)
+	if enemy.loaded_def.cover_rock:
+		_drop_cover_rock(enemy)
 	_link_bait(enemy)
 	print("%s is preparing %s (hidden)" % [enemy.display_name, enemy.loaded_def.skill_name])
 
@@ -1197,8 +1232,14 @@ func _reveal_skill(enemy: Combatant) -> void:
 		enemy.set_meta("aim_locked", true)
 	if def.kind == Skills.Kind.DEFENSE or def.kind == Skills.Kind.COUNTER:
 		text += " STANCE"
-	if def.is_mechanic():
+	if def.lethal:
+		text += "  -  HIDE BEHIND THE ROCK"
+	elif def.is_mechanic():
 		text += "  -  UNAVOIDABLE"
+	if def.ceiling_circles > 0:
+		_start_falls(enemy)
+	if def.lethal:
+		_add_skulls(enemy)
 	if def.follow_up != null:
 		text += "  >  " + def.follow_up.skill_name.to_upper()
 	if enemy.contained:
@@ -1225,6 +1266,10 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 		return
 	if enemy.loaded_def.push_out:
 		_push_out(enemy, reset_timeline)
+		return
+	if enemy.loaded_def.ceiling_circles > 0 and enemy.loaded_def.radius <= 0.01:
+		# Ceiling Burst alone: the circles did the work; nothing else strikes.
+		_finish_enemy_skill(enemy, reset_timeline)
 		return
 	if enemy.loaded_def.is_offensive():
 		if enemy.loaded_def.aims_exactly() and enemy.cast_target != null and not enemy.cast_target.is_down:
@@ -1253,7 +1298,14 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 ## Clean-up after an Attack or Smash, hit or miss.
 func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.attack_range:
+		enemy.attack_range.rotation.y = 0.0  # Golem Smash turned it to one side
+		enemy.attack_range.clip_half = Vector2.ZERO
+		enemy.attack_range.clip_circle = 0.0
 		enemy.attack_range.go_dormant()
+	for fall in _falls.duplicate():
+		if fall["owner"] == enemy:
+			_remove_fall(fall)  # interrupted before they all came down
+	_remove_cover_rock(enemy)
 	_clear_cast_extras(enemy)
 	enemy.show_skill_text("")
 	enemy.cast_target = null
@@ -1312,7 +1364,9 @@ func _update_attack_ranges() -> void:
 		# Strikes always land when the enemy's icon reaches the end of the bar;
 		# until then the area just glows and warns who's standing in it.
 		var skill_name := enemy.loaded_def.skill_name
-		if enemy.loaded_def.is_mechanic():
+		if enemy.loaded_def.lethal:
+			skill_name += " (hide behind the rock!)"
+		elif enemy.loaded_def.is_mechanic():
 			skill_name += " (unavoidable)"
 		var verb := "will push back" if enemy.loaded_def.push_out else "will hit"
 		warnings.append("%s's %s %s: %s" % [enemy.display_name, skill_name, verb, ", ".join(targets)])
@@ -1355,7 +1409,22 @@ func _build_cast_areas(enemy: Combatant) -> void:
 			enemy.extra_areas.append(area)
 		_place_party_areas(enemy, true)
 	elif enemy.attack_range:
+		enemy.attack_range.rotation.y = -deg_to_rad(def.aim_offset_degrees)  # 90: its right side
+		_set_arena_clip(enemy.attack_range, def.fills_arena)
 		enemy.attack_range.show_skill(def, true, _cast_radius(enemy))
+
+
+## Fills-the-arena areas stop at the arena's edges.
+func _set_arena_clip(area: AttackRange, on: bool) -> void:
+	area.clip_center = arena.global_position
+	area.clip_half = Vector2.ZERO
+	area.clip_circle = 0.0
+	if not on:
+		return
+	if arena.shape == Arena.Shape.CIRCLE:
+		area.clip_circle = arena.size.x / 2.0
+	else:
+		area.clip_half = arena.size / 2.0
 
 
 ## Moves placed areas onto their party members (circles) or aims them at
@@ -1418,6 +1487,14 @@ func _clear_cast_extras(enemy: Combatant) -> void:
 		if is_instance_valid(area):
 			area.queue_free()
 	enemy.extra_areas.clear()
+	for node in enemy.get_meta("skulls", []):
+		if is_instance_valid(node):
+			node.queue_free()
+	enemy.set_meta("skulls", [])
+	for area in enemy.get_meta("ceiling_grey", []):
+		if is_instance_valid(area) and not _falls.any(func(f): return f["area"] == area):
+			area.queue_free()
+	enemy.set_meta("ceiling_grey", [])
 	_clear_telegraphs(enemy)
 
 
@@ -1684,6 +1761,311 @@ func _remove_hazard(hazard: Dictionary) -> void:
 	_hazards.erase(hazard)
 
 
+# --- Ceiling Burst -----------------------------------------------------------
+
+## Ceiling Burst: picks the spots where the circles will fall (shown in grey
+## while the skill is hidden). One lands near each party member, so nobody
+## can ignore it; the rest are scattered over the arena, apart from each other.
+func _place_ceiling_circles(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	var r := def.ceiling_radius
+	var spots: Array[Vector3] = []
+	for member in _standing(party):
+		if spots.size() >= def.ceiling_circles:
+			break
+		for attempt in 12:
+			var spot := member.global_position + Vector3(randf_range(-1.6, 1.6), 0.0, randf_range(-1.6, 1.6))
+			if _inside_arena(spot, r * 0.5) and _spot_free(spot, spots, r * 1.1) and not _in_own_area(enemy, spot):
+				spots.append(spot)
+				break
+	var tries := 0
+	while spots.size() < def.ceiling_circles and tries < 400:
+		tries += 1
+		var spot := _random_arena_point(r * 0.6)
+		if _spot_free(spot, spots, r * 1.2) and not _in_own_area(enemy, spot):
+			spots.append(spot)
+	var circle := EnemySkill.make(def.skill_name, def.kind, EnemySkill.Shape.CIRCLE, r, 360.0, def.ceiling_damage, 0.0, 0)
+	var grey: Array = []
+	for spot in spots:
+		var area := AttackRange.new()
+		add_child(area)
+		area.global_position = Vector3(spot.x, 0.035, spot.z)
+		area.show_skill(circle, true)
+		area.set_meta("circle_def", circle)
+		grey.append(area)
+	enemy.set_meta("ceiling_grey", grey)
+
+
+## At the reveal: the circles take the skill's color and start falling, one
+## after another in a random order.
+func _start_falls(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	var areas: Array = enemy.get_meta("ceiling_grey", []).duplicate()
+	areas.shuffle()
+	enemy.set_meta("ceiling_penalty", false)
+	for i in areas.size():
+		var area: AttackRange = areas[i]
+		if not is_instance_valid(area):
+			continue
+		area.show_hazard(area.get_meta("circle_def"), FALLING_ROCK_COLOR)  # its own color: not the smash's
+		_falls.append({"area": area, "owner": enemy, "time_left": def.ceiling_lead + i * def.ceiling_interval,
+				"damage": def.ceiling_damage, "warning": def.ceiling_warning, "ring": null, "name": def.skill_name,
+				"rock_radius": def.ceiling_rock_radius, "rock_seconds": def.ceiling_rock_seconds})
+
+
+func _falls_pending(enemy: Combatant) -> bool:
+	for fall in _falls:
+		if fall["owner"] == enemy:
+			return true
+	return false
+
+
+## Each circle's ring shrinks onto it in its last ceiling_warning seconds;
+## when it lands, everyone inside is hit.
+func _tick_falls(world_delta: float) -> void:
+	for piece in _debris.duplicate():
+		piece["time_left"] = float(piece["time_left"]) - world_delta
+		if float(piece["time_left"]) <= 0.0:
+			_debris.erase(piece)
+			var old_rock: Node3D = piece["rock"]
+			if is_instance_valid(old_rock):
+				var sink := create_tween()
+				sink.tween_property(old_rock, "global_position:y", -2.2, 0.6)
+				sink.tween_callback(old_rock.queue_free)
+	for fall in _falls.duplicate():
+		var area: AttackRange = fall["area"]
+		if not is_instance_valid(area):
+			_falls.erase(fall)
+			continue
+		fall["time_left"] = float(fall["time_left"]) - world_delta
+		var left: float = fall["time_left"]
+		var warning: float = fall["warning"]
+		if left <= warning and fall["ring"] == null:
+			var ring := _make_ring(area.radius, 0.12, Color(1.0, 0.45, 0.2, 0.95))
+			add_child(ring)
+			ring.global_position = Vector3(area.global_position.x, 0.06, area.global_position.z)
+			fall["ring"] = ring
+		if fall["ring"] != null:
+			var grow := 1.0 + 2.0 * clampf(left / maxf(warning, 0.01), 0.0, 1.0)
+			(fall["ring"] as Node3D).scale = Vector3(grow, 1.0, grow)
+		var someone := false
+		for member in _standing(party):
+			if area.contains(member.global_position, member.body_radius * 0.6):
+				someone = true
+		area.set_alert(someone and left <= warning)
+		if left > 0.0:
+			continue
+		_land_fall(fall)
+
+
+func _land_fall(fall: Dictionary) -> void:
+	var area: AttackRange = fall["area"]
+	var owner: Combatant = fall["owner"]
+	var hit: Array[Combatant] = []
+	for member in _standing(party):
+		if area.contains(member.global_position, member.body_radius * 0.6):
+			var taken := _hurt(member, int(fall["damage"]), false, String(fall["name"]), owner, String(fall["name"]))
+			_popup(member, str(taken), Color(1.0, 0.55, 0.3))
+			hit.append(member)
+	if not hit.is_empty():
+		var lines: PackedStringArray = ["%s: a falling rock hits %s" % [fall["name"], _names(hit)]]
+		if is_instance_valid(owner) and not owner.get_meta("ceiling_penalty", false):
+			owner.set_meta("ceiling_penalty", true)  # one max AP segment per burst, not per rock
+			var note := _lose_max_ap_for_hit(hit)
+			if note != "":
+				lines.append(note)
+			if playtest:
+				playtest.avoidable(owner, String(fall["name"]))
+		_flash("\n".join(lines))
+		_check_party()
+	if float(fall.get("rock_radius", 0.0)) > 0.0:
+		# The rock stays where it fell for a while: it blocks the way (and sight).
+		var rock := ArenaObstacle.new()
+		rock.kind = ArenaObstacle.Kind.ROCK
+		rock.radius = float(fall["rock_radius"])
+		arena.add_child(rock)
+		rock.global_position = Vector3(area.global_position.x, 0.0, area.global_position.z)
+		rock.scale = Vector3(1.0, 0.75, 1.0)  # a fallen chunk, lower than the arena's rocks
+		_debris.append({"rock": rock, "time_left": float(fall["rock_seconds"])})
+		for c in combatants:
+			_keep_in_arena(c)  # anyone it landed on is pushed out from under it
+	_remove_fall(fall)
+
+
+func _remove_fall(fall: Dictionary) -> void:
+	if fall["ring"] != null and is_instance_valid(fall["ring"]):
+		(fall["ring"] as Node).queue_free()
+	if is_instance_valid(fall["area"]):
+		(fall["area"] as Node).queue_free()
+	_falls.erase(fall)
+
+
+## True if a floor point is inside the arena, at least margin from its edge.
+func _inside_arena(point: Vector3, margin: float) -> bool:
+	var p := point - arena.global_position
+	if arena.shape == Arena.Shape.CIRCLE:
+		return Vector2(p.x, p.z).length() <= arena.size.x / 2.0 - margin
+	return absf(p.x) <= arena.size.x / 2.0 - margin and absf(p.z) <= arena.size.y / 2.0 - margin
+
+
+func _random_arena_point(margin: float) -> Vector3:
+	var half := arena.size / 2.0 - Vector2(margin, margin)
+	for attempt in 30:
+		var p := arena.global_position + Vector3(randf_range(-half.x, half.x), 0.0, randf_range(-half.y, half.y))
+		if _inside_arena(p, margin):
+			return p
+	return arena.global_position
+
+
+## Not inside a rock, and at least min_gap from the other spots.
+## Combined with an area of its own (Golem Smash + Ceiling Burst): the
+## circles fall where the smash doesn't, shrinking the safe ground.
+func _in_own_area(enemy: Combatant, spot: Vector3) -> bool:
+	return enemy.loaded_def.radius > 0.01 and enemy.attack_range != null and enemy.attack_range.contains(spot)
+
+
+func _spot_free(spot: Vector3, others: Array[Vector3], min_gap: float) -> bool:
+	for obstacle in arena.obstacles():
+		if Vector2(spot.x - obstacle.global_position.x, spot.z - obstacle.global_position.z).length() < obstacle.radius:
+			return false
+	for other in others:
+		if Vector2(spot.x - other.x, spot.z - other.z).length() < min_gap:
+			return false
+	return true
+
+
+# --- Doom Gaze ----------------------------------------------------------------
+
+## Doom Gaze: a rock crashes down at one of the four compass points around
+## the enemy, picked so there's room to hide behind it inside the arena.
+func _drop_cover_rock(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	var r := def.cover_rock_radius
+	var dirs := [Vector3.FORWARD, Vector3.RIGHT, Vector3.BACK, Vector3.LEFT]
+	dirs.shuffle()
+	var chosen := Vector3.ZERO
+	var where := Vector3.ZERO
+	for distance in [def.cover_rock_distance, def.cover_rock_distance * 0.75, def.cover_rock_distance * 0.55]:
+		for dir in dirs:
+			var spot: Vector3 = enemy.global_position + dir * distance
+			var hide: Vector3 = spot + dir * (r + 1.8)  # room behind it for the party
+			if not _inside_arena(spot, r + 0.4) or not _inside_arena(hide, 0.7):
+				continue
+			var blocked := false
+			for obstacle in arena.obstacles():
+				if Vector2(spot.x - obstacle.global_position.x, spot.z - obstacle.global_position.z).length() < obstacle.radius + r + 0.6:
+					blocked = true
+			if blocked:
+				continue
+			chosen = dir
+			where = spot
+			break
+		if chosen != Vector3.ZERO:
+			break
+	if chosen == Vector3.ZERO:
+		return  # no room anywhere (shouldn't happen in the boss arena)
+	var rock := ArenaObstacle.new()
+	rock.kind = ArenaObstacle.Kind.ROCK
+	rock.radius = r
+	arena.add_child(rock)
+	rock.global_position = Vector3(where.x, 9.0, where.z)
+	rock.set_meta("hide_dir", chosen)
+	var tween := create_tween()
+	tween.tween_property(rock, "global_position:y", 0.0, 0.55).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	enemy.set_meta("cover_rock", rock)
+	_flash("A rock crashes down! Hide behind it")
+
+
+func _remove_cover_rock(enemy: Combatant) -> void:
+	if not enemy.has_meta("cover_rock"):
+		return
+	var rock: Node3D = enemy.get_meta("cover_rock")
+	enemy.remove_meta("cover_rock")
+	if rock == null or not is_instance_valid(rock):
+		return
+	var tween := create_tween()
+	tween.tween_property(rock, "global_position:y", -2.2, 0.5)
+	tween.tween_callback(rock.queue_free)
+
+
+## Where an AI ally hides from a lethal skill: in the cover rock's shadow,
+## side by side (a second row further back), or null.
+func _hide_point(ally: Combatant) -> Variant:
+	for enemy in enemies:
+		if enemy.is_down or enemy.loaded_def == null or not enemy.loaded_def.lethal:
+			continue
+		if not enemy.has_meta("cover_rock"):
+			continue
+		var rock: Node3D = enemy.get_meta("cover_rock")
+		if rock == null or not is_instance_valid(rock):
+			continue
+		var away := rock.global_position - enemy.global_position
+		away.y = 0.0
+		away = away.normalized()
+		var side := away.cross(Vector3.UP)
+		var slot := _standing(party).find(ally)
+		var offsets := [0.0, 0.7, -0.7, 0.35, -0.35, 0.0]
+		var row := 0.0 if slot < 3 else 0.9
+		var base := Vector3(rock.global_position.x, 0.0, rock.global_position.z)
+		return base + away * ((rock as ArenaObstacle).radius + ally.body_radius + 0.45 + row) \
+				+ side * float(offsets[clampi(slot, 0, offsets.size() - 1)])
+	return null
+
+
+## A point beside the rock between an ally and where it's heading, on the
+## ally's side of it, so the ally walks round instead of into it.
+func _around_rock(ally: Combatant, goal: Vector3) -> Vector3:
+	var best: ArenaObstacle = null
+	for obstacle in arena.obstacles():
+		if not obstacle.blocks_sight():
+			continue
+		var c := Vector2(obstacle.global_position.x, obstacle.global_position.z)
+		var a := Vector2(ally.global_position.x, ally.global_position.z)
+		var ab := Vector2(goal.x, goal.z) - a
+		var t := clampf((c - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+		if (a + ab * t).distance_to(c) < obstacle.radius + ally.body_radius:
+			if best == null or ally.global_position.distance_to(obstacle.global_position) \
+					< ally.global_position.distance_to(best.global_position):
+				best = obstacle
+	if best == null:
+		return goal
+	var center := Vector3(best.global_position.x, 0.0, best.global_position.z)
+	var along := goal - ally.global_position
+	along.y = 0.0
+	var side := along.normalized().cross(Vector3.UP)
+	if side.dot(ally.global_position - center) < 0.0:
+		side = -side
+	return center + side * (best.radius + ally.body_radius + 0.6)
+
+
+## White skulls scattered over a lethal skill's area, so it reads as death.
+func _add_skulls(enemy: Combatant) -> void:
+	var nodes: Array = []
+	var half := arena.size / 2.0
+	var step := 3.4
+	var x := -half.x + step * 0.5
+	var row := 0
+	while x < half.x:
+		var z := -half.y + step * (0.5 if row % 2 == 0 else 1.0)
+		while z < half.y:
+			var spot := arena.global_position + Vector3(x, 0.0, z)
+			if enemy.attack_range.contains(spot) and _inside_arena(spot, 0.6) \
+					and spot.distance_to(enemy.global_position) > enemy.body_radius + 1.0:
+				var skull := Label3D.new()
+				skull.text = "☠"
+				skull.font_size = 150
+				skull.modulate = Color(1, 1, 1, 0.6)
+				skull.outline_size = 0
+				skull.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+				add_child(skull)
+				skull.global_position = Vector3(spot.x, 0.06, spot.z)
+				nodes.append(skull)
+			z += step
+		x += step * 0.87
+		row += 1
+	enemy.set_meta("skulls", nodes)
+
+
 # --- Telegraphs -------------------------------------------------------------
 
 ## Revealed skills that need a specific answer say so on the field:
@@ -1839,7 +2221,9 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 					for member in members:
 						if _skill_reaches(enemy, skill, member):
 							reached += 1
-					if not _skill_reaches(enemy, skill, target) and reached == 0:
+					if skill.ceiling_circles > 0:
+						pass  # Ceiling Burst falls all over the arena: always worth it
+					elif not _skill_reaches(enemy, skill, target) and reached == 0:
 						score *= 0.05  # can't reach anyone: almost never worth preparing
 					elif not skill.shared_damage:
 						score *= 1.0 + 0.25 * maxi(reached - 1, 0)
@@ -2190,6 +2574,8 @@ func _resolve_strike() -> void:
 	for target in s.targets:
 		var mod: Dictionary = s.mods.get(target, {})
 		var damage := ceili(base_damage * float(mod.get("mult", 1.0)))
+		if s.def.lethal:
+			damage = (target.hp + target.shield) * 2 + 1  # Doom Gaze: through barriers and Brace
 		var one_hp: bool = mod.get("one_hp", false)
 		if target.riposte_left > 0.0 and s.def.parryable():
 			_riposte(target, s.enemy, lines)
@@ -2848,6 +3234,7 @@ func _add_art(row: int) -> void:
 	_combo_locks[battle_menu.combo.size()] = art["name"]
 	for index in indices:
 		battle_menu.combo.append(index)
+	_count("arts_picked")  # the tutorial's Arts list step
 	_rebuild_plan()
 	_refresh_combo_reach()
 

@@ -32,6 +32,11 @@ var _alert := false
 var _base_radius: float
 var _base_angle: float
 var _material: StandardMaterial3D
+## Fills-the-arena areas: drawn only up to the arena's edges (a rectangle
+## clip_half around clip_center, or a circle of clip_circle radius).
+var clip_center := Vector3.ZERO
+var clip_half := Vector2.ZERO
+var clip_circle := 0.0
 
 
 func _ready() -> void:
@@ -146,12 +151,15 @@ func _build_mesh() -> ArrayMesh:
 		_:
 			# A flat fan of triangles pointing forward (-Z).
 			var half := deg_to_rad(angle_degrees) / 2.0
-			for i in SEGMENTS:
-				var a0 := -half + 2.0 * half * i / SEGMENTS
-				var a1 := -half + 2.0 * half * (i + 1) / SEGMENTS
+			var segments := SEGMENTS if not _clipped() else 96
+			for i in segments:
+				var a0 := -half + 2.0 * half * i / segments
+				var a1 := -half + 2.0 * half * (i + 1) / segments
+				var d0 := Vector3(sin(a0), 0.0, -cos(a0))
+				var d1 := Vector3(sin(a1), 0.0, -cos(a1))
 				vertices.append(Vector3.ZERO)
-				vertices.append(Vector3(sin(a0), 0.0, -cos(a0)) * radius)
-				vertices.append(Vector3(sin(a1), 0.0, -cos(a1)) * radius)
+				vertices.append(d0 * _ray_length(d0))
+				vertices.append(d1 * _ray_length(d1))
 
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -159,3 +167,36 @@ func _build_mesh() -> ArrayMesh:
 	var area := ArrayMesh.new()
 	area.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return area
+
+
+func _clipped() -> bool:
+	return live and (clip_half != Vector2.ZERO or clip_circle > 0.0) and is_inside_tree()
+
+
+## How far a fan ray (local direction) reaches: the radius, or less where the
+## arena's edge comes first.
+func _ray_length(local_dir: Vector3) -> float:
+	if not _clipped():
+		return radius
+	var world := global_basis * local_dir
+	world.y = 0.0
+	if world.length_squared() < 0.000001:
+		return radius
+	var scale_factor := world.length()  # the node may be scaled
+	world = world.normalized()
+	var p := global_position - clip_center
+	var reach := radius * scale_factor
+	if clip_circle > 0.0:
+		var flat := Vector2(p.x, p.z)
+		var d := Vector2(world.x, world.z)
+		var b := flat.dot(d)
+		var c := flat.length_squared() - clip_circle * clip_circle
+		var disc := b * b - c
+		if disc >= 0.0:
+			reach = minf(reach, maxf(-b + sqrt(disc), 0.0))
+	else:
+		if absf(world.x) > 0.0001:
+			reach = minf(reach, ((clip_half.x if world.x > 0.0 else -clip_half.x) - p.x) / world.x)
+		if absf(world.z) > 0.0001:
+			reach = minf(reach, ((clip_half.y if world.z > 0.0 else -clip_half.y) - p.z) / world.z)
+	return maxf(reach, 0.0) / scale_factor

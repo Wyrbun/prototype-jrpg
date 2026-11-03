@@ -186,7 +186,7 @@ end-of-fight screen to open the folder.
     make the Golem repeat a skill, or have it prepare one and freeze the
     moment it's revealed (a held enemy doesn't strike or walk).
 - Lessons: 1 Moving, 2 The timeline (reach ring, your turn), 3 Combos, timed
-  hits and Wait, 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
+  hits, Wait and Arts (find Double Slash, then add an Art from the list), 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
   Defend, 6 The skill triangle (Thrust/Smash through Defense, Wait out
   Counter, interrupt Smash), 7 Abilities (Archer joins, then Mage and
   Cleric), 8 Max AP, 9 Rocks (the Golem waits with Long Strike revealed and

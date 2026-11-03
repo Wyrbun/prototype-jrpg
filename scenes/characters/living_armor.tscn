@@ -43,6 +43,21 @@ max_radius = 11.0
 contain_share = 0.1
 cast_speed = 0.6
 
+[sub_resource type="Resource" id="Skill_4"]
+script = ExtResource("2_skill")
+skill_name = "Doom Gaze"
+kind = 4
+weight = 1
+shape = 1
+radius = 40.0
+angle = 360.0
+damage = 999
+windup = 1.0
+cast_speed = 0.3
+fills_arena = true
+lethal = true
+cover_rock = true
+
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.2, 2.0, 1.0)
 
@@ -58,7 +73,7 @@ interrupt_resist = 3
 move_speed = 4.0
 turn_speed_degrees = 120.0
 body_radius = 0.8
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)

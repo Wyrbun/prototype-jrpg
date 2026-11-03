@@ -28,8 +28,8 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit), Fireball (unavoidable, no Parry or Defend: circle on its target; hits everyone inside, so stand alone) | |
 | Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out), then Sword Spin 2 s later (donut 3.5-6 m; always hits everyone Shout pushed, others can dodge into the middle; can't be parried) | |
 | Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle; 3 hits from within 1.5 m interrupt it), Curse (unavoidable: a line to each party member, rocks block; in 2+ lines: double damage, can't be blocked) | |
-| Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns) | |
-| Living Armor | 900 | Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows from 2 to 11 m over a slow cast; dealing 10% of its HP during the cast contains it, so you can step out) | |
+| Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Right/Left Golem Smash (half the room, it can't turn), Ceiling Burst (falling circles that leave rocks for ~10 s), the two combined, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns) | |
+| Living Armor | 900 | Doom Gaze (arena-wide instant death: hide behind the rock it drops), Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows from 2 to 11 m over a slow cast; dealing 10% of its HP during the cast contains it, so you can step out) | |
 | Dragon Hatchling | 960 | **Closes in** (`closes_in`): while none of its aimed skills reaches anyone it walks 2.5x faster, so keeping away doesn't leave it casting only Burning Spike. Breath (unavoidable on its target, tracks it exactly; massive cone; damage shrinks the more people it hits: stack up; slow cast, 60% speed), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (unavoidable: a circle on each party member; anyone in an overlap drops to 1 HP; each circle keeps burning for 3 Dragon turns, 8 HP/s) | |
 
 ## Normal enemies
@@ -79,6 +79,9 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Crush | Smash | Long, thin line | built |
 | Rock Stomp | Attack | Short circle around itself | built |
 | Rock Spikes | Special | Targeted circle | Leaves 4 rock spikes that damage anyone walking into them; last 2 of the Golem's turns |
+| Right / Left Golem Smash | Smash | Half the room (a 180° cone to its right or left, out to the arena's edges) | Locks its facing for the whole cast, so whoever it faced can step out; can't be Parried or Defended; 48 damage |
+| Ceiling Burst | Special | 10 circles all over the arena | Grey when the cast starts; from the reveal they fall in a random order, 0.5 s apart (a ring shrinks onto each in its last second). One always lands near each party member. 28 damage each; each leaves a rock (blocks movement and sight) for ~10 s. The Golem waits at the end of the bar until the last one falls |
+| Right / Left Smash + Ceiling Burst | Special | Both at once | 8 circles fall only on the safe half, then the smash lands: stay out of its half and dodge the rocks |
 
 ### Living Armor
 | Skill | Kind | Shape | Rules |
@@ -86,6 +89,7 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Combo | Attack | (melee) | 3 hits; the last one launches the target far away |
 | Dark Bolt | Special | Circle on every party member, explodes | Overlapping circles deal double damage; can be Parried |
 | Shadowflare | Special | Expanding circle | Grows until enough damage is dealt to the Armor, then explodes a few seconds later |
+| Doom Gaze | Special | The whole arena, with white skulls | Slow cast (30% speed). When it starts, a rock crashes down 5 m away at a compass point (always with room behind it). Anyone the Armor can see when it lands is struck down outright, through barriers and Brace; hiding behind the rock means no damage. The rock goes afterwards |
 
 ### Dragon Hatchling
 | Skill | Kind | Shape | Rules |
