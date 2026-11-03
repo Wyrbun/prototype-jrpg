@@ -287,6 +287,11 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	_centered(font, "PROTOTYPE JRPG", 120.0, 56, GOLD)
 	_centered(font, "A battle system prototype", 165.0, 20, Color(0.7, 0.72, 0.8))
+	# The build's version (Project Settings > Application > Config > Version),
+	# so play-testers can say which build they played.
+	var version := "v" + str(ProjectSettings.get_setting("application/config/version", "dev"))
+	var version_width := font.get_string_size(version, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	_text(font, Vector2(size.x - version_width - 14.0, size.y - 12.0), version, 15, Color(0.55, 0.57, 0.65))
 
 	if page == Page.CONTROLS:
 		# Rows shrink on short windows so the whole table and the hint fit.

@@ -130,6 +130,7 @@ func save(result: String, stats: Dictionary, members: Array[Combatant], foes: Ar
 	lines.append("# %s (attempt %d): %s" % [round_title, attempt, result])
 	lines.append("")
 	lines.append("- When: %s" % Time.get_datetime_string_from_system().replace("T", " "))
+	lines.append("- Version: %s" % ProjectSettings.get_setting("application/config/version", "dev"))
 	if mode != "":
 		lines.append("- Mode: %s" % mode)
 	lines.append("- Length: %d:%02d, %d turns" % [int(seconds) / 60, int(seconds) % 60, total_turns])
@@ -216,7 +217,7 @@ func _append_csv(stamp: String, result: String, seconds: float, total_turns: int
 		return
 	file.seek_end()
 	if is_new:
-		file.store_line("date,round,attempt,result,seconds,turns,party_hp_left,party_max_hp,enemy_hp_left,enemy_max_hp,downs,parries,defends,misses,perfects,interrupts")
+		file.store_line("date,round,attempt,result,seconds,turns,party_hp_left,party_max_hp,enemy_hp_left,enemy_max_hp,downs,parries,defends,misses,perfects,interrupts,version")
 	var party_hp := 0
 	var party_max := 0
 	var downs := 0
@@ -229,8 +230,8 @@ func _append_csv(stamp: String, result: String, seconds: float, total_turns: int
 	for foe in foes:
 		enemy_hp += maxi(foe.hp, 0)
 		enemy_max += foe.max_hp
-	file.store_line("%s,%s,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d" % [stamp, round_title, attempt, result, roundi(seconds),
+	file.store_line("%s,%s,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s" % [stamp, round_title, attempt, result, roundi(seconds),
 			total_turns, party_hp, party_max, enemy_hp, enemy_max, downs, int(stats.get("parries", 0)),
 			int(stats.get("defends", 0)), int(stats.get("misses", 0)), int(stats.get("perfects", 0)),
-			int(stats.get("interrupts", 0))])
+			int(stats.get("interrupts", 0)), ProjectSettings.get_setting("application/config/version", "dev")])
 	file.close()

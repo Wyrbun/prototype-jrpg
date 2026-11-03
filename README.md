@@ -32,11 +32,38 @@ timing as the playhead passes (Press, Hold or Tap) for a **Perfect**. Moves in
 the right order merge into **Arts**, secret until you find them mid-combo.
 Perfects and Parries grow the party's max AP; mistakes reset it.
 
-## Running it
+## How to play
 
-1. Install **Godot 4.7** (standard version, not .NET) from godotengine.org.
-2. In Godot, click **Import** and select this folder's `project.godot`.
-3. Press **F5**. The game opens on the title screen.
+**Download (Windows):** grab the latest `PrototypeJRPG-<version>-windows.zip`
+from the [Releases](../../releases) page, unzip it and run the `.exe`. No
+install needed. Windows may warn about an unknown app the first time: choose
+*More info > Run anyway*.
+
+**Download (Linux, x86_64):** grab `PrototypeJRPG-<version>-linux.tar.gz`
+from the same page, then:
+
+```
+tar -xzf PrototypeJRPG-<version>-linux.tar.gz
+chmod +x "Prototype JRPG.x86_64"   # only if it won't start
+./"Prototype JRPG.x86_64"
+```
+
+The version is shown on the title screen; what changed in each one is in
+[`docs/RELEASES.md`](docs/RELEASES.md).
+
+**From source (any platform):** install **Godot 4.7** (standard, not .NET),
+click **Import**, pick this folder's `project.godot`, and press **F5**.
+
+**First steps:**
+
+1. Start with **Tutorial** on the title screen. It teaches everything in about 15 minutes, and you can't lose.
+2. Then play **Boss Rush**: 12 rounds that get harder, with auto-save (**Continue** picks up where you left off).
+3. Stuck on a round? **Round Select** jumps to any of them.
+
+**Feedback is very welcome!** After every fight the game writes a short
+report; press **O** on the end screen to open the folder (on Windows,
+`%APPDATA%\Godot\app_userdata\Prototype JRPG\playtests`). Attach a few to an
+[issue](../../issues) along with what felt fun, confusing or unfair.
 
 ## Controls (defaults)
 

@@ -2,6 +2,16 @@
 
 How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
+Player-facing notes per public build are in `RELEASES.md`.
+
+## Versions: 0.1.0, the first public build
+
+- `application/config/version` (0.1.0) is the one place to bump; it shows
+  in the title screen's corner and in every play-test report (and a
+  `version` column in playtests.csv). The Windows export carries it too.
+- `docs/RELEASES.md` holds short notes for each release.
+- The Linux export preset is back (embedded .pck, x86_64), so each release
+  can ship a `linux.tar.gz` next to the Windows zip.
 
 ## Tutorial, combo bar and parry feedback
 
