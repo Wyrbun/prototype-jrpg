@@ -34,17 +34,18 @@ Perfects and Parries grow the party's max AP; mistakes reset it.
 
 ## How to play
 
-**Download (Windows):** grab the latest `PrototypeJRPG-<version>-windows.zip`
-from the [Releases](../../releases) page, unzip it and run the `.exe`. No
-install needed. Windows may warn about an unknown app the first time: choose
-*More info > Run anyway*.
+**Current build: [0.1.0](../../releases/tag/v0.1.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
-**Download (Linux, x86_64):** grab `PrototypeJRPG-<version>-linux.tar.gz`
-from the same page, then:
+**Download (Windows):** get
+[`PrototypeJRPG-0.1.0-windows.zip`](../../releases/download/v0.1.0/PrototypeJRPG-0.1.0-windows.zip),
+unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
+about an unknown app the first time: choose *More info > Run anyway*.
+
+**Download (Linux, x86_64):** get
+[`PrototypeJRPG-0.1.0-linux.tar.gz`](../../releases/download/v0.1.0/PrototypeJRPG-0.1.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-<version>-linux.tar.gz
-chmod +x "Prototype JRPG.x86_64"   # only if it won't start
+tar -xzf PrototypeJRPG-0.1.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -83,6 +84,7 @@ report; press **O** on the end screen to open the folder (on Windows,
 
 - [`docs/battle-design.md`](docs/battle-design.md): every rule and number in detail
 - [`docs/enemy-roster.md`](docs/enemy-roster.md): enemies and their skills
+- [`docs/RELEASES.md`](docs/RELEASES.md): what changed in each public build
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): how the system evolved
 
 ## Roadmap

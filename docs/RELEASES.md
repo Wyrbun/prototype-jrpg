@@ -19,6 +19,8 @@ of every play-test report.
      (Windows 10 and 11 have `tar` built in: run it from a terminal in the builds folder)
 4. Add a section below, then publish a GitHub Release tagged `v<version>`
    (a pre-release while under 1.0) with both files attached.
+5. Point the README's "Current build" line and its two download links at
+   the new version.
 
 ---
 
