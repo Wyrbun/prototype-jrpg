@@ -60,6 +60,10 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export_range(1, 5) var hits: int = 1
 ## The last hit throws its targets this many meters away (0 = no throw).
 @export var launch: float = 0.0
+## The last hit drags its targets this many meters towards the enemy
+## (0 = no pull). Red arrows on the area show it. Dragged over a hole or a
+## lethal edge means falling; into fire means burning.
+@export var pull: float = 0.0
 ## Damage shrinks when several are hit together: 100%, 67%, 50%, 40%...
 @export var shared_damage: bool = false
 ## Leaves its area burning for this many of the enemy's turns (0 = none);

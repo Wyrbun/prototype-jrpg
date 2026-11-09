@@ -61,6 +61,7 @@ size = Vector3(1.5, 1.5, 1.5)
 albedo_color = Color(0.7, 0.62, 0.45, 1)
 
 [node name="TrainingGolem" instance=ExtResource("1_base")]
+boss = true
 display_name = "Training Golem"
 max_hp = 400
 speed = 9.0

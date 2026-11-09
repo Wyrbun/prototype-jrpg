@@ -65,6 +65,7 @@ size = Vector3(1.2, 2.0, 1.0)
 albedo_color = Color(0.25, 0.25, 0.32, 1)
 
 [node name="LivingArmor" instance=ExtResource("1_base")]
+boss = true
 display_name = "Living Armor"
 max_hp = 900
 speed = 20.0

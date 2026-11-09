@@ -10,13 +10,16 @@ extends Control
 ## damage taken while defending, which comes back at that fighter's next
 ## turn if they don't get hit again first.
 
-const ROW_HEIGHT := 30.0
+const ROW_HEIGHT := 34.0
+## Party rows get a second line under the HP bar for effect tags (BRACE 2,
+## BAR 80 RUSH...), so they never run into the AP meter beside the panel.
+const TAG_ROW_HEIGHT := 50.0
 ## Rows that fit at full height (the control is sized for six).
 const MAX_ROWS := 6
 ## Where bars start at the least; pushed right for long names.
-const BAR_X := 84.0
-const BAR_WIDTH := 170.0
-const BAR_HEIGHT := 14.0
+const BAR_X := 96.0
+const BAR_WIDTH := 210.0
+const BAR_HEIGHT := 16.0
 
 var party: Array[Combatant] = []
 var controlled: Combatant = null
@@ -34,14 +37,16 @@ func _draw() -> void:
 	# Bars start after the longest name, so names like "Stone Golem" fit.
 	var bar_x := BAR_X
 	for c in party:
-		bar_x = maxf(bar_x, font.get_string_size(c.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 12.0)
+		bar_x = maxf(bar_x, font.get_string_size(c.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x + 12.0)
 	var row_height := ROW_HEIGHT if party.size() <= MAX_ROWS else size.y / party.size()
+	if not tags_on_left and party.size() * TAG_ROW_HEIGHT <= size.y:
+		row_height = TAG_ROW_HEIGHT
 	var top := size.y - party.size() * row_height
 	for i in party.size():
 		var c := party[i]
 		var y := top + i * row_height
 		var name_color := Color(0.5, 0.5, 0.5) if c.is_down else (Color(1.0, 0.82, 0.2) if c == controlled else Color.WHITE)
-		_text(font, Vector2(0, y + 17), c.display_name, 17, name_color)
+		_text(font, Vector2(0, y + 19), c.display_name, 19, name_color)
 
 		var bar := Rect2(bar_x, y + 5, BAR_WIDTH, BAR_HEIGHT)
 		draw_rect(bar, Color(0.08, 0.09, 0.13, 0.85))
@@ -58,13 +63,21 @@ func _draw() -> void:
 			draw_rect(Rect2(bar.position, Vector2(shield_width, 4)), Color(0.55, 0.8, 1.0))
 
 		var hp_text := "DOWN" if c.is_down else "%d / %d" % [c.hp, c.max_hp]
-		_text(font, Vector2(bar.end.x + 10, y + 17), hp_text, 15, name_color)
+		_text(font, Vector2(bar.end.x + 10, y + 19), hp_text, 17, name_color)
 		var tags := "" if c.is_down else c.status_text()
 		if tags != "" and tags_on_left:
-			var width := font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-			_text(font, Vector2(-width - 10, y + 17), tags, 13, Color(1.0, 0.6, 0.45))
+			var width := font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			_text(font, Vector2(-width - 10, y + 19), tags, 15, Color(1.0, 0.6, 0.45))
 		elif tags != "":
-			_text(font, Vector2(bar.end.x + 92, y + 17), tags, 13, Color(0.6, 0.85, 1.0))
+			# Under the bar, inside the panel: smaller type for a long line,
+			# then cut with an ellipsis rather than spill over the AP meter.
+			var room := size.x - bar.position.x
+			var tag_size := 14
+			while tag_size > 11 and font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x > room:
+				tag_size -= 1
+			while tags.length() > 4 and font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x > room:
+				tags = tags.substr(0, tags.length() - 2) + "…"
+			_text(font, Vector2(bar.position.x, y + 39), tags, tag_size, Color(0.6, 0.85, 1.0))
 
 
 func _text(font: Font, pos: Vector2, text: String, size: int, color: Color) -> void:

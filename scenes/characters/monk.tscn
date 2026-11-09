@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/party_member.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.92, 0.55, 0.18, 1)
+
+[node name="Monk" instance=ExtResource("1_base")]
+display_name = "Monk"
+class_id = "monk"
+max_hp = 160
+combo_limit = 30.0
+can_block = true
+can_parry = true
+bar_steps = Array[float]([30.0, 50.0, 80.0, 100.0])
+attack_power = 16
+attack_reach = 0.8
+speed = 10.0
+
+[node name="Body" parent="."]
+surface_material_override/0 = SubResource("Mat_body")

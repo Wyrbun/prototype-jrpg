@@ -16,12 +16,14 @@ const ARCHER := preload("res://scenes/characters/archer.tscn")
 const MAGE := preload("res://scenes/characters/mage.tscn")
 const CLERIC := preload("res://scenes/characters/cleric.tscn")
 const ASSASSIN := preload("res://scenes/characters/assassin.tscn")
+const MONK := preload("res://scenes/characters/monk.tscn")
 
 var battle: BattleArena
 var panel: TutorialPanel
 var golem: Combatant
 var knight: Combatant
 var assassin: Combatant
+var monk: Combatant
 var steps: Array[Dictionary] = []
 var index := -1
 
@@ -186,7 +188,7 @@ func _apply_party() -> void:
 			battle._end_turn()  # its lesson is over: the turn passes quietly
 		if battle.active != null:
 			return
-	var scenes := {"knight": null, "archer": ARCHER, "mage": MAGE, "cleric": CLERIC, "assassin": ASSASSIN}
+	var scenes := {"knight": null, "archer": ARCHER, "mage": MAGE, "cleric": CLERIC, "assassin": ASSASSIN, "monk": MONK}
 	for member in battle.party.duplicate():
 		if not _pending_party.has(member.class_id):
 			battle.bench_member(member)
@@ -199,6 +201,8 @@ func _apply_party() -> void:
 		battle._set_controlled(id_member(String(_pending_party[0])))
 	if _members.has("assassin"):
 		assassin = _members["assassin"]
+	if _members.has("monk"):
+		monk = _members["monk"]
 	_pending_party = []
 
 
@@ -275,7 +279,7 @@ func _build_steps() -> void:
 			_knight_soon()
 			_top_up_ap(60.0))
 	_goal(3, "The Arts list",
-		"Known Arts can also go on the bar in one go. In the combo bar, press {swap} to move into the ARTS panel, choose an Art with {up} / {down}, and {confirm} adds its whole recipe. {swap} or {cancel} goes back to the moves.\n\nAn Art picked from the list stays itself even after other moves.",
+		"Known Arts can also go on the bar in one go. In the combo bar, press {swap} to move into the ARTS panel, choose an Art with {up} / {down}, and {confirm} adds its whole recipe. {swap} or {cancel} goes back to the moves.\n\nAn Art picked from the list stays itself even after other moves, and the chosen Art's details (its cost, timing and what it does) show above the panel.",
 		"Add an Art from the list ({swap}) and play it",
 		func(): return _stat("arts_picked") >= 1 and _stat("combos") > _combos_before_list,
 		func():
@@ -415,6 +419,8 @@ func _build_steps() -> void:
 		"Later enemies have skills marked UNAVOIDABLE. Those can't be dodged, Parried or Defended: their circles and lines follow their targets until they land, and they just deal their damage. What matters is answering them:\n- Red sphere over everyone: spread out, so circles don't overlap\n- Arrows pointing inward: stack up, to share the damage\n- A circle on one person: they should stand alone\n\nGetting the answer wrong costs a max AP segment, like any avoidable hit.")
 	_note(10, "Special skills",
 		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the caster hard to stop them, then step out\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
+	_note(10, "Drops",
+		"Some arenas have drops: holes and edges marked by a glowing red line lined with skulls. Anyone knocked or pulled over one falls out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nWalk into a drop yourself and you teeter: {parry} as the ring turns gold to catch yourself. Each fighter gets that save once per fight.")
 
 	# 11. The Assassin: positioning and Marks
 	_note(11, "The Assassin",
@@ -476,8 +482,58 @@ func _build_steps() -> void:
 				battle._set_controlled(assassin)
 			_golem_repeat("Attack"))
 
-	# 12. Free practice
-	_note(12, "Free practice",
+	# 12. The Monk: build the bar, then cash out
+	_note(12, "The Monk",
+		"The last class: the Monk. Weak alone, he builds his bar up over a fight, then spends it all at once.\n\nHis bar starts at 30 AP and climbs in steps: 50, 80, 100. Every CLIMB Art (Knee Smash, Triple Rush, Mountain Crusher) raises it one step, whichever step he's on. On his turn, pips over his head show the steps he's climbed, and the same pips sit by his timeline icon. He spends party AP like everyone else.\n\nPunch and Kick have one timed hit each; their other hits land by themselves (the small ticks on the bar).",
+		func():
+			_golem_rest()
+			golem.statuses.erase("taunt")
+			golem.set_marks(0)
+			_set_party(["monk"])
+			if monk != null:
+				monk.global_position = golem.global_position + Vector3(0.0, 0.0, golem.body_radius + monk.body_radius + 0.5)
+				battle._keep_in_arena(monk))
+	_goal(12, "Climb a step",
+		"At 30, only Knee Smash fits: Kick + Heavy Kick (a HOLD move). Play it, Perfect or not: the step comes either way, and a \"STEP 1\" banner shows it.",
+		"Climb a step with Knee Smash",
+		func(): return monk != null and monk.combo_limit >= 50,
+		func():
+			_soon("monk")
+			_top_up_ap(100.0))
+	_note(12, "Tokens",
+		"Played with EVERY timing Perfect, an Art also leaves a TOKEN for later: Knee Smash leaves Rush, Palm Strike (Punch + Punch) Triple, Flash Kick (Kick + Kick) Mountain. Tokens stay until an Art uses them up, and each one used up adds 10% damage.\n\nUnder the bar, a preview tells you what the Art at the end does: the tokens it uses, the step it climbs to, and what a Perfect adds. Once a timing isn't Perfect, that last part greys out.\n\nThe bar also shows the steps still to climb, past its end.")
+	_goal(12, "Climb to the top",
+		"From 50, pick the climb Art that fits the turn:\n- Triple Rush (Palm Strike + Knee Smash): ignores Defense, uses Triple and Rush\n- Mountain Crusher (Heavy Punch + Flash Kick + Knee Smash): hits everyone around the target\n- Knee Smash: the cheapest",
+		"Climb to bar 100",
+		func(): return monk != null and monk.combo_limit >= 100,
+		func():
+			_soon("monk")
+			_top_up_ap(100.0))
+	steps[-1]["tick"] = func():
+		if battle.active == null:
+			_soon("monk")
+			_top_up_ap(100.0)
+	_note(12, "Cash out",
+		"At the top, a climb Art played all Perfect earns CROWD CHEER. With it, Tortoise Special (Heavy Punch + Heavy Kick + Headbutt) cashes out the whole climb: 1.5x damage at bar 80, 2.5x at 100. Then the bar drops back to 30 and the climb starts over.\n\nIt ends in a Headbutt, and moves after a Headbutt go on a fresh bar, after a short READY.\n\nThe crowd is on your side today: the Monk has Crowd Cheer.",
+		func():
+			if monk != null:
+				monk.tokens["Crowd Cheer"] = 1
+				monk.combo_limit = maxf(monk.combo_limit, 100.0))
+	_goal(12, "Cash out",
+		"Heavy Punch, Heavy Kick, Headbutt: watch the bar drop back to 30 when it lands.",
+		"Cash out with Tortoise Special",
+		func(): return _stat("monk_cashouts") >= 1,
+		func():
+			if monk != null:
+				monk.tokens["Crowd Cheer"] = 1
+				monk.combo_limit = maxf(monk.combo_limit, 80.0)
+			_soon("monk")
+			_top_up_ap(100.0))
+	_note(12, "Risks and tanking",
+		"Mistakes cost the Monk: a missed timing, an avoidable hit or a Parry pressed too early drops his bar a step and takes his newest token (Crowd Cheer last). Deep Breath heals him and gives that step back.\n\nHe can tank ONE enemy for a while: Provoke makes it come for him, and each Parry meanwhile gives Rush; a Suplex counter gives Mountain. The Knight is still the better tank: his Taunt holds every enemy nearby, and while it lasts, allies close to him share his Block and Parry.")
+
+	# 13. Free practice
+	_note(13, "Free practice",
 		"That's everything! For the final test, the Knight, Archer, Mage and Cleric fight the Training Golem together, and it can be defeated.\n\nWith a full party, {swap} switches who you steer between turns. The others move on their own: they stay out of danger, stand near their attack range, and stack up or spread out when an enemy skill calls for it.\n\nEsc pauses; quit to the menu from there, where the Boss Rush is waiting.",
 		func():
 			_set_party(["knight", "archer", "mage", "cleric"])
@@ -488,7 +544,7 @@ func _build_steps() -> void:
 			golem.hold_at = -1.0
 			golem.cannot_fall = false
 			golem.hp = golem.max_hp)
-	_goal(12, "Free practice",
+	_goal(13, "Free practice",
 		"Everything you've learned works here. The Golem picks its skills at random again.",
 		"Defeat the Training Golem (optional)",
 		func(): return golem.is_down)

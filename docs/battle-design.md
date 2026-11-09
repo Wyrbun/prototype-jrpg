@@ -138,12 +138,33 @@ end-of-fight screen to open the folder.
     member can't attack an enemy behind one (the reach ring stays dim).
     Grazing the edge doesn't block (85% of the rock counts).
   - **Pit**: blocks movement only.
+  - **Hole**: a lethal drop (black, a glowing red ring, skulls around it).
+- **Lethal edges** (`lethal_sides` on rectangles, `lethal_rim` on circles):
+  marked by a thin glowing red death wall lined with skulls; other edges are
+  walls. Rules for drops (holes and lethal edges):
+  - **Forced moves** (knockback, launch, push out, Hook, enemy `pull`) carry
+    fighters over a drop: they **fall out of the fight** (counted as down).
+    Party moves can knock regular enemies in to end fights sooner. Enemies
+    with `boss` (Stone Golem, Living Armor, Dragon Hatchling, Training Golem)
+    can't fall: they stop at the brink.
+  - **Walking**: AI allies and enemies steer around drops and never step
+    in. The steered fighter can walk to the very edge; when its middle goes
+    over, the fight pauses on a **save ring** (like a Parry, `edge_save_seconds`
+    1.0, window = `parry_window`): Parry as it turns gold to be put back on
+    solid ground, otherwise it falls. **One save per character per fight**
+    (used even if failed); after that, walking over means falling.
+  - Enemy skills with `launch` (throw away) or `pull` (drag towards the
+    enemy, on the last hit) show **red arrows** on their area, sliding the
+    way you'll be moved. Pulls drag through anything: holes, edges, fire.
+  - Reports count `falls`, `enemy_falls` and `edge_saves`.
+- **Round 5** uses the **Platform** arena (`arena_platform.tscn`): 19 x 16,
+  the east edge lethal, two holes in the middle and one rock.
 - Enemies and allies **steer around** obstacles; an enemy without a clear
   view of its target keeps walking until it has one.
 - Rounds 7-10 use the Round 11 arena for now (no mockup yet).
 - **Party picker** (`scripts/battle/party_picker.gd`): from Round 7
   (`PICK_PARTY_FROM` = index 6) the fight opens paused behind a "Choose your
-  party" panel: tick 1 to 4 of the five classes (solo allowed), then start;
+  party" panel: tick 1 to 4 of the six classes (solo allowed), then start;
   the scene reloads with that party (`chosen_party`, `chosen_for_round`).
   Retrying keeps the pick, a new round asks again, Esc goes to the title.
 - An `Encounter` can have a `tip`, shown for 9 s when the fight starts
@@ -194,7 +215,10 @@ end-of-fight screen to open the folder.
   strikes once you're hidden behind the rock), 10 Special skills (notes),
   11 The Assassin (with only the Knight; the Golem is Taunted by the Knight so its back
   stays open: hit it from behind, use Shadowstep, put 4 Marks on it,
-  Execute, then let the Golem's Attack be auto-parried), 12 Free practice
+  Execute, then let the Golem's Attack be auto-parried), 12 The Monk (alone:
+  climb a step with Knee Smash, notes on tokens and the preview, climb to bar
+  100 with any climb Arts, then cash out with Tortoise Special, given Crowd
+  Cheer for the lesson; a note on risks and tanking), 13 Free practice
   (Knight, Archer, Mage and Cleric together; switching who you steer is
   explained here)
   (the Golem fights normally and can be defeated).
@@ -560,7 +584,7 @@ Every class has Arts now.
 | Light Heal | 25 | heals 20% of max HP |
 | Brace | 20 | takes 50% less damage, 3 Knight turns |
 | Shield Bash | 30 | rushes next to an enemy within 9 m (in sight); next turn starts a third of the way along, like Wait |
-| Taunt | 60 | enemies within 6 m go after the Knight for 3 Knight turns |
+| Taunt | 40 | enemies within 6 m go after the Knight for 3 Knight turns; meanwhile he **guards**: allies within 3 m (`guard_radius`) are covered by Block and Parry even if their class can't do them |
 
 ### Archer (150 HP, 70 AP, cannot Block or Parry)
 | Attack | AP | Hits | Notes |
@@ -684,6 +708,106 @@ added by the last hit (`last_hit: {"add_marks": N}`).
 | Shadow Cloak | 50 | any Marked enemy: its Marks become a shield of 10% max HP each (17 per Mark) |
 | Vanish | 25 | enemies stop targeting the Assassin (while anyone else stands) until it attacks or 2 of its turns pass |
 
+### Monk (160 HP, a bar that climbs 30 / 50 / 80 / 100, can Block and Parry)
+A combo class built on **build, then cash out**. Every move is weak on its
+own; the Monk climbs his bar through three Arts, then spends the whole climb
+at once with Tortoise Special and starts again. Sturdy enough to tank, and
+tanking feeds the climb. (Design write-up: "Monk Rework: Build and Cash
+Out".)
+
+**Party AP, his own bar.** He pays from party AP like everyone; what's his
+own is his **bar length** (combo limit), which steps 30 -> 50 -> 80 -> 100.
+Every **climb Art** (Knee Smash, Triple Rush, Mountain Crusher) raises it
+one step, whichever step he's on; mistakes drop it a step; Tortoise Special
+spends it back to 30; a knockout resets it and his tokens.
+
+**Seeing the climb.** On his own turn, pips over his head (one per step,
+lit when climbed) with his tokens under them; small pips beside his
+timeline icon; while building, the bar continues past its end with notches
+at the steps still to climb ("next step: a climb Art"); a preview under the
+bar for the Art at its end ("Uses Triple, Rush (+30%) · Step: bar 80 ·
+Perfect: +Crusher"), shown above the AP meter while it plays, with the
+Perfect part struck out once a timing wasn't Perfect; and a banner, "STEP 2 ·
+BAR 80" or "STEP LOST". HP panel: "BAR 80  RUSH".
+
+**Three outcomes per Art.**
+
+| How the Art went | The Monk gets |
+|---|---|
+| Every timing Perfect | its step **and** its tokens (inner Arts' tokens too) |
+| Sloppy but no miss (late let-go, a tap short, a skipped press) | its step only; it still uses up the tokens it consumes |
+| A miss (wrong press, the chain ends) | nothing, and he loses a step |
+
+**Losing a step** (a miss in his combo, an avoidable hit he takes, a Parry
+pressed too early): the bar drops one step and he loses his newest token,
+Crowd Cheer last ("-1 STEP"). Deep Breath gives the last lost step back.
+
+**Tokens** stay between turns until an Art uses them up; each one used up
+adds **+10%** to that Art's damage. Sources: Arts played all Perfect, a
+Parry while Provoke is active (+1 Rush), a Suplex counter (+1 Mountain).
+**Crowd Cheer** comes from any climb Art played all Perfect that reaches the
+top (or is played there); sloppy at the top means bar 100 but no cash-out
+yet.
+
+**Timed hits.** Punch has 3 hits but only the last is timed; Kick has 2 and
+only the first is timed. The others land by themselves (a small tick on the
+bar, no box, no penalty). Heavy punches use Tap, heavy kicks Hold & Release.
+
+**Headbutt restarts the bar.** When more moves follow a Headbutt (or
+Tortoise Special, which ends in one), a fresh bar of his full length
+follows it, paid from party AP like the rest. Once per combo
+(`bar_resets_per_combo`). While building, everything before the Headbutt
+folds into a small "+70 AP" tag; while the combo plays, an Art that gives a
+buff takes its blocks off the bar, and the fresh bar's moves appear once
+the Headbutt lands. The bar keeps its scale for the whole combo.
+
+| Attack | AP | Notes |
+|---|---|---|
+| Punch | 5 | 0.15 x3; timed: last hit |
+| Kick | 5 | 0.25 + 0.2; timed: first hit |
+| Heavy Punch | 20 | 1.5; Tap x4; cancels a turn about to strike (stun) |
+| Heavy Kick | 20 | 1.5; Hold; breaks Defense |
+| Headbutt | 30 | 2.6; restarts the bar when more moves follow |
+
+**Arts.** Each is built out of the smaller ones (the Legaia "Arts inside
+Arts" idea, see below). Only the Art actually played raises the bar, not the
+smaller ones inside it. The Arts list writes a recipe as its smaller Arts
+once they're all known ("Heavy Punch + Flash Kick + Triple Rush"), else as
+moves, shortened to initials when long ("P P P P K HK").
+
+| Recipe | Art | AP | Timing | Uses up | Perfect: gives | Climbs |
+|---|---|---|---|---|---|---|
+| P P | Palm Strike | 10 | Tap x3 | | Triple | |
+| K K | Flash Kick | 10 | Hold | | Mountain | |
+| K HK | Knee Smash | 25 | Hold | | Rush | one step |
+| Palm Strike + Knee Smash (P P K HK) | Triple Rush | 35 | 2 presses + Hold; ignores Defense | Triple, Rush | Crusher | one step |
+| Heavy Punch + Flash Kick + Knee Smash (HP K K K HK) | Mountain Crusher | 55 | 3 presses + Tap x6; 2.5 m circle | Mountain, Crusher | Triple | one step |
+| HP HK Headbutt | Tortoise Special (finisher) | 70 | 3 presses; breaks Defense; restarts the bar | Crowd Cheer, the whole climb | | back to 30 |
+
+At bar 30 only Knee Smash fits, so every climb opens the same way; from bar
+50 he picks the climb Art that fits the turn. The three feed each other:
+Knee Smash leaves Rush for Triple Rush, Triple Rush leaves Crusher for
+Mountain Crusher, Mountain Crusher leaves Triple for Triple Rush. Bigger
+climb Arts hit harder per AP (measured, perfect, attack 16: Knee Smash 2.1
+per AP, Triple Rush 3.2, Mountain Crusher 2.8 on one target, more on a
+group).
+
+**Tortoise Special** only forms (and can only be played) while he holds
+Crowd Cheer, so from bar 80 up. Its cash-out grows steeply: **1.5x at bar
+80, 2.5x at bar 100**.
+
+Measured with perfect timing (attack 16, vs a Knight's perfect Crusader's
+Edge at 163): Tortoise at 100 + Knee Smash on the fresh bar ~320; a late
+turn of Tortoise at 100 + Mountain Crusher on the fresh bar (125 AP of
+party AP) ~420. Tunable in moves.gd (hits, `cashout`) and
+`token_damage_bonus`.
+
+| Skill | AP | Effect |
+|---|---|---|
+| Provoke | 20 | one enemy within 6 m targets the Monk until his next turn; each Parry meanwhile gives +1 Rush |
+| Suplex | 20 | counter stance for 4 s (like Riposte): the attacker takes 2x attack and is thrown 3 m; +1 Mountain |
+| Deep Breath | 30 | heal 20% of max HP; gives back the last step he lost |
+
 ### Shared rules
 - **Durations count the caster's turns**: "3 turns" runs out when the
   caster's third turn after using it begins. Riposte and Concentrate run on
@@ -692,6 +816,9 @@ added by the last hit (`last_hit: {"add_marks": N}`).
   of max HP. Shown as a light-blue strip on the HP bar.
 - **Damage order on a party member:** Arcane Barrier (ignores the hit) ->
   Brace (halves it) -> shields -> HP.
+- **The Knight is the tank:** most HP (200), Brace for damage, Taunt for the
+  room, and his guard while Taunt lasts. The Monk (160 HP) tanks one enemy
+  at a time and for himself; he out-damages the Knight instead.
 - **Block / Parry per class:** one E or Q press still covers everyone caught
   in a strike, but only those whose class can parry/block benefit; the rest
   take the full hit. A missed Parry only penalizes classes that can parry.
@@ -715,6 +842,11 @@ first, left to right), so an Art that overlaps a bigger one is swallowed by
 it. Keep this in mind when designing more Arts: recipes that nest inside
 each other could become a deliberate trick (and a whole can of worms for
 how the bar merges, costs and reveals them).
+
+**First step (Monk):** an Art can list the smaller Arts inside it
+(`contains`). The bar still reads one way, but when the big Art plays, the
+tokens of the Arts inside it are given first, so they still "count". Full
+nesting (several readings, costs) is still parked.
 
 ## Open questions
 

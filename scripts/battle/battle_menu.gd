@@ -18,6 +18,9 @@ enum Mode { HIDDEN, COMMANDS, COMBO, EXECUTING, SKILLS, TARGET }
 const PX_PER_AP := 8.0
 ## Width of the "READY" lead-in block in front of the strip during a combo.
 const LEAD_IN_PX := 70.0
+## The bar never grows wider than the move list above it (long bars, like the
+## Monk's, shrink to fit instead of running under the Arts panel and HUD).
+const MAX_BAR_PX := 720.0
 const GOLD := Color(0.95, 0.78, 0.35)
 ## Timing types: Press boxes are white squares, Hold is blue and rounded,
 ## Tap is pink with diamonds.
@@ -82,6 +85,33 @@ var arts_hidden_sizes := {}
 ## progress (0 -> 1).
 var reveal_name := ""
 var reveal_progress := 0.0
+## Monk's Headbutt restarts: AP of bar before the current fresh part, what
+## that part can spend, and the slots the bar restarts after.
+var segment_start := 0.0
+var segment_available := 0.0
+var reset_slots: Array[int] = []
+## Monk while a combo plays: blocks already used up by an Art that gave a
+## buff. They vanish and the rest of the bar slides left, so it stays short.
+var consumed_slots := 0
+## Pixels per AP for the current bar (shrinks when a long bar must fit).
+var _px := PX_PER_AP
+## Where slot 0 starts on screen (left of the bar once blocks are used up).
+var _origin := 0.0
+## Monk: the bar lengths still to climb (shown past the bar's end while
+## building), what the Art at the end of the bar does with his climb, what
+## a Perfect adds, and whether that Perfect is still on (greyed once lost).
+var step_marks: Array[float] = []
+var preview_main := ""
+var preview_perfect := ""
+var preview_perfect_on := true
+## A banner over the field when the Monk's climb moves ("STEP 2 · BAR 80",
+## "STEP LOST"), shown even while the menus are hidden.
+const BANNER_SECONDS := 1.6
+## The preview stays clear of the HP panels at the screen's sides.
+const PREVIEW_MARGIN := 450.0
+var banner_text := ""
+var banner_color := Color.WHITE
+var banner_left := 0.0
 
 var _panel_style: StyleBoxFlat
 
@@ -95,7 +125,8 @@ func _ready() -> void:
 	_panel_style.set_corner_radius_all(6)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	banner_left = maxf(banner_left - delta, 0.0)
 	queue_redraw()
 
 
@@ -107,6 +138,8 @@ func combo_cost() -> float:
 
 
 func _draw() -> void:
+	if banner_left > 0.0:
+		_draw_banner(ThemeDB.fallback_font)
 	if mode == Mode.HIDDEN:
 		return
 	var font := ThemeDB.fallback_font
@@ -132,51 +165,52 @@ func _draw() -> void:
 	elif mode == Mode.SKILLS:
 		_draw_move_list(font)
 	elif mode == Mode.TARGET:
-		var panel := Rect2((size.x - 520) / 2.0, size.y - 250, 520, 62)
+		var panel := Rect2((size.x - 640) / 2.0, size.y - 270, 640, 72)
 		draw_style_box(_panel_style, panel)
-		_text(font, panel.position + Vector2(16, 27), target_prompt, 19, GOLD)
-		_text(font, panel.position + Vector2(16, 50), Keybinds.fill("{confirm} / Enter: confirm     {cancel} / Backspace: back"), 15, Color(0.75, 0.75, 0.8))
+		_text(font, panel.position + Vector2(18, 31), target_prompt, 22, GOLD)
+		_text(font, panel.position + Vector2(18, 58), Keybinds.fill("{confirm} / Enter: confirm     {cancel} / Backspace: back"), 17, Color(0.75, 0.75, 0.8))
 
 
 # --- Command menu ----------------------------------------------------------
 
 func _draw_commands(font: Font) -> void:
-	var panel := Rect2(40, 200, 280, 40 + commands.size() * 38)
+	var panel := Rect2(40, 220, 340, 40 + commands.size() * 44)
 	var dimmed := mode != Mode.COMMANDS
-	_text(font, panel.position + Vector2(4, -12), fighter_name, 22, GOLD)
+	_text(font, panel.position + Vector2(4, -12), fighter_name, 25, GOLD)
 	# Reaction reminders, only for what this class can do (stacked upward).
 	var reminder_y := -10.0
 	if show_parry:
-		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), Keybinds.fill("Parry: {parry}"), 15, Color(1.0, 0.85, 0.3))
-		reminder_y -= 20.0
+		_text(font, panel.position + Vector2(panel.size.x - 124, reminder_y), Keybinds.fill("Parry: {parry}"), 17, Color(1.0, 0.85, 0.3))
+		reminder_y -= 22.0
 	if show_defend:
-		_text(font, panel.position + Vector2(panel.size.x - 110, reminder_y), Keybinds.fill("Defend: {defend}"), 15, Color(0.6, 0.8, 1.0))
+		_text(font, panel.position + Vector2(panel.size.x - 124, reminder_y), Keybinds.fill("Defend: {defend}"), 17, Color(0.6, 0.8, 1.0))
 	draw_style_box(_panel_style, panel)
 
 	for i in commands.size():
-		var row := Rect2(panel.position + Vector2(10, 18 + i * 38), Vector2(panel.size.x - 20, 32))
+		var row := Rect2(panel.position + Vector2(10, 18 + i * 44), Vector2(panel.size.x - 20, 38))
 		var selected := i == command_index
 		if selected and not dimmed:
 			draw_rect(row, Color(GOLD, 0.22))
-			_text(font, row.position + Vector2(6, 23), ">", 20, GOLD)
+			_text(font, row.position + Vector2(6, 27), ">", 23, GOLD)
 		var color := Color.WHITE if command_enabled[i] else Color(0.5, 0.5, 0.55)
 		if dimmed and not selected:
 			color = color.darkened(0.4)
-		_text(font, row.position + Vector2(28, 23), commands[i], 20, color)
+		_text(font, row.position + Vector2(30, 27), commands[i], 23, color)
 		if command_notes[i] != "":
-			_text(font, row.position + Vector2(140, 22), command_notes[i], 13, Color(0.6, 0.6, 0.65))
+			_text(font, row.position + Vector2(160, 26), command_notes[i], 15, Color(0.6, 0.6, 0.65))
 
 
 # --- Combo builder ---------------------------------------------------------
 
 func _draw_move_list(font: Font) -> void:
-	var width := 560.0
-	var row_height := 30.0
-	width = 600.0
-	var top := size.y - 400 if mode == Mode.COMBO else size.y - 340
-	var panel := Rect2((size.x - width) / 2.0, top, width, 16 + moves.size() * row_height)
+	var width := 720.0
+	var row_height := 36.0
+	var height := 16 + moves.size() * row_height
+	# In the combo bar, the list ends just above the bar's header line.
+	var top := size.y - 264 - height if mode == Mode.COMBO else size.y - 340
+	var panel := Rect2((size.x - width) / 2.0, top, width, height)
 	draw_style_box(_panel_style, panel)
-	var room := minf(combo_limit, ap_available) - (combo_cost() if mode == Mode.COMBO else 0.0)
+	var room := minf(combo_limit, segment_available) - (combo_cost() - segment_start if mode == Mode.COMBO else 0.0)
 	for i in moves.size():
 		var move := moves[i]
 		var row := Rect2(panel.position + Vector2(8, 8 + i * row_height), Vector2(width - 16, row_height - 2))
@@ -185,15 +219,19 @@ func _draw_move_list(font: Font) -> void:
 		var fits := shown_cost <= room and usable
 		if i == move_index and not (mode == Mode.COMBO and arts_focus):
 			draw_rect(row, Color(GOLD, 0.22))
-			_text(font, row.position + Vector2(6, 21), ">", 18, GOLD)
+			_text(font, row.position + Vector2(6, 25), ">", 20, GOLD)
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
-		draw_rect(Rect2(row.position + Vector2(24, 8), Vector2(12, 12)), move["color"] if fits else Color(0.35, 0.35, 0.4))
-		_text(font, row.position + Vector2(44, 21), move["name"], 17, color)
-		_text(font, row.position + Vector2(200, 21), "%d AP" % shown_cost, 17, GOLD if fits else color)
+		draw_rect(Rect2(row.position + Vector2(24, 10), Vector2(14, 14)), move["color"] if fits else Color(0.35, 0.35, 0.4))
+		_text(font, row.position + Vector2(46, 25), move["name"], 20, color)
+		_text(font, row.position + Vector2(232, 25), "%d AP" % shown_cost, 20, GOLD if fits else color)
 		var desc: String = move["desc"]
 		if not usable and i < move_notes.size() and move_notes[i] != "":
 			desc = move_notes[i]
-		_text(font, row.position + Vector2(270, 21), desc, 15, color.darkened(0.15))
+		# The description fits between the cost and the timing badge.
+		var desc_size := 17
+		while desc_size > 12 and font.get_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, -1, desc_size).x > row.size.x - 312 - 100:
+			desc_size -= 1
+		_text(font, row.position + Vector2(312, 25), desc, desc_size, color.darkened(0.15))
 		_timing_badge(font, move, Vector2(row.end.x - 6, row.position.y + row.size.y / 2.0), not fits)
 	if mode == Mode.COMBO and (not arts.is_empty() or arts_hidden > 0):
 		_draw_arts(font, panel)
@@ -203,25 +241,28 @@ func _draw_move_list(font: Font) -> void:
 ## unknown ones as "???" with only the first move. Arts the moves at the end
 ## of the bar are heading towards glow gold and say which move comes next.
 func _draw_arts(font: Font, beside: Rect2) -> void:
-	var row_height := 34.0
+	var row_height := 42.0
 	var x := beside.end.x + 12.0
-	var width := minf(340.0, size.x - x - 8.0)
+	var width := minf(420.0, size.x - x - 8.0)
 	if width < 220.0:
 		return  # no room on a narrow window
 	var hidden_line := ""
 	var hidden_size := Vector2.ZERO
 	if arts_hidden > 0:
 		hidden_line = ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
-		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12)
+		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14)
 	var extra := hidden_size.y + 10.0 if arts_hidden > 0 else 0.0  # wraps on a narrow panel
-	var panel := Rect2(x, beside.position.y, width, 34.0 + arts.size() * row_height + extra)
+	# Bottom-aligned with the move list, growing upward: it never reaches
+	# down into the combo bar, however many Arts the class has.
+	var panel_height := 38.0 + arts.size() * row_height + extra
+	var panel := Rect2(x, beside.end.y - panel_height, width, panel_height)
 	draw_style_box(_panel_style, panel)
-	_text(font, panel.position + Vector2(12, 24), "ARTS", 16, GOLD)
-	var tip := "choose one to add it whole" if arts_focus else "moves in this order merge"
-	_text(font, panel.position + Vector2(64, 24), tip, 12, Color(0.6, 0.62, 0.7))
+	_text(font, panel.position + Vector2(12, 27), "ARTS", 19, GOLD)
+	var tip := "choose one to add it whole" if arts_focus else "moves in this order merge  ·  Tab: details"
+	_text(font, panel.position + Vector2(74, 27), tip, 14, Color(0.6, 0.62, 0.7))
 	for i in arts.size():
 		var art: Dictionary = arts[i]
-		var row := Rect2(panel.position + Vector2(6, 32 + i * row_height), Vector2(width - 12, row_height - 2))
+		var row := Rect2(panel.position + Vector2(6, 36 + i * row_height), Vector2(width - 12, row_height - 2))
 		var heading: bool = art["next"] != ""
 		if heading:
 			draw_rect(row, Color(GOLD, 0.18))
@@ -229,28 +270,61 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 			draw_rect(row, Color(GOLD, 0.35))
 			draw_rect(row, GOLD, false, 2.0)
 		var name_color: Color = art["color"] if art["known"] else Color(0.55, 0.55, 0.6)
-		_text(font, row.position + Vector2(8, 14), art["name"], 15, name_color)
+		_text(font, row.position + Vector2(8, 17), art["name"], 18, name_color)
 		if art["finisher"]:
-			var name_w := font.get_string_size(art["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-			_text(font, row.position + Vector2(14 + name_w, 14), "FINISHER", 10, GOLD)
-		_text(font, row.position + Vector2(8, 29), art["recipe"], 12, Color(0.75, 0.77, 0.85))
+			var name_w := font.get_string_size(art["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+			_text(font, row.position + Vector2(14 + name_w, 17), "FINISHER", 12, GOLD)
+		var recipe_size := 15
+		while recipe_size > 10 and font.get_string_size(art["recipe"], HORIZONTAL_ALIGNMENT_LEFT, -1, recipe_size).x > row.size.x - 14:
+			recipe_size -= 1
+		_text(font, row.position + Vector2(8, 35), art["recipe"], recipe_size, Color(0.75, 0.77, 0.85))
 		if heading:
 			var hint: String = "next: " + art["next"]
-			var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-			_text(font, Vector2(row.end.x - hint_w - 6, row.position.y + 14), hint, 12, GOLD)
+			var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			_text(font, Vector2(row.end.x - hint_w - 6, row.position.y + 17), hint, 14, GOLD)
 	if arts_hidden > 0:
 		var top := panel.end.y - hidden_size.y - 6.0
-		draw_multiline_string_outline(font, Vector2(panel.position.x + 12, top + font.get_ascent(12)), hidden_line,
-				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12, -1, 4, Color.BLACK)
-		draw_multiline_string(font, Vector2(panel.position.x + 12, top + font.get_ascent(12)), hidden_line,
-				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 12, -1, Color(0.6, 0.62, 0.7))
+		draw_multiline_string_outline(font, Vector2(panel.position.x + 12, top + font.get_ascent(14)), hidden_line,
+				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14, -1, 4, Color.BLACK)
+		draw_multiline_string(font, Vector2(panel.position.x + 12, top + font.get_ascent(14)), hidden_line,
+				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14, -1, Color(0.6, 0.62, 0.7))
+	if arts_focus and arts_index >= 0 and arts_index < arts.size():
+		_draw_art_details(font, arts[arts_index], panel)
+
+
+## Tab in the combo bar: the chosen Art's details in a box above the Arts
+## panel: its recipe, cost and timing, and everything it does.
+func _draw_art_details(font: Font, art: Dictionary, below: Rect2) -> void:
+	var width := below.size.x
+	var lines: Array = []  # [text, size, color]
+	lines.append([art["recipe"], 15, Color(0.8, 0.82, 0.9)])
+	var facts: PackedStringArray = ["%d AP" % int(art.get("cost", 0))]
+	if String(art.get("timing", "")) != "":
+		facts.append(String(art["timing"]))
+	if art.get("finisher", false):
+		facts.append("Finisher")
+	lines.append(["  ·  ".join(facts), 15, GOLD])
+	var desc: String = art.get("desc", "")
+	var desc_h := font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16).y if desc != "" else 0.0
+	var height := 44.0 + lines.size() * 22.0 + desc_h + 12.0
+	var box := Rect2(below.position.x, below.position.y - height - 8.0, width, height)
+	draw_style_box(_panel_style, box)
+	_text(font, box.position + Vector2(14, 30), art["name"], 21, art["color"])
+	var y := box.position.y + 56.0
+	for line in lines:
+		_text(font, Vector2(box.position.x + 14, y), line[0], line[1], line[2])
+		y += 22.0
+	if desc != "":
+		var pos := Vector2(box.position.x + 14, y - 4 + font.get_ascent(16))
+		draw_multiline_string_outline(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, 4, Color.BLACK)
+		draw_multiline_string(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, Color(0.92, 0.92, 0.95))
 
 
 ## "2 two-move, 1 four-move": how many hidden Arts of each length.
 func _hidden_by_length() -> String:
 	if arts_hidden_sizes.is_empty():
 		return "%d Arts" % arts_hidden
-	var words := {2: "two", 3: "three", 4: "four", 5: "five"}
+	var words := {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
 	var lengths := arts_hidden_sizes.keys()
 	lengths.sort()
 	var parts: PackedStringArray = []
@@ -260,41 +334,90 @@ func _hidden_by_length() -> String:
 
 
 func _draw_combo_bar(font: Font) -> void:
-	var bar_width := combo_limit * PX_PER_AP
+	# One scale for the whole combo: the combo limit fits the move list's width.
+	# (Monk while building: the steps still to climb share that width.)
+	var span := combo_limit
+	if mode == Mode.COMBO and not step_marks.is_empty():
+		span = maxf(span, step_marks[-1])
+	_px = minf(PX_PER_AP, minf(MAX_BAR_PX, size.x - LEAD_IN_PX - 60.0) / maxf(span, 1.0))
+	# Which slots are on the bar. Building: the part before a Headbutt restart
+	# folds into a small "+70 AP" tag, so the bar shows the fresh part. Playing:
+	# blocks used up by a buff (or before a restart) are gone, and what comes
+	# after the next restart shows up once the Headbutt lands.
+	var first_visible := 0
+	var last_visible := plan.size() - 1
+	if mode == Mode.EXECUTING:
+		first_visible = mini(consumed_slots, plan.size())
+		for r in reset_slots:
+			if r >= first_visible:
+				last_visible = r
+				break
+	elif not reset_slots.is_empty():
+		first_visible = reset_slots[-1] + 1
+	var hidden_ap := 0.0
+	for slot in mini(first_visible, plan.size()):
+		hidden_ap += float(plan[slot]["cost"])
+	var capacity := combo_limit
+	if mode == Mode.EXECUTING:
+		var shown := 0.0
+		for slot in range(first_visible, last_visible + 1):
+			shown += float(plan[slot]["cost"])
+		capacity = maxf(shown, 10.0)  # only what's left to play in this bar
+	var bar_width := capacity * _px
 	# While building, the bar sits under the move list; while the combo plays,
 	# it drops to the bottom edge of the screen.
 	var bar_y := size.y - 52 if mode == Mode.EXECUTING else size.y - 232
-	var bar_x := (size.x - bar_width) / 2.0
+	# Monk while building: the steps still to climb continue past the bar.
+	var future := 0.0
+	if mode == Mode.COMBO and not step_marks.is_empty():
+		future = (step_marks[-1] - combo_limit) * _px
+	var bar_x := (size.x - bar_width - future) / 2.0
 	if mode == Mode.EXECUTING:
 		bar_x += LEAD_IN_PX / 2.0  # keep lead-in + strip centered together
 	var bar := Rect2(bar_x, bar_y, bar_width, 34)
-	var used := combo_cost()
-	var affordable := minf(combo_limit, ap_available)
+	_origin = bar.position.x - hidden_ap * _px  # where slot 0 would start
+	var origin := _origin
+	var used := combo_cost() - segment_start
+	var affordable := minf(combo_limit, segment_available)
 
 	# "25 / 45 AP" above the bar, like the AP readout in Legaia.
 	var header := "%d / %d AP" % [used, affordable]
 	if affordable < combo_limit:
 		header += "   (limit %d)" % combo_limit
+	if segment_start > 0.0:
+		header = "Fresh bar: " + header
 	if target_name != "":
 		header = "Target: %s     %s" % [target_name, header]
-	var header_size := font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 17)
+	var header_size := font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 19)
 	if mode != Mode.EXECUTING:  # the AP bar already says this during the combo
-		_text(font, Vector2(bar.position.x + (bar_width - header_size.x) / 2.0, bar.position.y - 8), header, 17, GOLD)
+		_text(font, Vector2(bar.position.x + (bar_width - header_size.x) / 2.0, bar.position.y - 8), header, 19, GOLD)
 
 	draw_rect(bar, Color(0.08, 0.09, 0.13, 0.92))
 	# The part of the bar you can't afford right now.
 	if affordable < combo_limit:
-		var locked := Rect2(bar.position.x + affordable * PX_PER_AP, bar.position.y, (combo_limit - affordable) * PX_PER_AP, bar.size.y)
+		var locked := Rect2(origin + (segment_start + affordable) * _px, bar.position.y, (combo_limit - affordable) * _px, bar.size.y)
 		draw_rect(locked, Color(0.35, 0.12, 0.12, 0.8))
 		var x := locked.position.x + 4.0
 		while x < locked.end.x:
 			draw_line(Vector2(x, locked.position.y), Vector2(minf(x + 10.0, locked.end.x), locked.end.y), Color(0.55, 0.2, 0.2), 1.5)
 			x += 10.0
 
-	var cursor := bar.position.x
+	if mode != Mode.EXECUTING and first_visible > 0:
+		# Building after a Headbutt: what came before it, folded up.
+		var tag := Rect2(bar.position.x - 96.0, bar.position.y, 88.0, bar.size.y)
+		draw_rect(tag, Color(0.15, 0.13, 0.08, 0.95))
+		draw_rect(tag, GOLD, false, 2.0)
+		var tag_text := "+%d AP" % roundi(hidden_ap)
+		var tag_w := font.get_string_size(tag_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		_text(font, Vector2(tag.position.x + (tag.size.x - tag_w) / 2.0, tag.position.y + 23), tag_text, 15, GOLD)
+		_text(font, Vector2(tag.position.x + 4, tag.end.y + 16), "before the Headbutt", 11, GOLD)
+	var cursor := origin
 	for slot in plan.size():
 		var move := plan[slot]
-		var segment := Rect2(cursor, bar.position.y, float(move["cost"]) * PX_PER_AP, bar.size.y)
+		var segment := Rect2(cursor, bar.position.y, float(move["cost"]) * _px, bar.size.y)
+		if slot < first_visible or slot > last_visible:
+			cursor = segment.end.x  # folded away / not on this bar yet
+			continue
 		var color: Color = move["color"]
 		if mode == Mode.EXECUTING and slot < executing_slot:
 			color = color.darkened(0.5)
@@ -307,8 +430,13 @@ func _draw_combo_bar(font: Font) -> void:
 		var box_width := segment.size.x * float(move["window"])
 		var timing: int = int(move.get("timing", 0))
 		var playing := mode == Mode.EXECUTING and slot == executing_slot
+		var untimed: Array = move.get("untimed", [])
 		for hit in times.size():
 			var hit_x := segment.position.x + segment.size.x * float(times[hit])
+			if hit < untimed.size() and untimed[hit]:
+				# Lands by itself (Monk's Punch / Kick): a small tick, no box.
+				draw_line(Vector2(hit_x, segment.position.y + 4), Vector2(hit_x, segment.end.y - 4), Color(1, 1, 1, 0.55), 2.0)
+				continue
 			var box := Rect2(hit_x - box_width, segment.position.y - 3, box_width, segment.size.y + 6)
 			var result := 0
 			if slot < slot_results.size() and hit < (slot_results[slot] as Array).size():
@@ -356,7 +484,48 @@ func _draw_combo_bar(font: Font) -> void:
 		var label_width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
 		_text(font, Vector2(segment.position.x + (segment.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
 		cursor = segment.end.x
+		if reset_slots.has(slot) and slot < plan.size() - 1:
+			# Headbutt: a fresh bar comes after it.
+			_text(font, Vector2(cursor - 64, bar.end.y + 30), "FRESH BAR >", 12, GOLD)
 	draw_rect(bar, GOLD, false, 2.0)
+	if future > 0.0:
+		# The rest of the climb: a dim extension with a notch at each step.
+		var ext := Rect2(bar.end.x + 2.0, bar.position.y + 4.0, future - 2.0, bar.size.y - 8.0)
+		draw_rect(ext, Color(0.1, 0.1, 0.14, 0.75))
+		_dashed_rect(ext, Color(GOLD, 0.55))
+		for length in step_marks:
+			var nx := bar.end.x + (length - combo_limit) * _px
+			draw_line(Vector2(nx, bar.position.y), Vector2(nx, bar.end.y), Color(GOLD, 0.8), 2.0)
+			var mark := str(int(length))
+			var mark_w := font.get_string_size(mark, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+			_text(font, Vector2(nx - mark_w - 4, ext.end.y - 4), mark, 11, Color(GOLD, 0.85))
+		var hint := "next step: a climb Art"
+		var hint_size := 13
+		while hint_size > 10 and font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size).x > ext.size.x - 40:
+			hint_size -= 1
+		if font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hint_size).x <= ext.size.x - 40:
+			_text(font, Vector2(ext.position.x + 6, ext.position.y + ext.size.y / 2.0 + 4), hint, hint_size, Color(0.75, 0.72, 0.6))
+	if preview_main != "" or preview_perfect != "":
+		# What this Art does with the Monk's climb; the Perfect part greys out
+		# once a timing in it wasn't Perfect.
+		var gap := "    " if preview_main != "" and preview_perfect != "" else ""
+		var full := preview_main + gap + preview_perfect
+		# Playing: above the party AP meter (the bar sits under it).
+		var py := size.y - 130.0 if mode == Mode.EXECUTING else bar.end.y + 50.0
+		# Kept in the gap between the two HP panels (party left, enemies right).
+		var fs := 14
+		while fs > 10 and font.get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > size.x - 2.0 * PREVIEW_MARGIN:
+			fs -= 1
+		var pw := font.get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var px := (size.x - pw) / 2.0
+		_text(font, Vector2(px, py), preview_main + gap, fs, Color(0.9, 0.88, 0.8))
+		if preview_perfect != "":
+			var pre_w := font.get_string_size(preview_main + gap, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var perfect_color := Color(1.0, 0.85, 0.3) if preview_perfect_on else Color(0.5, 0.5, 0.55)
+			_text(font, Vector2(px + pre_w, py), preview_perfect, fs, perfect_color)
+			if not preview_perfect_on:
+				var pp_w := font.get_string_size(preview_perfect, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				draw_line(Vector2(px + pre_w, py - 5), Vector2(px + pre_w + pp_w, py - 5), perfect_color, 2.0)
 
 	if mode == Mode.EXECUTING:
 		# "READY" lead-in: the playhead crosses it first, so you can see it
@@ -379,10 +548,10 @@ func _draw_combo_bar(font: Font) -> void:
 		# Playhead: where in the combo we are right now.
 		var x := cursor  # past the last move = finished
 		if executing_slot < plan.size():
-			var start := bar.position.x
+			var start := origin
 			for slot in executing_slot:
-				start += float(plan[slot]["cost"]) * PX_PER_AP
-			var width := float(plan[executing_slot]["cost"]) * PX_PER_AP
+				start += float(plan[slot]["cost"]) * _px
+			var width := float(plan[executing_slot]["cost"]) * _px
 			x = start + width * slot_progress
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color.WHITE, 3.0)
@@ -392,11 +561,11 @@ func _draw_combo_bar(font: Font) -> void:
 ## banner with the Art's name pops up over the field, then fades.
 func _draw_reveal(font: Font, bar: Rect2) -> void:
 	var t := reveal_progress
-	var start := bar.position.x
+	var start := _origin
 	for slot in executing_slot:
-		start += float(plan[slot]["cost"]) * PX_PER_AP
+		start += float(plan[slot]["cost"]) * _px
 	if executing_slot < plan.size():
-		var seg := Rect2(start, bar.position.y - 4, float(plan[executing_slot]["cost"]) * PX_PER_AP, bar.size.y + 8)
+		var seg := Rect2(start, bar.position.y - 4, float(plan[executing_slot]["cost"]) * _px, bar.size.y + 8)
 		var flash := 1.0 - t
 		draw_rect(seg, Color(1, 1, 1, 0.75 * flash))
 		draw_rect(seg.grow(4.0 * flash), Color(1.0, 0.9, 0.5, flash), false, 3.0)
@@ -414,6 +583,17 @@ func _draw_reveal(font: Font, bar: Rect2) -> void:
 	var big_size := int(lerpf(30.0, 46.0, appear))
 	var big_w := font.get_string_size(reveal_name, HORIZONTAL_ALIGNMENT_LEFT, -1, big_size).x
 	_text(font, Vector2((size.x - big_w) / 2.0, y + 18), reveal_name, big_size, Color(1, 1, 1, alpha))
+
+
+## The Monk's step banner: big words across the upper field, fading out.
+func _draw_banner(font: Font) -> void:
+	var t := banner_left / BANNER_SECONDS
+	var alpha := clampf(minf(t / 0.25, (1.0 - t) / 0.1), 0.0, 1.0)
+	var y := size.y * 0.36
+	var band := Rect2(0, y - 40, size.x, 58)
+	draw_rect(band, Color(0, 0, 0, 0.45 * alpha))
+	var w := font.get_string_size(banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
+	_text(font, Vector2((size.x - w) / 2.0, y + 2), banner_text, 34, Color(banner_color, alpha))
 
 
 func _result_fill(result: int) -> Color:
@@ -476,16 +656,16 @@ func _timing_badge(font: Font, move: Dictionary, right: Vector2, dim: bool) -> v
 	var color := HOLD_COLOR if timing == 1 else TAP_COLOR
 	if dim:
 		color = color.darkened(0.45)
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + (30.0 if timing == 2 else 18.0)
-	var rect := Rect2(right.x - width, right.y - 9, width, 18)
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + (32.0 if timing == 2 else 20.0)
+	var rect := Rect2(right.x - width, right.y - 11, width, 22)
 	if timing == 1:
 		_pill(rect, Color(color, 0.3), color, 2.0)
-		_text(font, rect.position + Vector2(9, 14), text, 13, Color.WHITE)
+		_text(font, rect.position + Vector2(10, 16), text, 15, Color.WHITE)
 	else:
 		draw_rect(rect, Color(color, 0.25))
 		_dashed_rect(rect, color)
-		_diamond(rect.position + Vector2(11, 9), 4.5, color, Color.WHITE)
-		_text(font, rect.position + Vector2(20, 14), text, 13, Color.WHITE)
+		_diamond(rect.position + Vector2(12, 11), 5.0, color, Color.WHITE)
+		_text(font, rect.position + Vector2(22, 16), text, 15, Color.WHITE)
 
 
 func _text(font: Font, pos: Vector2, text: String, font_size: int, color: Color) -> void:

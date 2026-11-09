@@ -16,8 +16,9 @@ Placeholder art throughout (capsules and boxes): this stage is about a fun core 
 
 - **A 12-round boss rush** with auto-save, Round Select, and a party picker for the boss rounds (1 to 4 fighters, solo allowed)
 - **A guided tutorial** that teaches every mechanic, step by step
-- **Five classes**: Knight, Archer, Mage, Cleric and Assassin, each with its own attacks, skills, reactions and secret **Arts**
+- **Six classes**: Knight, Archer, Mage, Cleric, Assassin and Monk, each with its own attacks, skills, reactions and secret **Arts**
 - **Enemies with readable skills**: cones, lines, donuts, half-room cleaves, falling rocks, instant-death gazes you hide from, and more
+- **Arenas with drops**: holes and lethal edges you can knock enemies into, or be thrown into yourself
 - **Play-test reports** written after every fight (press O on the end screen)
 
 ## How a fight works
@@ -98,7 +99,7 @@ report; press **O** on the end screen to open the folder (on Windows,
 - [x] Positioning between turns, Wait command (current test setup)
 - [x] Enemy template: design enemy skills in the Inspector without code
 - [x] Boss rush: 12 rounds, arenas with rocks and a pit, multi-enemy fights
-- [x] Classes: Knight, Archer, Mage, Cleric, Assassin, each with attacks and skills
+- [x] Classes: Knight, Archer, Mage, Cleric, Assassin, Monk, each with attacks and skills
 - [x] Timing types: Press, Hold and Release, Tap; positionals and Marks (Assassin)
 - [x] Arts: secret named combos for every class, revealed mid-combo
 - [x] Title screen and a guided tutorial

@@ -36,6 +36,10 @@ enum Team { PARTY, ENEMY }
 ## Party only: the class's AP: the most it can spend in one turn (the
 ## combo bar's length, and the limit for a skill's cost).
 @export var combo_limit: float = 50.0
+## Monk: the bar lengths its climb steps through ([30, 50, 80, 100]; empty
+## = a normal class). It starts on the first; Arts raise it a step at a
+## time, mistakes drop it one, Tortoise Special spends it all.
+@export var bar_steps: Array[float] = []
 ## Assassin: while any enemy carries an Assassin's Mark, a strike that can be
 ## parried is parried automatically, spending one Mark.
 @export var auto_parry_with_marks := false
@@ -46,6 +50,8 @@ enum Team { PARTY, ENEMY }
 ## Enemies: no positionals. Every hit counts as "from behind", from anywhere
 ## (its ring is a plain full circle). Small enemies (Goblin, Kobold).
 @export var no_positionals := false
+## Enemies only: a boss can't be knocked off the arena or into a hole.
+@export var boss := false
 ## Enemies only: the skills it can prepare. Add an element, choose
 ## "New EnemySkill" and fill it in. Left empty, the enemy uses a basic
 ## Attack / Smash / Defense / Counter set.
@@ -114,8 +120,15 @@ var stance: int = Skills.NONE
 var statuses := {}
 ## Barrier/shield HP: soaks up damage before HP does.
 var shield: int = 0
-## Archer's Riposte: seconds of counter stance left.
+## Archer's Riposte (and the Monk's Suplex): seconds of counter stance left,
+## and what the counter is called.
 var riposte_left := 0.0
+var counter_name := "Riposte"
+## Monk: its tokens ({"Triple": 2, "Rush": 1}), kept in the order they
+## were earned, and the bar length before its last lost step (Deep Breath
+## gives it back; 0 = nothing to recover).
+var tokens := {}
+var lost_step := 0.0
 ## Tutorial controls: "hold" freezes this fighter on the timeline (and an
 ## enemy in place, without striking); "cannot_fall" keeps HP at 1 or more;
 ## "forced_skill" is prepared every time instead of a random pick.
@@ -144,6 +157,9 @@ const MAX_MARKS := 5
 
 var _skill_label: Label3D = null
 var _marks_label: Label3D = null
+## Monk: the climb pips over his head (shown on his own turn).
+var _climb_label: Label3D = null
+var _token_label: Label3D = null
 ## Party only: gold ring on the floor showing attack reach.
 var _reach_ring: MeshInstance3D = null
 ## Party only: hides the reach ring (while a strike's rings close in).
@@ -157,6 +173,8 @@ var _lunge_tween: Tween = null
 
 func _ready() -> void:
 	hp = max_hp
+	if climbs():
+		combo_limit = bar_steps[0]
 	_name_label.text = display_name
 	# Everyone starts a little way along the bar, so the first turns vary.
 	timeline_pos = randf_range(0.0, 25.0)
@@ -285,6 +303,109 @@ func add_shield(amount: int) -> int:
 	return shield - before
 
 
+## Monk: true for a class whose bar climbs in steps.
+func climbs() -> bool:
+	return not bar_steps.is_empty()
+
+
+## Monk: which step the bar is on (0 = the starting length).
+func bar_step() -> int:
+	var index := 0
+	for i in bar_steps.size():
+		if combo_limit >= bar_steps[i]:
+			index = i
+	return index
+
+
+## Monk: a climb Art raises the bar one step. Returns how much it grew
+## (0 at the top).
+func climb_step() -> float:
+	var before := combo_limit
+	if bar_step() < bar_steps.size() - 1:
+		combo_limit = bar_steps[bar_step() + 1]
+	return combo_limit - before
+
+
+## Monk: true when the bar is at its last step.
+func at_top() -> bool:
+	return climbs() and combo_limit >= bar_steps[-1]
+
+
+## Monk: pips over his head on his own turn: one per step climbed (lit) or
+## still to climb, and his tokens under them.
+func show_climb(visible_now: bool) -> void:
+	if not climbs():
+		return
+	if _climb_label == null:
+		_climb_label = _make_climb_label(0.95, 110)  # the pips, big
+		_token_label = _make_climb_label(0.45, 40)   # the tokens under them
+	var shown := visible_now and not is_down
+	_climb_label.visible = shown
+	_token_label.visible = shown
+	if not shown:
+		return
+	var pips: PackedStringArray = []
+	for i in range(1, bar_steps.size()):
+		pips.append("●" if bar_step() >= i else "○")
+	_climb_label.text = " ".join(pips)
+	var chips: PackedStringArray = []
+	for token in tokens:
+		var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
+		chips.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
+	_token_label.text = "  ".join(chips)
+
+
+func _make_climb_label(height: float, font_size: int) -> Label3D:
+	var label := Label3D.new()
+	label.position = _name_label.position + Vector3(0.0, height, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = font_size
+	label.outline_size = 14
+	label.modulate = Color(1.0, 0.78, 0.35)
+	add_child(label)
+	return label
+
+
+## Monk: a mistake drops the bar one step and takes the most recent token
+## (Crowd Cheer last, so a drop can still leave a cash-out). Returns a short
+## note, or "" when there was nothing to lose.
+func drop_step() -> String:
+	var lost: PackedStringArray = []
+	if bar_step() > 0:
+		lost_step = combo_limit
+		combo_limit = bar_steps[bar_step() - 1]
+		lost.append("bar %d" % int(combo_limit))
+	var keys := tokens.keys()
+	keys.reverse()
+	var pick := ""
+	for key in keys:
+		if key != "Crowd Cheer":
+			pick = key
+			break
+	if pick == "" and not keys.is_empty():
+		pick = keys[0]
+	if pick != "":
+		tokens[pick] = int(tokens[pick]) - 1
+		if int(tokens[pick]) <= 0:
+			tokens.erase(pick)
+		lost.append("-1 " + pick)
+	return ", ".join(lost)
+
+
+## Monk: Tortoise Special spent the climb: back to the first step.
+func spend_climb() -> void:
+	combo_limit = bar_steps[0]
+	lost_step = 0.0
+
+
+## Monk: everything its climb built (knocked out = back to the start).
+func reset_climb() -> void:
+	combo_limit = bar_steps[0]
+	lost_step = 0.0
+	tokens.clear()
+
+
 func add_status(status_name: String, turns: int, caster: Combatant) -> void:
 	statuses[status_name] = {"turns": turns, "caster": caster}
 
@@ -346,8 +467,14 @@ func current_move_speed() -> float:
 ## Short tags for the HP panel, e.g. "BRACE 2  SHIELD 26".
 func status_text() -> String:
 	var tags: PackedStringArray = []
+	if climbs():
+		# The Monk's climb first, so a long line never cuts it off.
+		tags.append("BAR %d" % int(combo_limit))
+		for token in tokens:
+			var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
+			tags.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED"}
+			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())
@@ -355,7 +482,7 @@ func status_text() -> String:
 	if shield > 0:
 		tags.append("SHIELD %d" % shield)
 	if riposte_left > 0.0:
-		tags.append("RIPOSTE %.0fs" % ceilf(riposte_left))
+		tags.append("%s %.0fs" % [counter_name.to_upper(), ceilf(riposte_left)])
 	return "  ".join(tags)
 
 
@@ -371,6 +498,8 @@ func recover_hp() -> int:
 func _go_down() -> void:
 	is_down = true
 	recoverable = 0
+	if climbs():
+		reset_climb()
 	if marks > 0:
 		set_marks(0)  # Marks go with the enemy
 	timeline_pos = 0.0

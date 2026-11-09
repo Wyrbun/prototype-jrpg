@@ -22,6 +22,18 @@ enum Shape { RECTANGLE, CIRCLE }
 	set(value):
 		floor_color = value
 		_rebuild_floor()
+## Rectangle: which edges are a lethal drop (marked by a glowing death wall
+## lined with skulls). Fighters pushed over one fall out of the fight;
+## walking into one asks for a Parry-like save. The other edges are walls.
+@export_flags("North (-Z)", "East (+X)", "South (+Z)", "West (-X)") var lethal_sides: int = 0:
+	set(value):
+		lethal_sides = value
+		_rebuild_floor()
+## Circle: the whole rim is a lethal drop.
+@export var lethal_rim := false:
+	set(value):
+		lethal_rim = value
+		_rebuild_floor()
 
 ## Rocks only block sight where they're this solid (1 = their full size).
 ## A bit under 1 means an attack that just grazes a rock still gets through.
@@ -29,6 +41,12 @@ const SIGHT_SHRINK := 0.85
 ## How far ahead walkers look for obstacles to go around.
 const LOOK_AHEAD := 1.2
 const EDGE_WIDTH := 0.25
+const DEATH_RED := Color(1.0, 0.18, 0.15)
+## lethal_sides bits, in the order of the rectangle's sides.
+const SIDE_NORTH := 1
+const SIDE_EAST := 2
+const SIDE_SOUTH := 4
+const SIDE_WEST := 8
 
 var _floor: MeshInstance3D = null
 
@@ -65,9 +83,13 @@ func spawn_points(enemy_side: bool, count: int) -> Array[Transform3D]:
 
 
 ## Pushes a fighter back inside the edges and out of every obstacle.
-func keep_inside(fighter: Node3D, body_radius: float) -> void:
+## lethal_open: lethal edges and holes don't hold it back (forced moves and
+## the steered fighter's walking; the battle then checks lethal_at).
+func keep_inside(fighter: Node3D, body_radius: float, lethal_open: bool = false) -> void:
 	var p := fighter.global_position
 	for obstacle in obstacles():
+		if lethal_open and obstacle.is_lethal():
+			continue
 		var offset := p - obstacle.global_position
 		offset.y = 0.0
 		var min_distance := obstacle.radius + body_radius
@@ -78,16 +100,65 @@ func keep_inside(fighter: Node3D, body_radius: float) -> void:
 	if shape == Shape.CIRCLE:
 		var flat := Vector3(p.x, 0.0, p.z)
 		var limit := size.x / 2.0 - body_radius
-		if flat.length() > limit:
+		if flat.length() > limit and not (lethal_open and lethal_rim):
 			flat = flat.normalized() * limit
 			p.x = flat.x
 			p.z = flat.z
 	else:
 		var hx := size.x / 2.0 - body_radius
 		var hz := size.y / 2.0 - body_radius
-		p.x = clampf(p.x, -hx, hx)
-		p.z = clampf(p.z, -hz, hz)
+		var open := lethal_sides if lethal_open else 0
+		p.x = clampf(p.x, -INF if open & SIDE_WEST else -hx, INF if open & SIDE_EAST else hx)
+		p.z = clampf(p.z, -INF if open & SIDE_NORTH else -hz, INF if open & SIDE_SOUTH else hz)
 	fighter.global_position = p
+
+
+## True if a point is over a lethal drop: in a hole, or past a lethal edge.
+func lethal_at(point: Vector3) -> bool:
+	var p := point - global_position
+	for obstacle in obstacles():
+		if obstacle.is_lethal() and Vector2(point.x - obstacle.global_position.x, point.z - obstacle.global_position.z).length() < obstacle.radius:
+			return true
+	if shape == Shape.CIRCLE:
+		return lethal_rim and Vector2(p.x, p.z).length() > size.x / 2.0
+	var hx := size.x / 2.0
+	var hz := size.y / 2.0
+	return (lethal_sides & SIDE_EAST and p.x > hx) or (lethal_sides & SIDE_WEST and p.x < -hx) \
+			or (lethal_sides & SIDE_SOUTH and p.z > hz) or (lethal_sides & SIDE_NORTH and p.z < -hz)
+
+
+## Which way is back to safety from a point at (or over) a lethal drop.
+func inward(point: Vector3) -> Vector3:
+	for obstacle in obstacles():
+		if obstacle.is_lethal():
+			var off := Vector3(point.x - obstacle.global_position.x, 0.0, point.z - obstacle.global_position.z)
+			if off.length() < obstacle.radius + 1.0:
+				return off.normalized() if off.length() > 0.01 else Vector3.BACK
+	var p := point - global_position
+	p.y = 0.0
+	if shape == Shape.CIRCLE:
+		return -p.normalized() if p.length() > 0.01 else Vector3.BACK
+	# The nearest side.
+	var hx := size.x / 2.0
+	var hz := size.y / 2.0
+	var gaps := {Vector3.LEFT: hx - p.x, Vector3.RIGHT: p.x + hx, Vector3.FORWARD: hz - p.z, Vector3.BACK: p.z + hz}
+	var best := Vector3.BACK
+	var best_gap := INF
+	for dir in gaps:
+		if gaps[dir] < best_gap:
+			best_gap = gaps[dir]
+			best = dir
+	return best
+
+
+## True if the arena has any lethal edge or hole.
+func has_drops() -> bool:
+	if lethal_sides != 0 or lethal_rim:
+		return true
+	for obstacle in obstacles():
+		if obstacle.is_lethal():
+			return true
+	return false
 
 
 ## Bends a walking direction around obstacles in the way, so fighters slide
@@ -169,8 +240,9 @@ func _rebuild_floor() -> void:
 			var d1 := Vector3(cos(a1), 0, sin(a1))
 			ground.append_array([Vector3.ZERO, d0 * r, d1 * r])
 			var lift := Vector3(0, 0.02, 0)
-			edge.append_array([d0 * (r - EDGE_WIDTH) + lift, d0 * r + lift, d1 * r + lift,
-					d0 * (r - EDGE_WIDTH) + lift, d1 * r + lift, d1 * (r - EDGE_WIDTH) + lift])
+			if not lethal_rim:
+				edge.append_array([d0 * (r - EDGE_WIDTH) + lift, d0 * r + lift, d1 * r + lift,
+						d0 * (r - EDGE_WIDTH) + lift, d1 * r + lift, d1 * (r - EDGE_WIDTH) + lift])
 	else:
 		var hx := size.x / 2.0
 		var hz := size.y / 2.0
@@ -181,6 +253,8 @@ func _rebuild_floor() -> void:
 		var inner := [Vector3(-hx + w, 0.02, -hz + w), Vector3(hx - w, 0.02, -hz + w),
 				Vector3(hx - w, 0.02, hz - w), Vector3(-hx + w, 0.02, hz - w)]
 		for i in 4:
+			if lethal_sides & (1 << i):
+				continue  # a drop: drawn as a death wall instead (below)
 			var j := (i + 1) % 4
 			edge.append_array([outer[i], outer[j], inner[j], outer[i], inner[j], inner[i]])
 
@@ -197,3 +271,64 @@ func _rebuild_floor() -> void:
 		mesh.surface_set_material(mesh.get_surface_count() - 1, part[1])
 	_floor.mesh = mesh
 	add_child(_floor)
+	_add_death_walls()
+
+
+## Lethal edges: a thin glowing red line just inside the drop, lined with
+## skulls, so it reads at a glance as "don't go past here".
+func _add_death_walls() -> void:
+	var paths: Array = []  # each: [from, to] along a lethal edge
+	if shape == Shape.CIRCLE:
+		if lethal_rim:
+			var r := size.x / 2.0
+			for i in 72:
+				var a0 := TAU * i / 72.0
+				var a1 := TAU * (i + 1) / 72.0
+				paths.append([Vector3(cos(a0), 0, sin(a0)) * r, Vector3(cos(a1), 0, sin(a1)) * r])
+	else:
+		var hx := size.x / 2.0
+		var hz := size.y / 2.0
+		var corners := [Vector3(-hx, 0, -hz), Vector3(hx, 0, -hz), Vector3(hx, 0, hz), Vector3(-hx, 0, hz)]
+		for i in 4:
+			if lethal_sides & (1 << i):
+				paths.append([corners[i], corners[(i + 1) % 4]])
+	if paths.is_empty():
+		return
+	var strip := PackedVector3Array()
+	var skull_spots: Array[Vector3] = []
+	var carry := 0.0
+	for path in paths:
+		var a: Vector3 = path[0]
+		var b: Vector3 = path[1]
+		var along := (b - a)
+		var length := along.length()
+		var inward_dir := Vector3.UP.cross(along.normalized())  # sides run clockwise seen from above: left is inside
+		if inward_dir.dot(-((a + b) / 2.0)) < 0.0:
+			inward_dir = -inward_dir
+		var w := 0.18
+		var lift := Vector3(0, 0.04, 0)
+		var a_in := a + inward_dir * 0.15
+		var b_in := b + inward_dir * 0.15
+		strip.append_array([a_in + lift, b_in + lift, b_in + inward_dir * w + lift,
+				a_in + lift, b_in + inward_dir * w + lift, a_in + inward_dir * w + lift])
+		var d := 1.6 - carry
+		while d < length:
+			skull_spots.append(a + along.normalized() * d + inward_dir * 0.75)
+			d += 1.6
+		carry = length - (d - 1.6)
+	var wall := MeshInstance3D.new()
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = strip
+	var wall_mesh := ArrayMesh.new()
+	wall_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.albedo_color = DEATH_RED
+	glow.cull_mode = BaseMaterial3D.CULL_DISABLED
+	wall_mesh.surface_set_material(0, glow)
+	wall.mesh = wall_mesh
+	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_floor.add_child(wall)
+	for spot in skull_spots:
+		_floor.add_child(ArenaObstacle.make_skull(spot))

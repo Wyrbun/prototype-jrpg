@@ -113,7 +113,7 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | have (on one: Fireball, Rock Spikes; on every member: Dark Bolt, Burning Spike) |
 | **One shape per party member** + **overlap rules** | Shaman, Living Armor, Dragon | have |
 | **Stops at first hit** / **snaps to a target** | Arcanist, Ogre | have |
-| **Forced movement** (push out, launch) | Ogre, Living Armor | have |
+| **Forced movement** (push out, launch, pull) | Ogre, Living Armor; pull for future bosses | have (pull: the `pull` field drags those hit towards the enemy; over a drop they fall) |
 | **Combo skills** (one skill triggers another) | Ogre (Shout then Sword Spin) | have (follow_up) |
 | **Interruptible casts** (hit count or damage threshold) | Shaman, Living Armor | have |
 | **Lingering hazards** that last several turns | Golem, Dragon | have (fire trail, rock spikes) |

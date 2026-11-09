@@ -268,6 +268,9 @@ var _hazards: Array[Dictionary] = []
 var _falls: Array[Dictionary] = []
 ## Rocks Ceiling Burst left behind: {"rock", "time_left"} (world time).
 var _debris: Array[Dictionary] = []
+## Walking over a lethal edge: a Parry-like save in progress, or empty.
+## {"fighter", "time_left", "reacted" (0 none, 1 in time, 2 too early), "ring"}.
+var _edge_save: Dictionary = {}
 const FALLING_ROCK_COLOR := Color(1.0, 0.62, 0.25)
 ## Telegraph arrows being animated: {"node", "base", "dir"}.
 var _telegraph_arrows: Array[Dictionary] = []
@@ -295,10 +298,29 @@ var _exec_reveal_left := 0.0
 ## same for every move: a block lasts as long as it is wide (Bash's growing
 ## chains are the one exception, see _plan_slot).
 @export var playhead_ap_per_second: float = 15.0
+## Monk: how many times a Headbutt can restart the combo bar in one combo.
+@export var bar_resets_per_combo: int = 1
+## Knight: while his Taunt is up, allies within this many meters of him are
+## covered by Block and Parry even if their class can't do them.
+@export var guard_radius: float = 3.0
+## Monk: extra damage on an Art for each token it uses up.
+@export var token_damage_bonus: float = 0.10
+## Walking over a lethal edge: seconds the save ring takes to close (the
+## timing window is the Parry's, parry_window).
+@export var edge_save_seconds: float = 1.0
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
 var _ap_before_combo := 0.0
+## Monk: the current slot's token result: {"bonus": damage share, "after":
+## tokens if every timing is Perfect, "sloppy": tokens otherwise, ...}.
+var _exec_tokens := {}
+## The bar length when the combo started (the playing bar keeps its scale
+## while the Monk's bar grows or is spent mid-combo).
+var _exec_limit := 0.0
+## After a Headbutt restart: the slot the fresh bar starts on once its
+## "READY" lead-in ends (-1 = none waiting).
+var _exec_resume_slot := -1
 
 # Combo playback (runs in _process while the menu is EXECUTING).
 ## PARTIAL: the player went for a Hold or Tap timing but didn't nail it
@@ -581,7 +603,9 @@ func _change_round(step: int) -> void:
 func _process(delta: float) -> void:
 	_world_moved = false
 	if not _game_over and not tutorial_pause:
-		if _strike != null:
+		if not _edge_save.is_empty():
+			_update_edge_save(delta)  # teetering on the edge: everything waits
+		elif _strike != null:
 			_update_strike(delta)  # everything else waits while a strike plays
 		elif active == null:
 			var world_delta := delta * battle_speed
@@ -647,6 +671,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("restart"):
 			get_viewport().set_input_as_handled()
 			get_tree().reload_current_scene()  # start the battle over
+		return
+	if not _edge_save.is_empty():
+		if event.is_action_pressed("parry"):
+			get_viewport().set_input_as_handled()
+			_edge_save_press()
 		return
 	if _strike != null:
 		if event.is_action_pressed("parry"):
@@ -836,7 +865,7 @@ func _free_roam(delta: float, world_delta: float) -> void:
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if controlled != null and not controlled.is_down and input != Vector2.ZERO:
 		controlled.step(_camera_relative(input), delta)
-		_keep_in_arena(controlled)
+		_walk_inside(controlled)
 	for enemy in enemies:
 		_enemy_step(enemy, world_delta)
 	for ally in party:
@@ -1205,8 +1234,127 @@ func _resolve_overlaps() -> void:
 
 
 ## Keeps a fighter inside the arena's edges and out of rocks and pits.
-func _keep_in_arena(fighter: Combatant) -> void:
+## forced: pushed or pulled (knockback, launch, Hook, pulls). Over a lethal
+## drop, a forced move makes the fighter fall (bosses hold on); walking never
+## does: walkers stop at lethal edges like at walls.
+func _keep_in_arena(fighter: Combatant, forced: bool = false) -> void:
+	if forced and arena.has_drops() and _can_fall(fighter):
+		# Walls and rocks still stop it; drops don't (bosses get the normal
+		# clamp below, so they stop at the brink).
+		arena.keep_inside(fighter, fighter.body_radius, true)
+		if arena.lethal_at(fighter.global_position):
+			_fall(fighter)
+		return
 	arena.keep_inside(fighter, fighter.body_radius)
+
+
+## The steered fighter walks right up to a lethal edge; once its middle
+## goes over, it teeters: one Parry-like save per character per fight.
+func _walk_inside(fighter: Combatant) -> void:
+	if not arena.has_drops():
+		_keep_in_arena(fighter)
+		return
+	arena.keep_inside(fighter, fighter.body_radius, true)
+	if not arena.lethal_at(fighter.global_position):
+		return
+	if fighter.get_meta("edge_saved", false):
+		_fall(fighter)  # its one save is spent
+	else:
+		_begin_edge_save(fighter)
+
+
+## Bosses never fall; everyone else can (party members and regular enemies).
+func _can_fall(fighter: Combatant) -> bool:
+	return not fighter.is_down and not fighter.boss
+
+
+## Over the edge: out of the fight. The body drops away.
+func _fall(fighter: Combatant) -> void:
+	if fighter.is_down:
+		return
+	fighter.set_meta("fell", true)
+	_popup(fighter, "FELL!", Color(1.0, 0.3, 0.25))
+	_count("falls")
+	if fighter.team == Combatant.Team.ENEMY:
+		_count("enemy_falls")
+	fighter.shield = 0
+	fighter.statuses.erase("arcane_barrier")
+	fighter.cannot_fall = false
+	if playtest:
+		if fighter.team == Combatant.Team.PARTY:
+			playtest.hurt(fighter, fighter.hp, "Fell off the arena")
+			playtest.down(fighter)
+		else:
+			playtest.deal(_exec_attacker if _menu_mode == BattleMenu.Mode.EXECUTING else null, fighter.hp)
+	fighter.hp = 0
+	fighter._go_down()
+	var drop := create_tween()
+	drop.tween_property(fighter, "global_position:y", -7.0, 0.7).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	drop.tween_callback(func(): fighter.visible = false)
+	_flash("%s falls off the arena!" % fighter.display_name)
+	print("%s falls off the arena" % fighter.display_name)
+	if fighter.team == Combatant.Team.PARTY:
+		_check_party()
+	else:
+		_check_enemies()
+
+
+## Teetering on a lethal edge: a ring closes on the fighter; Parry as it turns
+## gold to catch yourself, otherwise you fall.
+func _begin_edge_save(fighter: Combatant) -> void:
+	fighter.set_meta("edge_saved", true)  # one try per fight, caught or not
+	var ring := _make_ring(fighter.body_radius + 0.3, 0.1, Color.WHITE)
+	fighter.add_child(ring)
+	_edge_save = {"fighter": fighter, "time_left": edge_save_seconds, "reacted": 0, "ring": ring}
+	_popup(fighter, "WHOA!", Color(1.0, 0.75, 0.3))
+	_flash(Keybinds.fill("%s is about to fall! {parry} when the ring turns gold to catch yourself" % fighter.display_name))
+	for key in ["move_left", "move_right", "move_forward", "move_back"]:
+		Input.action_release(key)
+
+
+func _edge_save_press() -> void:
+	if int(_edge_save["reacted"]) != 0:
+		return
+	if float(_edge_save["time_left"]) <= parry_window:
+		_edge_save["reacted"] = 1
+	else:
+		_edge_save["reacted"] = 2
+		_popup(_edge_save["fighter"], "MISS", Color(1.0, 0.35, 0.3))
+
+
+func _update_edge_save(delta: float) -> void:
+	var fighter: Combatant = _edge_save["fighter"]
+	var ring: MeshInstance3D = _edge_save["ring"]
+	_edge_save["time_left"] = float(_edge_save["time_left"]) - delta
+	var left: float = _edge_save["time_left"]
+	var color := Color.WHITE
+	match int(_edge_save["reacted"]):
+		1:
+			color = Color(1.0, 0.85, 0.2)
+		2:
+			color = Color(1.0, 0.25, 0.2)
+		_:
+			if left <= parry_window:
+				color = Color(1.0, 0.85, 0.2)
+	var grow := 1.0 + 2.0 * clampf(left / maxf(edge_save_seconds, 0.01), 0.0, 1.0)
+	if is_instance_valid(ring):
+		ring.scale = Vector3(grow, 1.0, grow)
+		(ring.material_override as StandardMaterial3D).albedo_color = color
+	if left > 0.0:
+		return
+	var saved := int(_edge_save["reacted"]) == 1
+	_edge_save = {}
+	if is_instance_valid(ring):
+		ring.queue_free()
+	if saved:
+		var back := arena.inward(fighter.global_position)
+		fighter.global_position += back * (fighter.body_radius + 0.8)
+		arena.keep_inside(fighter, fighter.body_radius)
+		_popup(fighter, "SAVED!", Color(0.5, 1.0, 0.55))
+		_flash("%s catches themselves at the edge (that was the one save this fight)" % fighter.display_name)
+		_count("edge_saves")
+	else:
+		_fall(fighter)
 
 
 ## True if nothing (a rock) stands between two fighters.
@@ -2149,6 +2297,33 @@ func _add_telegraphs(enemy: Combatant) -> void:
 			arrow.look_at(area.to_global(edge + inward), Vector3.UP)
 			_telegraph_arrows.append({"node": arrow, "base": edge, "dir": inward})
 			nodes.append(arrow)
+	if (def.launch > 0.0 or def.pull > 0.0) and enemy.attack_range and not def.placed_on_party():
+		# Red arrows over the area: sliding outward (it throws you away) or
+		# towards the enemy (it drags you in). Mind what's behind you.
+		var area := enemy.attack_range
+		var half := deg_to_rad(area.angle_degrees) / 2.0
+		var full := area.angle_degrees >= 360.0
+		var count := 8 if full else 5
+		for i in count:
+			var t := (i + 0.5) / count
+			var a := TAU * t if full else -half + 2.0 * half * t
+			var radial := Vector3(sin(a), 0.0, -cos(a))
+			if area.shape == EnemySkill.Shape.LINE:
+				radial = Vector3.FORWARD
+			var reach := minf(area.radius, 6.0)
+			var base := radial * reach * (0.55 if def.pull > 0.0 else 0.35)
+			if area.shape == EnemySkill.Shape.LINE:
+				base = Vector3((t - 0.5) * area.width * 0.8, 0.0, -reach * 0.5)
+			base.y = 0.07
+			var dir := -radial if def.pull > 0.0 else radial
+			var arrow := _make_arrow()
+			(arrow.material_override as StandardMaterial3D).albedo_color = Color(0.75, 0.02, 0.02, 0.95)
+			area.add_child(arrow)
+			arrow.position = base
+			arrow.look_at(area.to_global(base + dir), Vector3.UP)
+			arrow.scale = Vector3(1.7, 1.0, 1.7)  # big and dark: it has to read over any area color
+			_telegraph_arrows.append({"node": arrow, "base": base, "dir": dir})
+			nodes.append(arrow)
 	enemy.set_meta("telegraphs", nodes)
 
 
@@ -2566,7 +2741,7 @@ func _try_parry() -> void:
 	else:
 		_strike.reaction = Reaction.PARRY_MISSED
 		for target in _strike.targets:
-			if target.can_parry:
+			if _covered(target, "parry"):
 				_popup(target, "MISS", Color(1.0, 0.35, 0.3))  # too early: said at once, over their head
 
 
@@ -2600,6 +2775,7 @@ func _resolve_strike() -> void:
 	var parry_missed := false
 	var final_hit := s.hits_left <= 0
 	var thrown: Array[Combatant] = []
+	var pulled: Array[Combatant] = []
 	var avoidable: Array[Combatant] = []  # took a hit they could have avoided
 	if s.def.hits > 1:
 		lines.append("%s %d/%d" % [skill_name, s.def.hits - s.hits_left, s.def.hits])
@@ -2625,8 +2801,8 @@ func _resolve_strike() -> void:
 			_popup(target, "AUTO-PARRY!", Color(0.78, 0.45, 1.0))
 			lines.append("%s auto-parries %s's %s (a Mark is spent)" % [target.display_name, s.enemy.display_name, skill_name])
 			continue
-		var can_parry := target.can_parry and s.def.parryable()
-		var can_block: bool = target.can_block and s.def.blockable() and not mod.get("unblockable", false)
+		var can_parry := _covered(target, "parry") and s.def.parryable()
+		var can_block: bool = _covered(target, "block") and s.def.blockable() and not mod.get("unblockable", false)
 		if s.reaction == Reaction.PARRY and can_parry:
 			parried = true
 			if playtest:
@@ -2675,10 +2851,17 @@ func _resolve_strike() -> void:
 					extra, _absorb_note(damage, taken)])
 		if final_hit and s.def.launch > 0.0 and not target.is_down:
 			thrown.append(target)
+		if final_hit and s.def.pull > 0.0 and not target.is_down:
+			pulled.append(target)
 
 	for target in thrown:
 		_knock_away(target, s.enemy.global_position, s.def.launch)
-		_popup(target, "LAUNCHED", Color(1.0, 0.6, 0.3))
+		if not target.is_down:
+			_popup(target, "LAUNCHED", Color(1.0, 0.6, 0.3))
+	for target in pulled:
+		_pull_toward(target, s.enemy.global_position, s.def.pull, s.enemy.body_radius + target.body_radius + 0.2)
+		if not target.is_down:
+			_popup(target, "PULLED", Color(1.0, 0.6, 0.3))
 
 	if parried:
 		# Every hit of a multi-hit strike can be parried, and each Parry grows
@@ -2689,9 +2872,17 @@ func _resolve_strike() -> void:
 			s.enemy.timeline_penalty += stagger_push
 			lines.append("%s is staggered" % s.enemy.display_name)
 		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
+		for target in s.targets:
+			if target.climbs() and target.statuses.has("provoking") and not target.is_down:
+				lines.append(_give_token(target, "Rush", "Provoke Parry"))
 	if parry_missed:
 		ap = 0.0
 		lines.append("Parry too early! Turn delayed, AP lost")
+		for target in s.targets:
+			if target.climbs() and target.can_parry:
+				var slip := _monk_slip(target)
+				if slip != "":
+					lines.append(slip)
 		var reset_note := _reset_max_ap()
 		if reset_note != "":
 			lines.append(reset_note)
@@ -2699,6 +2890,11 @@ func _resolve_strike() -> void:
 	if not avoidable.is_empty() and not parry_missed and not s.enemy.get_meta("ap_penalty_done", false):
 		# Once per strike (a 3-hit Combo costs one segment, not three).
 		s.enemy.set_meta("ap_penalty_done", true)
+		for member in avoidable:
+			if member.climbs():
+				var slip := _monk_slip(member)
+				if slip != "":
+					lines.append(slip)
 		var note := _lose_max_ap_for_hit(avoidable)
 		if note != "":
 			lines.append(note)
@@ -2813,7 +3009,20 @@ func _save_playtest(result: String) -> void:
 ## True if anyone caught in the strike can "parry" or "block" it.
 func _strike_targets_can(reaction: String) -> bool:
 	for target in _strike.targets:
-		if (target.can_parry if reaction == "parry" else target.can_block):
+		if _covered(target, reaction):
+			return true
+	return false
+
+
+## True if this fighter can "parry" or "block": its own class can, or a
+## Knight guarding with Taunt stands within guard_radius of it.
+func _covered(target: Combatant, reaction: String) -> bool:
+	if target.can_parry if reaction == "parry" else target.can_block:
+		return true
+	for guard in _standing(party):
+		if guard != target and guard.statuses.has("guarding") \
+				and (guard.can_parry if reaction == "parry" else guard.can_block) \
+				and guard.global_position.distance_to(target.global_position) <= guard_radius:
 			return true
 	return false
 
@@ -2829,10 +3038,15 @@ func _riposte(archer: Combatant, enemy: Combatant, lines: PackedStringArray) -> 
 	var dealt := enemy.take_damage(damage, false)
 	if playtest:
 		playtest.deal(archer, dealt)
-	_popup(archer, "RIPOSTE!", Color(1.0, 0.85, 0.2))
+	_popup(archer, archer.counter_name.to_upper() + "!", Color(1.0, 0.85, 0.2))
 	_popup(enemy, str(damage), Color.WHITE)
 	_knock_away(enemy, archer.global_position, 3.0)
-	lines.append("%s ripostes! %s takes %d and is pushed back" % [archer.display_name, enemy.display_name, damage])
+	if archer.counter_name == "Suplex":
+		lines.append("%s suplexes %s for %d and throws it" % [archer.display_name, enemy.display_name, damage])
+		if archer.climbs():
+			lines.append(_give_token(archer, "Mountain", "Suplex"))
+	else:
+		lines.append("%s ripostes! %s takes %d and is pushed back" % [archer.display_name, enemy.display_name, damage])
 
 
 ## Shoves a fighter straight away from a point, stopping at walls and rocks.
@@ -2844,7 +3058,25 @@ func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
 	var steps := 8
 	for i in steps:
 		fighter.global_position += away.normalized() * meters / steps
-		_keep_in_arena(fighter)
+		_keep_in_arena(fighter, true)
+		if fighter.is_down:
+			return  # pushed over a drop
+
+
+## Drags a fighter towards a point (boss pulls), stopping next to whoever is
+## there. Being dragged across a hole or a lethal edge means falling.
+func _pull_toward(fighter: Combatant, to: Vector3, meters: float, stop_gap: float) -> void:
+	var steps := 8
+	for i in steps:
+		var dir := to - fighter.global_position
+		dir.y = 0.0
+		var room := dir.length() - stop_gap
+		if room <= 0.0:
+			return
+		fighter.global_position += dir.normalized() * minf(meters / steps, room)
+		_keep_in_arena(fighter, true)
+		if fighter.is_down:
+			return
 
 
 func _check_party() -> void:
@@ -3077,11 +3309,12 @@ func _add_to_combo(index: int) -> void:
 		_flash(battle_menu.move_notes[index])
 		return
 	var cost := _next_cost(index)
-	var used := battle_menu.combo_cost()
+	var used := _segment_used()
+	var available := _segment_available()
 	if used + cost > controlled.combo_limit:
 		_flash("%s's combo bar is full" % controlled.display_name)
-	elif used + cost > ap:
-		_flash("Not enough AP (%d left)" % floori(ap - used))
+	elif used + cost > available:
+		_flash("Not enough AP (%d left)" % floori(available - used))
 	else:
 		battle_menu.combo.append(index)
 		_rebuild_plan()
@@ -3128,6 +3361,124 @@ func _next_cost(index: int) -> float:
 	return float(move["cost"])
 
 
+## AP the fighter can spend (party AP for everyone; the Monk's own is only
+## his bar's length).
+func _pool(_fighter: Combatant) -> float:
+	return ap
+
+
+func _pay(_fighter: Combatant, amount: float) -> void:
+	ap -= amount
+
+
+## Monk: a mistake costs a step of his climb and his newest token.
+func _monk_slip(fighter: Combatant) -> String:
+	var note := fighter.drop_step()
+	if note == "":
+		return ""
+	_popup(fighter, "-1 STEP", Color(1.0, 0.45, 0.35))
+	_step_banner("STEP LOST  ·  BAR %d" % int(fighter.combo_limit), Color(1.0, 0.4, 0.35))
+	_count("monk_steps_lost")
+	return "%s slips: %s" % [fighter.display_name, note]
+
+
+## Monk: a banner over the field when his climb moves ("STEP 2 · BAR 80").
+func _step_banner(text: String, color: Color) -> void:
+	if battle_menu:
+		battle_menu.banner_text = text
+		battle_menu.banner_color = color
+		battle_menu.banner_left = BattleMenu.BANNER_SECONDS
+
+
+## Monk: what the Art at the end of the bar (building) or playing now does
+## with his climb: [what it does, what a Perfect adds, Perfect still on?].
+func _monk_preview() -> Array:
+	var fighter := controlled
+	if fighter == null or not fighter.climbs() or _plan.is_empty():
+		return ["", "", true]
+	var executing := _menu_mode == BattleMenu.Mode.EXECUTING
+	var slot := _exec_slot if executing else _plan.size() - 1
+	if slot >= _plan.size():
+		return ["", "", true]
+	if executing and _exec_hits_done >= (_plan[slot]["hits"] as Array).size():
+		return ["", "", true]  # landed: the climb has already moved on
+	var move: Dictionary = _plan[slot]["move"]
+	var plan: Dictionary = _exec_tokens if executing else _token_plan(fighter, move)
+	if plan.is_empty():
+		return ["", "", true]
+	var parts: PackedStringArray = []
+	var used := int(plan.get("used", 0))
+	if used > 0:
+		var consumed: PackedStringArray = []
+		for token in move.get("consumes", []):
+			consumed.append(String(token))
+		parts.append("Uses %s (+%d%%)" % [", ".join(consumed), roundi(token_damage_bonus * 100.0 * used)])
+	if move.get("climb", false):
+		parts.append("Top: bar 100" if fighter.at_top() else "Step: bar %d" % int(fighter.bar_steps[mini(fighter.bar_step() + 1, fighter.bar_steps.size() - 1)]))
+	if move.has("cashout"):
+		parts.append("Cash-out x%.1f, back to %d" % [float(plan.get("cashout", 1.0)), int(fighter.bar_steps[0])])
+	var gives: PackedStringArray = []
+	var after: Dictionary = plan.get("after", {})
+	var sloppy: Dictionary = plan.get("sloppy", {})
+	for token in after:
+		if int(after[token]) > int(sloppy.get(token, 0)):
+			gives.append("+" + String(token))
+	if move.get("climb", false) and not fighter.tokens.has("Crowd Cheer") \
+			and (fighter.at_top() or fighter.bar_step() == fighter.bar_steps.size() - 2):
+		gives.append("+Crowd Cheer")
+	var perfect_on := true
+	if executing:
+		var entry := _plan[slot]
+		for hit in mini(_exec_hits_done, (entry["hits"] as Array).size()):
+			if not _untimed(entry, hit) and _exec_timings[hit] != Timing.PERFECT:
+				perfect_on = false
+	return ["  ·  ".join(parts), ("Perfect: " + ", ".join(gives)) if not gives.is_empty() else "", perfect_on]
+
+
+## Monk: a token from tanking (Parry while Provoking, a Suplex counter).
+func _give_token(fighter: Combatant, token: String, why: String) -> String:
+	fighter.tokens[token] = int(fighter.tokens.get(token, 0)) + 1
+	_popup(fighter, "+" + token.to_upper(), Color(1.0, 0.75, 0.35))
+	_count("monk_tank_tokens")
+	return "%s: +1 %s (%s)" % [fighter.display_name, token, why]
+
+
+## Plan slots after which the bar starts over (a Headbutt with more moves
+## planned after it counts; at most bar_resets_per_combo of them). A reset
+## on the last slot counts too while building, since the next move added
+## would follow it.
+func _reset_slots(include_last: bool) -> Array[int]:
+	var slots: Array[int] = []
+	for i in _plan.size():
+		if slots.size() >= bar_resets_per_combo:
+			break
+		if _plan[i]["move"].get("bar_reset", false) and (include_last or i < _plan.size() - 1):
+			slots.append(i)
+	return slots
+
+
+## AP of the bar used since the last restart (the whole bar without one).
+func _segment_start(include_last: bool = true) -> float:
+	var resets := _reset_slots(include_last)
+	if resets.is_empty():
+		return 0.0
+	var start := 0.0
+	for i in resets[-1] + 1:
+		start += float(_plan[i]["cost"])
+	return start
+
+
+func _segment_used() -> float:
+	return battle_menu.combo_cost() - _segment_start()
+
+
+## What the current part of the bar can spend: a bar's worth, and no more
+## than the party AP left after the parts before it (a fresh bar after a
+## Headbutt is paid too).
+func _segment_available() -> float:
+	return maxf(minf(controlled.combo_limit, ap - _segment_start()), 0.0)
+
+
 ## The move list shows what each move would cost if added next.
 func _refresh_next_costs() -> void:
 	for i in _moves.size():
@@ -3142,7 +3493,8 @@ func _refresh_next_costs() -> void:
 ## and undiscovered recipes stay a surprise.
 func _parse_combo(with_unknown: bool) -> Array:
 	var arts: Array = Moves.arts(controlled.class_id).filter(
-			func(art): return with_unknown or ArtsBook.known(controlled.class_id, art["name"]))
+			func(art): return (with_unknown or ArtsBook.known(controlled.class_id, art["name"])) \
+					and (not art.has("needs_token") or controlled.tokens.has(art["needs_token"])))
 	arts.sort_custom(func(x, y): return (x["recipe"] as Array).size() > (y["recipe"] as Array).size())
 	var names: Array = battle_menu.combo.map(func(k): return _moves[k]["name"])
 	var groups: Array = []
@@ -3152,10 +3504,8 @@ func _parse_combo(with_unknown: bool) -> Array:
 		var length := 1
 		for art in arts:
 			var recipe: Array = art["recipe"]
-			if _combo_locks.has(i) and art["name"] != _combo_locks[i]:
-				continue  # an Art picked from the list stays that Art
-			if not _combo_locks.has(i) and _crosses_lock(i, recipe.size()):
-				continue  # can't swallow part of a picked Art
+			if _crosses_lock(i, recipe.size()):
+				continue  # an Art picked from the list is never cut in half
 			if i + recipe.size() <= names.size() and names.slice(i, i + recipe.size()) == recipe:
 				move = art.duplicate(true)
 				var cost := 0
@@ -3223,13 +3573,24 @@ func _reveal_art(slot: int) -> void:
 	battle_menu.reveal_progress = 0.0
 
 
-## True if a recipe starting at `start` would run into an Art picked from
-## the list.
+## True if a recipe at `start` would take only part of an Art picked from
+## the list. Taking a picked Art whole is fine: a bigger Art built on it
+## (Palm Strike x2 + Knee Smash = Triple Rush) still forms and reveals.
 func _crosses_lock(start: int, length: int) -> bool:
 	for lock in _combo_locks:
-		if lock > start and lock < start + length:
+		var lock_end: int = lock + _art_length(_combo_locks[lock])
+		var overlaps: bool = lock < start + length and lock_end > start
+		var inside: bool = lock >= start and lock_end <= start + length
+		if overlaps and not inside:
 			return true
 	return false
+
+
+func _art_length(art_name: String) -> int:
+	for art in Moves.arts(controlled.class_id):
+		if art["name"] == art_name:
+			return (art["recipe"] as Array).size()
+	return 1
 
 
 ## K / Backspace in the combo bar: removes the last basic move (an Art
@@ -3292,12 +3653,13 @@ func _add_art(row: int) -> void:
 			return
 		indices.append(index)
 		cost += float(_moves[index]["cost"])
-	var used := battle_menu.combo_cost()
+	var used := _segment_used()
+	var available := _segment_available()
 	if used + cost > controlled.combo_limit:
 		_flash("%s needs %d AP of bar: there's room for %d" % [art["name"], cost, controlled.combo_limit - used])
 		return
-	if used + cost > ap:
-		_flash("Not enough AP for %s (%d left)" % [art["name"], floori(ap - used)])
+	if used + cost > available:
+		_flash("Not enough AP for %s (%d left)" % [art["name"], floori(available - used)])
 		return
 	_combo_locks[battle_menu.combo.size()] = art["name"]
 	for index in indices:
@@ -3335,11 +3697,42 @@ func _update_arts_list() -> void:
 					and _would_finish_art(recipe[tail.size()], art["name"]):
 				next = recipe[tail.size()]
 				break
-		rows.append({"name": art["name"], "recipe": " + ".join(recipe), "known": true, "index": index,
+		var art_cost := 0
+		for move_name in recipe:
+			for m in _moves:
+				if m["name"] == move_name:
+					art_cost += int(m["cost"])
+		var timing_name: String = {Moves.TimingType.HOLD: "Hold & let go", Moves.TimingType.TAP: "Tap x%d" % int(art.get("taps", 0))}.get(
+				int(art.get("timing", Moves.TimingType.PRESS)), "Press")
+		rows.append({"name": art["name"], "recipe": _recipe_text(art), "known": true, "index": index,
+				"desc": art["desc"], "cost": art_cost, "timing": timing_name,
 				"next": next, "color": art["color"], "finisher": art.get("finisher", false)})
 	battle_menu.arts = rows
 	battle_menu.arts_hidden = hidden
 	battle_menu.arts_hidden_sizes = hidden_sizes
+
+
+## The Arts list's recipe line. Monk Arts built from smaller ones read
+## "Palm Strike + Palm Strike + Knee Smash" once those are all known (no
+## spoilers otherwise); long move lists shorten to initials ("P P P P K HK").
+func _recipe_text(art: Dictionary) -> String:
+	var known_inside := art.has("recipe_text")
+	for inner in art.get("contains", []):
+		if not ArtsBook.known(controlled.class_id, inner):
+			known_inside = false
+	if known_inside:
+		return art["recipe_text"]
+	var recipe: Array = art["recipe"]
+	var text := " + ".join(recipe)
+	if text.length() <= 40:
+		return text
+	var short: PackedStringArray = []
+	for move_name in recipe:
+		var initials := ""
+		for word in String(move_name).split(" "):
+			initials += word.substr(0, 1)
+		short.append(initials)
+	return " ".join(short)
 
 
 ## True if adding this basic move to the bar would make the bar end on this
@@ -3429,7 +3822,18 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 	if times.is_empty():
 		for i in hits.size():
 			times.append(float(i + 1) / hits.size())
+	# Monk's Punch / Kick: only one hit is timed, the others land by themselves.
+	var untimed: Array[bool] = []
+	for i in hits.size():
+		match String(move.get("timed", "all")):
+			"last":
+				untimed.append(i != hits.size() - 1)
+			"first":
+				untimed.append(i != 0)
+			_:
+				untimed.append(false)
 	return {
+		"untimed": untimed,
 		"move": move, "name": move["name"], "color": move["color"], "cost": cost,
 		"hits": hits, "times": times, "duration": duration,
 		"window": float(move["window"]) / duration,
@@ -3443,8 +3847,10 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 func _execute_combo() -> void:
 	_menu_mode = BattleMenu.Mode.EXECUTING
 	_exec_attacker = controlled
-	_ap_before_combo = ap
-	ap -= battle_menu.combo_cost()
+	_ap_before_combo = _pool(controlled)
+	_pay(controlled, battle_menu.combo_cost())  # a Headbutt's fresh bar included
+	_exec_limit = controlled.combo_limit
+	_exec_resume_slot = -1
 	if combo_counter:
 		combo_counter.begin(controlled.display_name)
 	_exec_attacker.statuses.erase("arcane_cost")  # Arcane Barrier's cost lasts until the next attack
@@ -3455,6 +3861,7 @@ func _execute_combo() -> void:
 	_count("combos_" + _exec_attacker.class_id)
 	_exec_attacker.face_toward(_combo_target.global_position - _exec_attacker.global_position, 1.0, 100000.0)
 	battle_menu.slot_results.clear()
+	battle_menu.consumed_slots = 0
 	for entry in _plan:
 		var per_hit: Array[int] = []
 		per_hit.resize((entry["hits"] as Array).size())
@@ -3487,6 +3894,7 @@ func _start_combo_slot(slot: int) -> void:
 	battle_menu.executing_slot = slot
 	battle_menu.slot_progress = 0.0
 	var art_move: Dictionary = _plan[slot]["move"]
+	_exec_tokens = _token_plan(_exec_attacker, art_move)
 	if art_move.has("recipe"):
 		# An Art: its name pops up, and the first time it's discovered.
 		_count("arts")
@@ -3504,7 +3912,11 @@ func _update_combo(delta: float) -> void:
 		battle_menu.lead_in_progress = clampf(1.0 - _exec_lead_in / combo_lead_in, 0.0, 1.0)
 		if _exec_lead_in <= 0.0:
 			battle_menu.lead_in_progress = -1.0
-			if _pending_reveals.has(0):
+			if _exec_resume_slot >= 0:
+				var resume := _exec_resume_slot
+				_exec_resume_slot = -1
+				_start_combo_slot(resume)  # the fresh bar starts now
+			elif _pending_reveals.has(0):
 				_start_combo_slot(0)
 		return
 	if _exec_reveal_left > 0.0:
@@ -3531,11 +3943,14 @@ func _update_combo(delta: float) -> void:
 	while _exec_hits_done < hits.size() and _exec_time >= duration * float(times[_exec_hits_done]):
 		var multiplier: float = hits[_exec_hits_done]
 		multiplier *= 1.0 + _settle_special_timing(entry, _exec_hits_done)
+		var untimed := _untimed(entry, _exec_hits_done)
 		var perfect := _exec_timings[_exec_hits_done] == Timing.PERFECT
-		if _exec_timings[_exec_hits_done] == Timing.NONE:
+		if _exec_timings[_exec_hits_done] == Timing.NONE and not untimed:
 			_shrink_max_ap(skipped_hit_max_ap_loss, _exec_attacker)  # opted out of the timing
 		if perfect:
 			multiplier *= 1.0 + perfect_damage_bonus
+		# Monk: the tokens the Art uses up, and Tortoise Special's cash-out.
+		multiplier *= 1.0 + float(_exec_tokens.get("bonus", 0.0))
 		_exec_attacker.play_lunge()
 		_exec_hit_perfect = perfect  # Divine Barrier grows on a Perfect
 		var hit_move: Dictionary = entry["move"]
@@ -3545,6 +3960,8 @@ func _update_combo(delta: float) -> void:
 			hit_move.merge(hit_move["last_hit"], true)
 		var keep_going := _land_hit(_exec_attacker, hit_move, multiplier, _exec_hits_done == 0, _exec_hits_done == hits.size() - 1)
 		_exec_hit_perfect = false
+		if _exec_hits_done == hits.size() - 1 and not _exec_attacker.is_down:
+			_settle_tokens()  # the Art's last hit landed: tokens and the bar
 		if combo_counter:
 			combo_counter.hit(perfect)
 		_exec_hits_done += 1
@@ -3566,6 +3983,16 @@ func _update_combo(delta: float) -> void:
 	if _exec_hits_done >= hits.size() and _exec_time >= duration:
 		if _exec_slot + 1 < _plan.size():
 			var overshoot := _exec_time - duration
+			if _reset_slots(false).has(_exec_slot):
+				# Headbutt: the bar starts over, after the same "READY" lead-in
+				# a combo starts with, so the player can read the fresh bar.
+				battle_menu.consumed_slots = _exec_slot + 1
+				battle_menu.executing_slot = _exec_slot + 1
+				_popup(_exec_attacker, "FRESH BAR!", Color(1.0, 0.75, 0.35))
+				_exec_resume_slot = _exec_slot + 1
+				_exec_lead_in = combo_lead_in
+				battle_menu.lead_in_progress = 0.0
+				return
 			_start_combo_slot(_exec_slot + 1)
 			if _exec_reveal_left <= 0.0:
 				_exec_time = overshoot  # keep the rhythm frame-exact
@@ -3580,11 +4007,116 @@ func _update_combo(delta: float) -> void:
 func _timing_prompt() -> String:
 	if _exec_slot < _plan.size() and _exec_lead_in <= 0.0:
 		var entry := _plan[_exec_slot]
-		if _special_hit(entry, _exec_hits_done):
+		if _special_hit(entry, _next_timed(entry)):
 			if int(entry["timing"]) == Moves.TimingType.HOLD:
 				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
 			return Keybinds.fill("TAP {confirm} exactly %d times before the hit: Perfect!  (a tap too many is a miss)" % int(entry["taps"]))
 	return Keybinds.fill("{confirm} when the playhead hits the box: Perfect!  (a wrong press ends the chain)")
+
+
+## Monk's Punch / Kick: hits that land by themselves (no timing box).
+func _untimed(entry: Dictionary, hit: int) -> bool:
+	var list: Array = entry.get("untimed", [])
+	return hit < list.size() and bool(list[hit])
+
+
+## The next hit a press is judged against (skipping hits that land by
+## themselves); the hit count when none is left.
+func _next_timed(entry: Dictionary) -> int:
+	var hit := _exec_hits_done
+	while hit < (entry["hits"] as Array).size() and _untimed(entry, hit):
+		hit += 1
+	return hit
+
+
+## Monk Arts: works out what this slot does with tokens before it plays.
+## The smaller Arts inside it give their tokens first (in order, each
+## using up what it consumes), then this Art uses up its own. Every token
+## used up anywhere in it adds token_damage_bonus to its damage.
+## Returns {} for moves without token fields.
+func _token_plan(fighter: Combatant, move: Dictionary) -> Dictionary:
+	if not fighter.climbs() or not (move.has("grants") or move.has("consumes") or move.has("contains") or move.get("climb", false)):
+		return {}
+	var arts := {}
+	for art in Moves.arts(fighter.class_id):
+		arts[art["name"]] = art
+	var held: Dictionary = fighter.tokens.duplicate()
+	var used := [0]
+	_apply_art_tokens(move, held, used, arts, true)
+	# Not all Perfect: the Art still uses its tokens up, but leaves none.
+	var sloppy: Dictionary = fighter.tokens.duplicate()
+	_apply_art_tokens(move, sloppy, [0], arts, false)
+	var bonus: float = token_damage_bonus * int(used[0])
+	var cashout := 1.0
+	for entry in move.get("cashout", []):
+		if fighter.combo_limit >= float(entry[0]):
+			cashout = float(entry[1])
+	bonus = (1.0 + bonus) * cashout - 1.0
+	return {"bonus": bonus, "after": held, "sloppy": sloppy, "used": used[0], "cashout": cashout}
+
+
+func _apply_art_tokens(art: Dictionary, held: Dictionary, used: Array, arts: Dictionary, grant: bool) -> void:
+	for inner in art.get("contains", []):
+		if arts.has(inner):
+			_apply_art_tokens(arts[inner], held, used, arts, grant)
+	for token in art.get("consumes", []):
+		used[0] += int(held.get(token, 0))
+		held.erase(token)
+	if not grant:
+		return
+	var grants: Dictionary = art.get("grants", {})
+	for token in grants:
+		held[token] = int(held.get(token, 0)) + int(grants[token])
+
+
+## The Art's last hit landed. Every timing Perfect: the Monk keeps the
+## tokens it left; otherwise only what it didn't use up. Either way its
+## step raises the bar (right there on screen), and Tortoise Special
+## spends the climb.
+func _settle_tokens() -> void:
+	var move: Dictionary = _plan[_exec_slot]["move"]
+	var fighter := _exec_attacker
+	if _exec_tokens.is_empty() or not fighter.climbs():
+		return
+	var entry := _plan[_exec_slot]
+	var all_perfect := true
+	for hit in (entry["hits"] as Array).size():
+		if not _untimed(entry, hit) and _exec_timings[hit] != Timing.PERFECT:
+			all_perfect = false
+	var before: Dictionary = fighter.tokens.duplicate()
+	fighter.tokens = _exec_tokens["after"] if all_perfect else _exec_tokens["sloppy"]
+	var notes: PackedStringArray = []
+	if not all_perfect and move.has("grants"):
+		notes.append("not all Perfect: no tokens")
+		_popup(fighter, "NO TOKEN", Color(0.75, 0.75, 0.8))
+	for token in fighter.tokens:
+		if int(fighter.tokens[token]) > int(before.get(token, 0)):
+			_popup(fighter, String(token).to_upper(), move["color"])
+			notes.append("+" + String(token))
+	if int(_exec_tokens["used"]) > 0:
+		notes.append("%d tokens used (+%d%%)" % [_exec_tokens["used"], roundi(token_damage_bonus * 100.0 * int(_exec_tokens["used"]))])
+	if move.get("climb", false):
+		var grown := fighter.climb_step()
+		if grown > 0.0:
+			_step_banner("STEP %d  ·  BAR %d" % [fighter.bar_step(), int(fighter.combo_limit)], Color(1.0, 0.78, 0.35))
+			notes.append("bar %d" % int(fighter.combo_limit))
+			_count("monk_steps")
+		if fighter.at_top() and all_perfect and not fighter.tokens.has("Crowd Cheer"):
+			# The top, reached (or held) all Perfect: the cash-out is ready.
+			fighter.tokens["Crowd Cheer"] = 1
+			_popup(fighter, "CROWD CHEER", Color(1.0, 0.85, 0.3))
+			notes.append("+Crowd Cheer")
+		elif fighter.at_top() and not all_perfect and not fighter.tokens.has("Crowd Cheer"):
+			notes.append("not all Perfect at the top: no Crowd Cheer yet")
+	if move.has("cashout"):
+		notes.append("cash-out x%.1f, bar back to %d" % [_exec_tokens["cashout"], int(fighter.bar_steps[0])])
+		fighter.spend_climb()
+		_count("monk_cashouts")
+	if not notes.is_empty():
+		# The buff is earned: its blocks (and everything before) leave the bar.
+		battle_menu.consumed_slots = _exec_slot + 1
+		_flash("%s: %s" % [move["name"], ", ".join(notes)])
+		print("%s: %s" % [move["name"], ", ".join(notes)])
 
 
 ## True for the hit that uses the move's Hold or Tap timing (its last hit;
@@ -3630,7 +4162,7 @@ func _judge_release() -> void:
 	_exec_holding = false
 	battle_menu.exec_holding = false
 	var entry := _plan[_exec_slot]
-	var hit := _exec_hits_done
+	var hit := _next_timed(entry)
 	if not _special_hit(entry, hit):
 		return
 	var duration: float = entry["duration"]
@@ -3654,7 +4186,7 @@ func _judge_timing() -> void:
 	var entry := _plan[_exec_slot]
 	var duration: float = entry["duration"]
 	var window: float = float(entry["window"]) * duration
-	var hit := _exec_hits_done
+	var hit := _next_timed(entry)
 	if hit < _exec_timings.size() and _special_hit(entry, hit):
 		if int(entry["timing"]) == Moves.TimingType.TAP:
 			if _exec_time < duration * float(entry["tap_start"]):
@@ -3699,6 +4231,10 @@ func _timing_miss(hit: int, why: String) -> void:
 	_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
 	var reset_note := _reset_max_ap()
 	ap = 0.0  # a missed timing costs all the party's AP
+	if _exec_attacker != null and _exec_attacker.climbs():
+		var slip := _monk_slip(_exec_attacker)
+		if slip != "":
+			why += " " + slip + "."
 	_flash("%s The chain ends, AP lost. %s" % [why, reset_note])
 	_stop_combo()
 
@@ -4257,7 +4793,7 @@ func _attack_target(check_cost: bool = true) -> Combatant:
 ## (its cost fits both the party's AP and the class's combo bar).
 func _affordable(move: Dictionary) -> bool:
 	var cost := float(move["cost"]) * (2.0 if controlled.statuses.has("arcane_cost") else 1.0)
-	return cost <= minf(ap, controlled.combo_limit)
+	return cost <= minf(_pool(controlled), controlled.combo_limit)
 
 
 # --- Skills (Abilities) ----------------------------------------------------
@@ -4268,7 +4804,7 @@ func _open_skills() -> void:
 	var notes: PackedStringArray = []
 	for skill in _skills:
 		var note := ""
-		if int(skill["cost"]) > ap:
+		if int(skill["cost"]) > _pool(controlled):
 			note = "Not enough AP"
 		elif int(skill["cost"]) > controlled.combo_limit:
 			note = "Costs more than %s's AP limit" % controlled.display_name
@@ -4389,7 +4925,7 @@ func _clear_target_marker() -> void:
 ## back with Abilities greyed out, so you can still Attack or Wait.
 func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 	var user := controlled
-	ap -= float(skill["cost"])
+	_pay(user, float(skill["cost"]))
 	_count("skills")
 	_count("skills_" + user.class_id)
 	var turns := int(skill["turns"])
@@ -4420,12 +4956,30 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 					taunted.append(enemy)
 					_popup(enemy, "TAUNTED", skill["color"])
 			message += ": " + (_names(taunted) + " now target " + user.display_name if not taunted.is_empty() else "nobody is close enough")
+			# While it lasts, his Blocks and Parries also cover allies near him.
+			user.add_status("guarding", turns, user)
+			message += "; allies within %d m share his Block and Parry" % int(guard_radius)
 		"Jump":
 			user.global_position = Vector3(point.x, user.global_position.y, point.z)
 			_keep_in_arena(user)
-		"Riposte":
+		"Riposte", "Suplex":
 			user.riposte_left = float(skill["seconds"])
-			_popup(user, "RIPOSTE", skill["color"])
+			user.counter_name = skill["name"]
+			_popup(user, String(skill["name"]).to_upper(), skill["color"])
+		"Provoke":
+			target.add_status("taunt", turns, user)
+			user.add_status("provoking", turns, user)
+			_popup(target, "PROVOKED", skill["color"])
+			message += ": %s now targets %s" % [target.display_name, user.display_name]
+		"Deep Breath":
+			var healed := user.heal(ceili(user.max_hp * float(skill["heal"])))
+			_popup(user, "+%d" % healed, Color(0.45, 0.95, 0.5))
+			message += ": recovers %d HP" % healed
+			if user.climbs() and user.lost_step > user.combo_limit:
+				user.combo_limit = user.lost_step  # the step he lost comes back
+				user.lost_step = 0.0
+				_popup(user, "BAR %d" % int(user.combo_limit), Color(1.0, 0.7, 0.3))
+				message += "; bar back to %d" % int(user.combo_limit)
 		"True Sight":
 			for ally in _standing(party):
 				ally.add_status("true_sight", turns, user)
@@ -4455,7 +5009,7 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			var room := maxf(dir.length() - user.body_radius - target.body_radius - 0.2, 0.0)
 			if room > 0.0:
 				target.global_position += dir.normalized() * minf(float(skill["pull"]), room)
-				_keep_in_arena(target)
+				_keep_in_arena(target, true)  # dragged over a hole: it falls
 			if target.marks > 0:
 				target.set_marks(0)
 				message += " (its Marks are used up)"
@@ -4688,13 +5242,30 @@ func _update_ui(delta: float) -> void:
 				break
 		member.update_reach_ring(member == controlled, in_reach)
 	battle_menu.mode = _menu_mode if _party_turn() and not _game_over else BattleMenu.Mode.HIDDEN
+	for member in party:
+		if member.climbs():
+			member.show_climb(_party_turn() and active == member and not _game_over)
 	if controlled != null:
 		battle_menu.fighter_name = controlled.display_name
 		battle_menu.target_name = _combo_target.display_name if _combo_target != null else ""
 		battle_menu.show_defend = controlled.can_block
 		battle_menu.show_parry = controlled.can_parry
-		battle_menu.combo_limit = controlled.combo_limit
-		battle_menu.ap_available = _ap_before_combo if _menu_mode == BattleMenu.Mode.EXECUTING else ap
+		battle_menu.combo_limit = _exec_limit if _menu_mode == BattleMenu.Mode.EXECUTING and _exec_limit > 0.0 else controlled.combo_limit
+		battle_menu.ap_available = _ap_before_combo if _menu_mode == BattleMenu.Mode.EXECUTING else _pool(controlled)
+		var building := _menu_mode == BattleMenu.Mode.COMBO or _menu_mode == BattleMenu.Mode.EXECUTING
+		battle_menu.segment_start = _segment_start(_menu_mode == BattleMenu.Mode.COMBO) if building else 0.0
+		battle_menu.segment_available = _segment_available() if building and battle_menu.segment_start > 0.0 else battle_menu.ap_available
+		battle_menu.reset_slots = _reset_slots(_menu_mode == BattleMenu.Mode.COMBO) if building else ([] as Array[int])
+		var preview := _monk_preview() if building else ["", "", true]
+		battle_menu.preview_main = preview[0]
+		battle_menu.preview_perfect = preview[1]
+		battle_menu.preview_perfect_on = preview[2]
+		# The bar's next steps, shown past its end while building.
+		battle_menu.step_marks.clear()
+		if controlled.climbs() and _menu_mode == BattleMenu.Mode.COMBO:
+			for length in controlled.bar_steps:
+				if length > controlled.combo_limit:
+					battle_menu.step_marks.append(length)
 	if _game_over:
 		# Placeholder end screen (a proper one is milestone 8).
 		# The last message stays on screen so you can see what happened.

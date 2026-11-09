@@ -6,8 +6,11 @@ extends Node3D
 ## Put these as children of an Arena and drag them around in the editor.
 ## - Rock: blocks movement and line of sight (attacks can't pass it).
 ## - Pit: blocks movement only; you can see and attack across it.
+## - Hole: a lethal drop. Walkers steer around it; anyone pushed into it
+##   falls out of the fight (bosses excepted), and walking in asks for a
+##   Parry-like save. Marked by a glowing red ring lined with skulls.
 
-enum Kind { ROCK, PIT }
+enum Kind { ROCK, PIT, HOLE }
 
 @export var kind: Kind = Kind.ROCK:
 	set(value):
@@ -30,6 +33,23 @@ func blocks_sight() -> bool:
 	return kind == Kind.ROCK
 
 
+func is_lethal() -> bool:
+	return kind == Kind.HOLE
+
+
+## A skull lying on the floor (the death wall's marker).
+static func make_skull(spot: Vector3) -> Label3D:
+	var skull := Label3D.new()
+	skull.text = "☠"
+	skull.font_size = 150
+	skull.modulate = Color(1.0, 0.95, 0.95, 0.95)
+	skull.outline_size = 18
+	skull.outline_modulate = Color(0.4, 0.0, 0.0, 0.9)
+	skull.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	skull.position = spot + Vector3(0, 0.05, 0)
+	return skull
+
+
 func _rebuild() -> void:
 	if not is_inside_tree():
 		return
@@ -46,6 +66,35 @@ func _rebuild() -> void:
 		_visual.mesh = rock
 		_visual.position.y = 0.9
 		material.albedo_color = Color(0.45, 0.42, 0.38)
+	elif kind == Kind.HOLE:
+		# A deep black drop with a glowing red ring and skulls around it.
+		var drop := CylinderMesh.new()
+		drop.top_radius = radius
+		drop.bottom_radius = radius
+		drop.height = 0.006
+		drop.radial_segments = 48
+		_visual.mesh = drop
+		_visual.position.y = 0.008
+		material.albedo_color = Color(0.0, 0.0, 0.0)
+		_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = radius + 0.06
+		torus.outer_radius = radius + 0.16
+		torus.rings = 48
+		ring.mesh = torus
+		ring.scale = Vector3(1.0, 0.15, 1.0)
+		ring.position.y = 0.03
+		var glow := StandardMaterial3D.new()
+		glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		glow.albedo_color = Color(1.0, 0.18, 0.15)
+		ring.material_override = glow
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_visual.add_child(ring)
+		var count := maxi(int(TAU * (radius + 0.7) / 1.5), 6)
+		for i in count:
+			var a := TAU * i / count
+			_visual.add_child(make_skull(Vector3(cos(a), 0.0, sin(a)) * (radius + 0.7) - Vector3(0, 0.008, 0)))
 	else:
 		var hole := CylinderMesh.new()
 		hole.top_radius = radius

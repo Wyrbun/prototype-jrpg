@@ -47,6 +47,28 @@ class_name Moves
 ##   consume_marks removes all of the target's Marks when it hits
 ##   random_timing the hit lands at a random point of its block (the first
 ##                 move of a combo: always in the middle or late part)
+##   timed     which hits are timed: "all" (the default), "last" or "first";
+##             the others land by themselves (no box, no Perfect, no penalty)
+##   bar_reset Monk's Headbutt: when more moves follow it, the combo bar
+##             starts over from empty (once per combo, bar_resets_per_combo)
+##   Monk Art fields (all optional):
+##   grants    tokens this Art leaves on the Monk, e.g. {"Rush": 1}, only
+##             when every timing of the Art was Perfect; they stay between
+##             turns until an Art uses them up
+##   consumes  tokens this Art uses up (Perfect or not): each one adds +10%
+##             to its damage
+##   contains  the smaller Arts inside its recipe, in order: their tokens are
+##             given first (so Triple Rush makes the Triple and Rush it uses)
+##   climb     a climb Art: raises the Monk's bar one step (30 -> 50 -> 80
+##             -> 100), Perfect or not; only the Art actually played, not the
+##             smaller ones inside it. Played all Perfect at the top, it also
+##             earns Crowd Cheer
+##   needs_token  the Art only forms (and can only be played) while the Monk
+##             holds this token (Tortoise Special: Crowd Cheer)
+##   cashout   Tortoise Special: [[bar length, damage multiplier], ...];
+##             it spends the whole climb (the bar goes back to its start)
+##   recipe_text  how the Arts list writes the recipe once the smaller Arts
+##             inside it are known (else the moves, shortened if long)
 ##   timing    how the move's (last) hit is timed (see TimingType):
 ##             PRESS  press inside the box (the default)
 ##             HOLD   press in the first box (at hold_start, a fraction of the
@@ -74,6 +96,7 @@ const GREEN := Color(0.45, 0.85, 0.45)
 const GOLD := Color(1.0, 0.85, 0.4)
 const RED := Color(0.95, 0.4, 0.3)
 const VIOLET := Color(0.62, 0.35, 0.95)
+const BROWN := Color(0.8, 0.55, 0.3)
 
 
 static func attacks(class_id: String) -> Array[Dictionary]:
@@ -135,6 +158,22 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 						{"behind_mult": 2.0, "front_miss": true, "marks_from_behind": 1, "random_timing": true}),
 				_attack("Execute", 100, [1.0], 1.6, 0.2, GOLD, "4x from behind; -15 AP per Mark on it",
 						{"behind_mult": 4.0, "mark_discount": 15, "min_cost": 25, "consume_marks": true, "random_timing": true}),
+			]
+		"monk":
+			# Weak alone, built to chain. Punch and Kick have one timed hit each
+			# (the rest land by themselves); heavy punches are Taps, heavy kicks
+			# Holds. Headbutt restarts the bar when more moves follow it.
+			list = [
+				_attack("Punch", 5, [0.15, 0.15, 0.15], 0.3, 0.12, BLUE, "3 quick hits (timed: last)",
+						{"timed": "last"}),
+				_attack("Kick", 5, [0.25, 0.2], 0.3, 0.12, TEAL, "2 hits (timed: first)",
+						{"timed": "first", "times": [0.55, 1.0]}),
+				_attack("Heavy Punch", 20, [1.5], 1.0, 0.16, ORANGE, "Tap: cancels a turn about to strike",
+						{"stun": true, "timing": TimingType.TAP, "taps": 4}),
+				_attack("Heavy Kick", 20, [1.5], 1.0, 0.16, GREEN, "Hold: breaks Defense",
+						{"effect": Effect.BREAK, "timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
+				_attack("Headbutt", 30, [2.6], 1.0, 0.18, BROWN, "Big hit; moves after it start a fresh bar",
+						{"bar_reset": true}),
 			]
 		_:
 			list = [_attack("Attack", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack")]
@@ -233,6 +272,39 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						{"effect": Effect.BREAK, "heal_allies": 0.15, "heal_radius": UNLIMITED,
 						"barrier": 0.10, "barrier_radius": UNLIMITED, "times": [0.3, 0.55, 1.0], "finisher": true}),
 			]
+		"monk":
+			# Build, then cash out: every climb Art (Knee Smash, Triple Rush,
+			# Mountain Crusher) raises the Monk's bar one step (30 -> 50 -> 80
+			# -> 100); he picks the one that fits the turn. Played all Perfect,
+			# an Art leaves a token another one uses up (+10% damage each), and
+			# reaching the top all Perfect earns Crowd Cheer. Tortoise Special
+			# (needs Crowd Cheer) spends the climb. Bigger climb Arts hit
+			# harder per AP than Knee Smash, on top of their effects.
+			list = [
+				_art(["Punch", "Punch"], "Palm Strike", [0.9], 1.0, 0.16, BLUE, "Tap: Perfect: grants Triple (for Triple Rush)",
+						{"timing": TimingType.TAP, "taps": 3, "grants": {"Triple": 1}}),
+				_art(["Kick", "Kick"], "Flash Kick", [0.9], 1.0, 0.16, TEAL, "Hold: Perfect: grants Mountain (for Mountain Crusher)",
+						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Mountain": 1}}),
+				_art(["Kick", "Heavy Kick"], "Knee Smash", [2.2], 1.0, 0.16, GREEN, "Hold: climbs a step; Perfect: grants Rush",
+						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Rush": 1}, "climb": true}),
+				_art(["Punch", "Punch", "Kick", "Heavy Kick"], "Triple Rush", [0.6, 0.6, 2.6], 1.0, 0.16, PURPLE,
+						"Hold: ignores Defense; climbs a step; uses Triple + Rush; Perfect: Crusher",
+						{"effect": Effect.PIERCE, "timing": TimingType.HOLD, "hold_start": 0.5, "times": [0.15, 0.3, 0.9],
+						"contains": ["Palm Strike", "Knee Smash"], "recipe_text": "Palm Strike + Knee Smash",
+						"consumes": ["Triple", "Rush"], "grants": {"Crusher": 1}, "climb": true}),
+				_art(["Heavy Punch", "Kick", "Kick", "Kick", "Heavy Kick"], "Mountain Crusher",
+						[0.9, 0.5, 0.5, 3.8], 1.0, 0.16, ORANGE,
+						"Tap: hits all around; climbs a step; uses Mountain + Crusher; Perfect: Triple",
+						{"area": Area.TARGET_CIRCLE, "area_size": 2.5, "timing": TimingType.TAP, "taps": 6, "tap_start": 0.6,
+						"times": [0.15, 0.32, 0.48, 0.92],
+						"contains": ["Flash Kick", "Knee Smash"], "recipe_text": "Heavy Punch + Flash Kick + Knee Smash",
+						"consumes": ["Mountain", "Crusher"], "grants": {"Triple": 1}, "climb": true}),
+				_art(["Heavy Punch", "Heavy Kick", "Headbutt"], "Tortoise Special", [0.8, 0.8, 2.4], 1.0, 0.2, GOLD,
+						"Finisher (needs Crowd Cheer): spends the climb; 1.5x at bar 80, 2.5x at 100",
+						{"effect": Effect.BREAK, "times": [0.25, 0.5, 1.0], "bar_reset": true, "finisher": true,
+						"consumes": ["Crowd Cheer"], "needs_token": "Crowd Cheer", "cashout": [[80.0, 1.5], [100.0, 2.5]],
+						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
+			]
 	return list
 
 
@@ -251,7 +323,7 @@ static func skills(class_id: String) -> Array[Dictionary]:
 				_skill("Light Heal", 25, Target.SELF, GREEN, "Heal 20% of max HP", {"heal": 0.2}),
 				_skill("Brace", 20, Target.SELF, TEAL, "Take 50% less damage, 3 turns", {"turns": 3}),
 				_skill("Shield Bash", 30, Target.ENEMY, ORANGE, "Rush to an enemy; next turn 33% sooner", {"range": 9.0}),
-				_skill("Taunt", 60, Target.NONE, RED, "Enemies nearby target you, 3 turns", {"radius": 6.0, "turns": 3}),
+				_skill("Taunt", 40, Target.NONE, RED, "Enemies nearby target you, 3 turns; you guard allies near you", {"radius": 6.0, "turns": 3}),
 			]
 		"archer":
 			list = [
@@ -281,6 +353,15 @@ static func skills(class_id: String) -> Array[Dictionary]:
 				_skill("Shadow Cloak", 50, Target.ENEMY, BLUE, "Its Marks become a shield (10% max HP each)",
 						{"range": UNLIMITED, "needs_marks": true, "shield": 0.10}),
 				_skill("Vanish", 25, Target.SELF, PURPLE, "Enemies lose track of you until you attack", {"turns": 2}),
+			]
+		"monk":
+			list = [
+				_skill("Provoke", 20, Target.ENEMY, RED, "One enemy targets you, 1 turn; each Parry: +1 Rush",
+						{"range": 6.0, "turns": 1}),
+				_skill("Suplex", 20, Target.SELF, GOLD, "Counter stance for 4 s: throw the attacker, +1 Mountain",
+						{"seconds": 4.0}),
+				_skill("Deep Breath", 30, Target.SELF, GREEN, "Heal 20%; get back the last step you lost",
+						{"heal": 0.2}),
 			]
 	return list
 

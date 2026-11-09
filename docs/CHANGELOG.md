@@ -4,6 +4,88 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Monk, round 2: seeing the climb, and choices
+
+- **Any climb Art climbs one step** (Knee Smash, Triple Rush, Mountain
+  Crusher), so he picks the one that fits the turn.
+- **Shorter recipes:** Triple Rush = Palm Strike + Knee Smash (35 AP);
+  Mountain Crusher = Heavy Punch + Flash Kick + Knee Smash (55 AP), and a
+  Perfect one gives Triple. Bigger climb Arts hit harder per AP.
+- **Crowd Cheer** from any all-Perfect climb Art at the top.
+- **Visible climb:** pips over the Monk on his turn and beside his timeline
+  icon, step notches past the bar's end, a preview of what the Art uses and
+  gives (Perfect part struck out once lost), and a STEP banner.
+- HUD: party effect tags moved under the HP bars, inside the panel.
+- The fresh bar after a Headbutt (or Tortoise Special) waits for the same
+  1 s "READY" lead-in a combo starts with.
+- The game now opens at **1600x900** (was Godot's default 1152x648): the
+  same text sizes with more room for the field and the menus.
+- **Tutorial: the Monk** (lesson 12, before free practice): climb a step
+  with Knee Smash, tokens and the preview, climb to bar 100, cash out with
+  Tortoise Special, and a note on his risks and tanking (and why the Knight
+  is still the better tank). The Arts list step mentions the details box.
+- **Bigger battle UI** to use that room: larger text and panels for the
+  command menu, move list, Arts panel, target prompt and HP panels.
+- **Art details:** Tab into the Arts list and the chosen Art shows a box
+  above the panel with its recipe, AP cost, timing and full description.
+  The Arts panel now grows upward from the move list's bottom, so it never
+  covers the combo bar.
+
+## Monk rework: build, then cash out
+
+- The Monk pays from **party AP**; only his bar length is his own, climbing
+  in steps 30 / 50 / 80 / 100 (no private pool, no refill).
+- **Tortoise Special** needs Crowd Cheer and spends the whole climb: 1.5x at
+  bar 80, 2.5x at 100, then back to 30.
+- **Three outcomes** per Art: all Perfect = step + tokens; sloppy = step
+  only; a miss = nothing and a lost step.
+- **Mistakes cost a step** (a miss, an avoidable hit, an early Parry) and
+  the newest token, Crowd Cheer last. Deep Breath gives the step back.
+- **Tanking feeds the climb:** a Parry while Provoking gives Rush, a Suplex
+  counter gives Mountain.
+- The fresh bar after a Headbutt is paid from party AP. The hit chain is cut.
+- **The Knight stays the better tank:** Taunt costs 40 (was 60) and makes
+  him guard allies within 3 m (they share his Block and Parry). The Monk
+  drops to 160 HP, Provoke costs 20 and lasts 1 turn, and Deep Breath no
+  longer cuts damage.
+
+## The Monk (sixth class)
+
+- A combo class with **its own AP pool**: max AP starts at 30 and grows by
+  finishing Arts (up to 100), refilled every turn, reset only by a
+  knockout. Tortoise Special with Crowd Cheer hits 2x.
+- **Token ladder:** Palm Strike, Flash Kick, Knee Smash, Triple Rush,
+  Mountain Crusher and Tortoise Special build on each other; bigger Arts
+  contain the smaller ones and use up the tokens they leave (+10% damage per
+  token). First use of "Arts inside Arts".
+- **Hit chain:** +5% per Perfect in a row (up to +50%).
+- **Headbutt** restarts the combo bar (a fresh bar, once per combo).
+- The combo bar is capped at the move list's width. Before a Headbutt, the
+  bar folds into a "+70 AP" tag; during a Monk combo, blocks used up by a
+  buff-giving Art leave the bar. The move list sits above the bar however
+  many moves a class has; long Arts recipes shrink or shorten to fit.
+- Punch and Kick have **one timed hit** each (new `timed` field); heavy
+  punches are Taps, heavy kicks Holds.
+- Abilities: Provoke (single-target taunt; Parries grow its max AP),
+  Suplex (counter stance), Deep Breath (heal + 25% less damage).
+- Available in the party picker before boss rounds. Not in the tutorial yet.
+- Fix: Arts picked from the Arts list now still form (and reveal) bigger
+  Arts that contain them whole; a picked Art is still never cut in half.
+- Arena skulls: smaller; they circle the holes and drift along lethal edges.
+
+## Drops: lethal holes and edges, knockback and pulls
+
+- Arenas can have **holes** and **lethal edges**, marked by a glowing red
+  death wall lined with skulls. Being knocked, launched, pushed or pulled
+  over one means falling out of the fight. Regular enemies can be knocked in
+  too (bosses can't).
+- Walking into a drop pauses on a Parry-like **save ring**: catch yourself in
+  time or fall. One save per character per fight.
+- Enemy skills get `pull` (drag those hit towards the enemy); push and pull
+  skills show red arrows on their area. Pulls drag into fire and holes alike.
+- New **Platform** arena (east edge lethal, two holes, a rock), used by
+  Round 5. The tutorial's notes gain a "Drops" page.
+
 ## Versions: 0.1.0, the first public build
 
 - `application/config/version` (0.1.0) is the one place to bump; it shows

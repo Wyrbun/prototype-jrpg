@@ -87,6 +87,13 @@ func _draw() -> void:
 			var points := PackedVector2Array([spot + Vector2(0, -4.5), spot + Vector2(4, 0), spot + Vector2(0, 4.5), spot + Vector2(-4, 0)])
 			draw_colored_polygon(points, Color(0.78, 0.45, 1.0))
 			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color.BLACK, 1.0)
+		# Monk's climb: small gold pips in a row right of the icon, one per step climbed.
+		if c.climbs():
+			var steps := c.bar_steps.size() - 1
+			for k in steps:
+				var spot := icon + Vector2(radius + 9.0 + k * 10.0, 0.0)  # in a row right of the icon
+				draw_circle(spot, 4.5, Color.BLACK)
+				draw_circle(spot, 3.5, Color(1.0, 0.78, 0.35) if c.bar_step() > k else Color(0.25, 0.25, 0.3))
 		var badge := _twin_letter(c)
 		if badge != "":
 			var spot := icon + Vector2(radius * 0.8, radius * 0.75)

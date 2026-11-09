@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_pit.tscn" id="a_pit"]
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_rock_field.tscn" id="a_rock_field"]
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_grand.tscn" id="a_grand"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_platform.tscn" id="a_platform"]
 [ext_resource type="PackedScene" path="res://scenes/characters/knight.tscn" id="c_knight"]
 [ext_resource type="PackedScene" path="res://scenes/characters/archer.tscn" id="c_archer"]
 [ext_resource type="PackedScene" path="res://scenes/characters/mage.tscn" id="c_mage"]
@@ -53,7 +54,7 @@ enemies = Array[PackedScene]([ExtResource("c_kobold_archer"), ExtResource("c_orc
 [sub_resource type="Resource" id="Round_5"]
 script = ExtResource("2_encounter")
 title = "Round 5"
-arena = ExtResource("a_rock_field")
+arena = ExtResource("a_platform")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage")])
 enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_bandit_arcanist"), ExtResource("c_orc_shaman")])
 
