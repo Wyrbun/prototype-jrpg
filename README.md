@@ -35,18 +35,18 @@ Perfects and Parries grow the party's max AP; mistakes reset it.
 
 ## How to play
 
-**Current build: [0.1.0](../../releases/tag/v0.1.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [0.2.0](../../releases/tag/v0.2.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.1.0-windows.zip`](../../releases/download/v0.1.0/PrototypeJRPG-0.1.0-windows.zip),
+[`PrototypeJRPG-0.2.0-windows.zip`](../../releases/download/v0.2.0/PrototypeJRPG-0.2.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.1.0-linux.tar.gz`](../../releases/download/v0.1.0/PrototypeJRPG-0.1.0-linux.tar.gz), then:
+[`PrototypeJRPG-0.2.0-linux.tar.gz`](../../releases/download/v0.2.0/PrototypeJRPG-0.2.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.1.0-linux.tar.gz
+tar -xzf PrototypeJRPG-0.2.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 

@@ -24,6 +24,14 @@ of every play-test report.
 
 ---
 
+## 0.2.0: the Monk, arenas with drops, a bigger screen
+
+- **A sixth class, the Monk.** Weak alone, he climbs his combo bar from 30 to 100 AP in steps through his climb Arts (Knee Smash, Triple Rush, Mountain Crusher), then cashes it all out with Tortoise Special. All-Perfect Arts leave tokens for the next one; mistakes cost him a step. Pick him in the party picker before boss rounds; the tutorial has a Monk lesson
+- **Arenas with drops.** Holes and edges lined with skulls: knock regular enemies off them, mind what's behind you, and catch yourself with a Parry-timed save if you walk off (once per fight). Round 5 now takes place on a platform with holes
+- **The Knight is the tank:** Taunt is cheaper (40 AP) and, while it lasts, allies near him share his Block and Parry
+- **Bigger window and UI:** the game opens at 1600x900, with larger menus and text; Tab in the combo bar shows an Art's details
+- Fixes: Arts picked from the Arts list now still form bigger Arts; HUD effects no longer cover the AP meter
+
 ## 0.1.0 (first public build)
 
 - A 12-round **Boss Rush** with auto-save, plus Round Select

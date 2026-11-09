@@ -23,10 +23,18 @@ enum Kind { ROCK, PIT, HOLE }
 		_rebuild()
 
 var _visual: MeshInstance3D = null
+## Holes: the ring of skulls slowly turns round the drop.
+var _skull_ring: Node3D = null
+const SKULL_TURN_SPEED := 0.25  # radians per second
 
 
 func _ready() -> void:
 	_rebuild()
+
+
+func _process(delta: float) -> void:
+	if _skull_ring != null and not Engine.is_editor_hint():
+		_skull_ring.rotation.y += SKULL_TURN_SPEED * delta
 
 
 func blocks_sight() -> bool:
@@ -41,9 +49,9 @@ func is_lethal() -> bool:
 static func make_skull(spot: Vector3) -> Label3D:
 	var skull := Label3D.new()
 	skull.text = "☠"
-	skull.font_size = 150
+	skull.font_size = 90
 	skull.modulate = Color(1.0, 0.95, 0.95, 0.95)
-	skull.outline_size = 18
+	skull.outline_size = 12
 	skull.outline_modulate = Color(0.4, 0.0, 0.0, 0.9)
 	skull.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 	skull.position = spot + Vector3(0, 0.05, 0)
@@ -91,10 +99,12 @@ func _rebuild() -> void:
 		ring.material_override = glow
 		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_visual.add_child(ring)
-		var count := maxi(int(TAU * (radius + 0.7) / 1.5), 6)
+		_skull_ring = Node3D.new()
+		_visual.add_child(_skull_ring)
+		var count := maxi(int(TAU * (radius + 0.55) / 1.1), 8)
 		for i in count:
 			var a := TAU * i / count
-			_visual.add_child(make_skull(Vector3(cos(a), 0.0, sin(a)) * (radius + 0.7) - Vector3(0, 0.008, 0)))
+			_skull_ring.add_child(make_skull(Vector3(cos(a), 0.0, sin(a)) * (radius + 0.55) - Vector3(0, 0.008, 0)))
 	else:
 		var hole := CylinderMesh.new()
 		hole.top_radius = radius

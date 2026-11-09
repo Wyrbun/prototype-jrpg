@@ -49,6 +49,9 @@ const SIDE_SOUTH := 4
 const SIDE_WEST := 8
 
 var _floor: MeshInstance3D = null
+## Death-wall skulls drift slowly along their edges: [{node, from, dir, length, offset}].
+var _edge_skulls: Array[Dictionary] = []
+const SKULL_DRIFT_SPEED := 0.35  # meters per second
 
 
 func _ready() -> void:
@@ -295,8 +298,7 @@ func _add_death_walls() -> void:
 	if paths.is_empty():
 		return
 	var strip := PackedVector3Array()
-	var skull_spots: Array[Vector3] = []
-	var carry := 0.0
+	_edge_skulls.clear()
 	for path in paths:
 		var a: Vector3 = path[0]
 		var b: Vector3 = path[1]
@@ -311,11 +313,14 @@ func _add_death_walls() -> void:
 		var b_in := b + inward_dir * 0.15
 		strip.append_array([a_in + lift, b_in + lift, b_in + inward_dir * w + lift,
 				a_in + lift, b_in + inward_dir * w + lift, a_in + inward_dir * w + lift])
-		var d := 1.6 - carry
-		while d < length:
-			skull_spots.append(a + along.normalized() * d + inward_dir * 0.75)
-			d += 1.6
-		carry = length - (d - 1.6)
+		var spacing := 1.2
+		var count := maxi(int(length / spacing), 1)
+		for k in count:
+			var skull := ArenaObstacle.make_skull(Vector3.ZERO)
+			_floor.add_child(skull)
+			_edge_skulls.append({"node": skull, "from": a + inward_dir * 0.6, "dir": along.normalized(),
+					"length": length, "offset": (k + 0.5) * length / count})
+			skull.position = a + inward_dir * 0.6 + along.normalized() * ((k + 0.5) * length / count) + Vector3(0, 0.05, 0)
 	var wall := MeshInstance3D.new()
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -330,5 +335,14 @@ func _add_death_walls() -> void:
 	wall.mesh = wall_mesh
 	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_floor.add_child(wall)
-	for spot in skull_spots:
-		_floor.add_child(ArenaObstacle.make_skull(spot))
+
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint() or _edge_skulls.is_empty():
+		return
+	for entry in _edge_skulls:
+		var skull: Node3D = entry["node"]
+		if not is_instance_valid(skull):
+			continue
+		entry["offset"] = fmod(float(entry["offset"]) + SKULL_DRIFT_SPEED * delta, float(entry["length"]))
+		skull.position = (entry["from"] as Vector3) + (entry["dir"] as Vector3) * float(entry["offset"]) + Vector3(0, 0.05, 0)
