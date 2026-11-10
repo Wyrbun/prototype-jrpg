@@ -24,6 +24,19 @@ of every play-test report.
 
 ---
 
+## 0.4.0: the Gale Maw
+
+- **New boss: the Gale Maw** (Round 11, after the Dragon, on the new Cliff arena). A stone face set into the wall: it never moves, and every attack pushes or pulls you. Inhale drags you toward its mouth, Exhale blows you toward the drop
+  - Rocks between you and the wall shelter you from its breath, but its blasts crack them: two cracks and a rock shatters (it grows back later)
+  - At half HP the cliff edge crumbles closer
+  - Being pushed or pulled leaves you **Winded**: your next turn comes later
+  - Every few actions it spits out a **Gust Sprite** that knocks you around
+  - Gale Burst (a blast, then lanes of wind), and Undertow lines that run past you into whoever stands behind
+- **Defend braces you:** against any push or pull, Defend (for classes that can Block) halves how far you're moved, even when the damage can't be blocked
+- **Edge saves on pushes too:** pushed or pulled over a drop, Parry to catch yourself. After a save you're **Off-Balance** for 3 turns: go over again then and you fall
+- **Enemy review:** fixes and tuning across the regular enemies and bosses (Kobold Power Shot, Shaman healing cap, Golem Stone Guard, Living Armor Parry Stance and more)
+- **Round order:** the Gale Maw is the last solo boss; the mixed boss rounds are now 12 and 13
+
 ## 0.3.0: class review, move details
 
 - **Every class rebalanced.** Each class got a full pass on its attacks, Arts and Abilities. Highlights:
