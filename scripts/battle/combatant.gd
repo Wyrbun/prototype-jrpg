@@ -133,6 +133,14 @@ var lost_step := 0.0
 ## enemy in place, without striking); "cannot_fall" keeps HP at 1 or more;
 ## "forced_skill" is prepared every time instead of a random pick.
 var hold := false
+## Knight's shield blows: seconds this enemy's timeline stays stopped.
+var freeze_left := 0.0
+## Mage's Fire: damage taken each time this enemy acts, and how many more times.
+var burn_damage := 0
+var burn_turns := 0
+## Turn control (halts, stuns) works once per action of this enemy's own,
+## so no class can lock it forever. Cleared when it acts.
+var control_used := false
 ## Tutorial: start holding as soon as this point on the timeline is reached
 ## (-1 = never).
 var hold_at := -1.0
@@ -474,7 +482,7 @@ func status_text() -> String:
 			var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
 			tags.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED"}
+			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())

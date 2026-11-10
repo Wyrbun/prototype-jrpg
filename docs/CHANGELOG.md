@@ -4,6 +4,121 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Ceiling Burst keeps off the Golem
+
+- Falling-rock circles no longer land on the Golem or other enemies, so a
+  rock can't shove the Golem aside. If it walks into one of its own circles,
+  that circle still hits but leaves no rock under it. Only party members are
+  pushed out from under a fallen rock.
+
+## Answer tags
+
+- While picking moves, the ones that answer what the enemy is doing glow:
+  green for INTERRUPTS, PIERCES, BREAKS GUARD, STUNS, HALTS, FROM BEHIND;
+  red for BLOCKED, COUNTERED, MISSES. Arts in the Arts panel too.
+- Abilities glow when they answer a strike coming at you (Riposte and
+  Suplex: COUNTERS IT; Brace, Arcane Barrier, Vanish), an enemy preparing
+  an attack (Hook) or one aimed at an ally (Taunt, Provoke).
+- The details box explains the tag in a "NOW:" line. The skill-triangle
+  tutorial lesson mentions the tags.
+
+## Move details box
+
+- While choosing moves or Abilities, a box beside the list explains the
+  highlighted one: cost, timing and every effect in plain words. The Arts
+  panel's Tab details show the same list.
+- Toggle it in the pause menu (Move details: On/Off); the choice is saved.
+
+## Class review: the Monk
+
+- **Climb Arts hit harder,** so his steady damage tops the Knight's: Knee
+  Smash 2.2 -> 2.5, Triple Rush 3.8 -> 4.4, Mountain Crusher 5.7 -> 6.3.
+- **Palm Strike and Flash Kick** 0.9 -> 1.0, now above their parts like
+  every other Art.
+
+## Class review: the Assassin
+
+- **Twin Fangs** 1.25 -> 1.1 per hit: still his best cheap Art, no longer
+  above his finisher.
+- **Execute** gains 15% per Mark it spends (4 Marks: 6.4x from behind,
+  5 Marks: 7.0x), so the Mark build-up pays off.
+- **Backstab** costs 25 (was 35); Cutthroat drops to 35.
+- **Phantom Rush** now hits 1.5x from behind, like Ambush.
+- Auto-parry keeps growing max AP: Marks are his Parry.
+
+## Class review: the Cleric
+
+- **Bash flurry:** each Bash in a row hits 0.1 harder (0.5 up to 0.9),
+  still 10 AP each and still raising max AP. Six Bashes deal 4.4.
+- **Sanctuary** hits 2.4 (was 1.5) and gives a 20% barrier within 6 m
+  (Perfect 28% within 7.5 m); it used to be worse than two Divine Barriers.
+- **Shielding** gives 15% (was 30%), so her barriers have a reason to exist.
+- **Haste** costs 40 (was 50): the ally's turns come 25% sooner and they run
+  20% faster, for 2 of their turns.
+- The tutorial's Cleric lesson no longer describes the old escalating Bash.
+
+## Playtest feedback: flavour on single moves
+
+- **Fire burns:** enemies it hits take 35% of the Mage's attack each time
+  they act, for their next 2 actions.
+- **Arcane Surge** (new Mage move, 25 AP): a single-target open Tap. Every
+  tap adds 10% damage, up to 10; extra taps are fine.
+- **Exposing Shot** replaces Pinning Shot: the enemy takes +15% damage from
+  everyone until its next turn. Only Arrow Rain pins now. Stunning Arrow
+  and Arrow Rain keep their recipes with Exposing Shot in place of Pinning
+  Shot.
+
+## Class review: the Mage
+
+- **Meteor Strike** 4.8 -> 6.0: the 75 AP finisher now clearly beats
+  playing the same spells as smaller Arts.
+- **Steam Burst** 2.8 -> 3.4 on a smaller circle (1.2 m): her focused spell
+  for bosses and Defense.
+- **Arcane Barrier** costs 30 (was 20) and no longer doubles her next combo.
+- **Tempest** pushes 5 m (was 7), so a group near the middle survives it.
+- **Teleport** costs 30 (was 60): a spot within 8 m, or Tab to appear next
+  to any ally.
+
+## Class review: the Archer
+
+- **Agility's** extra hit deals half of the move's first hit (it used to
+  copy it, doubling every single-hit move for 5 turns).
+- **One rule for turn control:** an enemy can be halted or stunned once per
+  action of its own. Stunning Arrow and Crusader's Edge now cancel the attack
+  and drop the enemy to just before the casting zone, not to the start.
+- **Power Draw** 1.4 -> 1.8, so the Hold is worth playing alone. Its Arts
+  went up to stay ahead of their parts: Piercing Arrow 3.0 -> 3.3, Stunning
+  Arrow 2.6 -> 3.1, Gale Shot 3.4 -> 4.2.
+- **Arrow Rain** 1.4 + 1.4 + 2.2 -> 1.6 + 1.6 + 2.6.
+- **Riposte** costs 25 (was 40), and the Archer hops 3 m back after
+  countering.
+- **True Sight** costs 40 (was 50) and also reveals enemy attacks as soon as
+  they start preparing.
+
+## Class review: the Knight
+
+- **Shield blows halt instead of pushing back.** Guard Strike stops the
+  enemy's timeline for 0.5 s, Shield Rush for 1 s. It keeps its place and
+  its cast, and it can only be halted once per action of its own, so a
+  string of shield blows can't stall it forever.
+- **Shield Wall** (new Art, Guard Strike + Guard Strike, 30 AP): a 3 m sweep
+  around the Knight that draws the aggro of every enemy it hits and gives
+  nearby allies a 10% barrier. Their first area move.
+- **Less damage, still able to fight alone:** attack 18 -> 15; Thrust
+  1.1 -> 1.4 so their Defense answer stays worth using.
+- **Smash** no longer breaks Defense; it knocks the enemy 4 m back instead.
+  Thrust and Lunge are their way through Defense.
+- **Brace** lasts 2 Knight turns (was 3).
+
+## Bash rallies, the Knight draws aggro
+
+- **Cleric's Bash** is now a flat 10 AP, low-damage hit (0.5) that grows the
+  party's max AP: +5 per Bash that lands (+10 with a Perfect), up to the
+  usual ceiling. The 10/20/30 escalating chain is gone.
+- **Knight's shield blows draw aggro:** Guard Strike, Shield Rush and
+  Crusader's Edge make the enemy target them for one of their turns; each more
+  one adds a turn, up to 3. Taunt stays the area option.
+
 ## Monk, round 2: seeing the climb, and choices
 
 - **Any climb Art climbs one step** (Knee Smash, Triple Rush, Mountain
@@ -45,7 +160,7 @@ Player-facing notes per public build are in `RELEASES.md`.
   counter gives Mountain.
 - The fresh bar after a Headbutt is paid from party AP. The hit chain is cut.
 - **The Knight stays the better tank:** Taunt costs 40 (was 60) and makes
-  him guard allies within 3 m (they share his Block and Parry). The Monk
+  them guard allies within 3 m (they share the Knight's Block and Parry). The Monk
   drops to 160 HP, Provoke costs 20 and lasts 1 turn, and Deep Breath no
   longer cuts damage.
 

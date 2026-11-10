@@ -80,7 +80,7 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Rock Stomp | Attack | Short circle around itself | built |
 | Rock Spikes | Special | Targeted circle | Leaves 4 rock spikes that damage anyone walking into them; last 2 of the Golem's turns |
 | Right / Left Golem Smash | Smash | Half the room (a 180° cone to its right or left, out to the arena's edges) | Locks its facing for the whole cast, so whoever it faced can step out; can't be Parried or Defended; 48 damage |
-| Ceiling Burst | Special | 10 circles all over the arena | Grey when the cast starts; from the reveal they fall in a random order, 0.5 s apart (a ring shrinks onto each in its last second). One always lands near each party member. 28 damage each; each leaves a rock (blocks movement and sight) for ~10 s. The Golem waits at the end of the bar until the last one falls |
+| Ceiling Burst | Special | 10 circles all over the arena | Grey when the cast starts; from the reveal they fall in a random order, 0.5 s apart (a ring shrinks onto each in its last second). One always lands near each party member. None land on the Golem (or another enemy): circles keep clear of them, and if the Golem walks into one, no rock is left under it, so its own skill never shoves it aside. 28 damage each; each leaves a rock (blocks movement and sight) for ~10 s. The Golem waits at the end of the bar until the last one falls |
 | Right / Left Smash + Ceiling Burst | Special | Both at once | 8 circles fall only on the safe half, then the smash lands: stay out of its half and dodge the rocks |
 
 ### Living Armor

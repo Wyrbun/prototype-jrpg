@@ -13,8 +13,8 @@ const GOLD := Color(0.95, 0.78, 0.35)
 const MAX_PARTY := 4
 ## [scene path, one-line role] for every class, in menu order.
 const CLASSES := [
-	["res://scenes/characters/knight.tscn", "The tank: Taunt guards allies near him, Brace, most HP"],
-	["res://scenes/characters/archer.tscn", "Ranged: Power Draw (Hold), Pinning Shot, Riposte"],
+	["res://scenes/characters/knight.tscn", "The tank: Taunt guards allies near them, Brace, most HP"],
+	["res://scenes/characters/archer.tscn", "Ranged: Power Draw (Hold), Exposing Shot, Riposte"],
 	["res://scenes/characters/mage.tscn", "Fire, Frost, Gust area spells (Tap), Concentrate"],
 	["res://scenes/characters/cleric.tscn", "Healer: Healing, Shielding, Full Cure, Bash"],
 	["res://scenes/characters/assassin.tscn", "Strikes from behind, Marks, auto-parry with Marks"],

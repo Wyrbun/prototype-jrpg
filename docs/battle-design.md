@@ -208,7 +208,7 @@ end-of-fight screen to open the folder.
     moment it's revealed (a held enemy doesn't strike or walk).
 - Lessons: 1 Moving, 2 The timeline (reach ring, your turn), 3 Combos, timed
   hits, Wait and Arts (find Double Slash, then add an Art from the list), 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
-  Defend, 6 The skill triangle (Thrust/Smash through Defense, Wait out
+  Defend, 6 The skill triangle (Thrust/Lunge through Defense, Wait out
   Counter, interrupt Smash), 7 The classes, one at a time and alone
   (Archer: Hold moves and Abilities; Mage: Tap spells; Cleric: heals), 8 Max AP
   (the Knight alone again), 9 Rocks (the Golem waits with Long Strike revealed and
@@ -537,17 +537,19 @@ down, which can:
   you can still Attack or Wait. A turn head start an Ability gives (Shield
   Bash) is applied when the turn ends.
 
+Pronouns (they become full characters later): Knight they/them, Archer she, Mage she, Assassin he, Cleric she, Monk he.
+
 All numbers are in `scripts/battle/moves.gd`. Damage = the fighter's
 attack_power x the hit's multiplier.
 
-### Knight (200 HP, 60 AP, can Block and Parry)
+### Knight (200 HP, attack 15, 60 AP, can Block and Parry)
 Basic moves (the only ones in the menu):
 
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Slash | 10 | 1.0 | basic |
-| Thrust | 15 | 1.1 | ignores Defense |
-| Guard Strike | 15 | 0.9 | pushes the enemy 8 back on the timeline (out of the casting zone = its cast is lost) |
+| Thrust | 15 | 1.4 | ignores Defense |
+| Guard Strike | 15 | 0.9 | **halts** the enemy: its timeline stops for 0.5 s (`freeze`; it keeps its place and its cast). Once per enemy action: until it acts again, more shield blows don't halt it ("NO HALT"), so it can't be locked. **Draws its aggro**: it targets the Knight for one of their turns, each more shield blow adds a turn (up to 3, `aggro_max_turns`; once per move, however many hits; their own Taunt is never shortened) |
 
 **Arts** (`Moves.arts()`): when the moves on the bar spell a recipe, they
 merge into the Art. The bar reads left to right and takes the longest
@@ -558,10 +560,11 @@ timing boxes.
 | Recipe | Art | AP | Hits (parts) | Effect |
 |---|---|---|---|---|
 | Slash + Slash | Double Slash | 20 | 1.25 x2 = 2.5 (2.0) | basic |
-| Slash + Thrust | Lunge | 25 | 2.6 (2.1) | ignores Defense |
-| Guard Strike + Slash | Shield Rush | 25 | 1.2 x2 = 2.4 (1.9) | pushes its turn 18 back |
-| Thrust + Thrust + Slash | Smash | 40 | 4.2 (3.2) | Smash type, breaks Defense |
-| Slash + Slash + Thrust + Guard Strike | Crusader's Edge (finisher) | 50 | 1.4 + 1.4 + 3.2 = 6.0 (4.0) | breaks Defense, cancels its turn, knocks it 3 m back |
+| Slash + Thrust | Lunge | 25 | 2.6 (2.4) | ignores Defense |
+| Guard Strike + Slash | Shield Rush | 25 | 1.2 x2 = 2.4 (1.9) | halts it 1 s (same once-per-action rule); draws its aggro |
+| Guard Strike + Guard Strike | Shield Wall | 30 | 1.5 (1.8) | sweep around the Knight (3 m circle): draws the aggro of every enemy hit; 10% max HP barrier to allies within 3 m |
+| Thrust + Thrust + Slash | Smash | 40 | 4.2 (3.8) | Smash type, knocks it 4 m back (doesn't break Defense) |
+| Slash + Slash + Thrust + Guard Strike | Crusader's Edge (finisher) | 50 | 1.4 + 1.4 + 3.2 = 6.0 (4.3) | breaks Defense, cancels its attack (a stun, once per enemy action), knocks it 3 m back; draws its aggro |
 
 **Discovery** (`scripts/arts_book.gd`, `user://arts.cfg`): undiscovered Arts
 are a surprise. They don't merge while building and aren't named anywhere;
@@ -573,6 +576,28 @@ blocks merge with a white flash, the combo pauses (`art_reveal_seconds`,
 1.4 s) on a **NEW ART!** banner with the Art's name, then the Art plays. From
 then on it merges while building and appears in the list. Reports count
 `arts` and `art_<name>`.
+**Move details** (`scripts/battle/move_info.gd`, drawn by
+`BattleMenu._draw_move_details`): while choosing moves or Abilities, a box
+left of the list explains the highlighted one: cost and timing, then every
+effect in plain words (damage, how to time it, area, Defense, control,
+support, Marks, tokens). Attacks and Arts are described from their fields,
+so a new field needs one line in `MoveInfo._attack_lines`; Abilities have
+written text in `MoveInfo.SKILL_TEXT`. The Arts panel's Tab details use the
+same lines. On by default; the pause menu's "Move details: On/Off" toggles
+it, saved in `user://settings.cfg` (`scripts/settings.gd`).
+**Answer tags** (`BattleArena._update_answer_tags`, every frame while picking
+moves or Abilities): moves that answer what the target is doing right now get
+a coloured pill and row outline. Green: INTERRUPTS (an Attack-type hit on a
+revealed Smash; "INTERRUPT 1/3" on bosses), BREAKS GUARD / PIERCES (vs
+Defense), STUNS, HALTS, FROM BEHIND. Amber: PARTLY BLOCKED, NO STUN / NO HALT
+(already used since it last acted). Red: BLOCKED, COUNTERED (Counter stance),
+MISSES (Backstab-type moves from the front). Abilities are read against the
+strikes the warning shows: COUNTERS IT (Riposte, Suplex), BLOCKS IT (Arcane
+Barrier), HALVES IT (Brace), SHAKES IT (Vanish) when one is coming at the
+steered fighter; STOPS IT (Hook) on an enemy preparing an attack in range;
+DRAWS IT (Taunt, Provoke) when one is aimed at an ally in range. Only
+revealed skills count. The details box opens with a "NOW:" line explaining
+the tag. Arts in the Arts panel get the same tags.
 **Picking from the list:** Tab (`swap_character`) in the combo bar moves the
 cursor into the Arts panel (known Arts only); Confirm adds the whole recipe
 at once, locked as that Art (`_combo_locks`), so moves before it can't
@@ -582,16 +607,16 @@ Every class has Arts now.
 | Skill | AP | Effect |
 |---|---|---|
 | Light Heal | 25 | heals 20% of max HP |
-| Brace | 20 | takes 50% less damage, 3 Knight turns |
+| Brace | 20 | takes 50% less damage, 2 Knight turns |
 | Shield Bash | 30 | rushes next to an enemy within 9 m (in sight); next turn starts a third of the way along, like Wait |
-| Taunt | 40 | enemies within 6 m go after the Knight for 3 Knight turns; meanwhile he **guards**: allies within 3 m (`guard_radius`) are covered by Block and Parry even if their class can't do them |
+| Taunt | 40 | enemies within 6 m go after the Knight for 3 Knight turns; meanwhile they **guard**: allies within 3 m (`guard_radius`) are covered by Block and Parry even if their class can't do them |
 
 ### Archer (150 HP, 70 AP, cannot Block or Parry)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Shoot | 10 | 1.0 | basic |
-| Power Draw | 20 | 1.4 | Hold; 1.2 s, the arrow flies at 85% of the block |
-| Pinning Shot | 15 | 0.9 | **pins** the enemy: it can turn but not walk until its own next turn starts (status `pinned`, shown as PINNED) |
+| Power Draw | 20 | 1.8 | Hold; 1.2 s, the arrow flies at 85% of the block |
+| Exposing Shot | 15 | 0.9 | **exposes** the enemy: every party hit on it deals +15% (`exposed_bonus`) until its own next turn starts (status `exposed`, shown as EXPOSED). Named so it isn't confused with the Assassin's Marks. (It was Pinning Shot; pinning now comes only from Arrow Rain.) |
 
 **Arts:**
 
@@ -599,10 +624,10 @@ Every class has Arts now.
 |---|---|---|---|---|
 | Shoot + Shoot | Double Shot | 20 | 1.25 x2 = 2.5 (2.0) | basic |
 | Shoot x3 | Triple Shot | 30 | 1.1 + 1.1 + 1.8 = 4.0 (3.0) | last arrow delayed (20%, 40%, 100%) and ignores Defense (`last_hit`) |
-| Shoot + Power Draw | Piercing Arrow | 30 | 3.0 (2.4) | Hold (1.5 s); LINE 1.2 m wide, full damage to every enemy in it, ignores Defense |
-| Pinning Shot + Power Draw | Stunning Arrow | 35 | 2.6 (2.3) | Hold (1.5 s); an enemy preparing an attack loses it and goes back to the start of the bar |
-| Power Draw + Power Draw | Gale Shot | 40 | 3.4 (2.8) | Hold (1.8 s); breaks Defense, pushes 4 m away |
-| Pinning Shot + Shoot + Shoot + Power Draw | Arrow Rain (finisher) | 55 | 1.4 + 1.4 + 2.2 = 5.0 (4.3) | three volleys on a 2.5 m circle at the target; breaks Defense, pins everyone hit |
+| Shoot + Power Draw | Piercing Arrow | 30 | 3.3 (2.8) | Hold (1.5 s); LINE 1.2 m wide, full damage to every enemy in it, ignores Defense |
+| Exposing Shot + Power Draw | Stunning Arrow | 35 | 3.1 (2.7) | Hold (1.5 s); an enemy preparing an attack loses it and drops back to just before the casting zone (like an interrupt). Once per enemy action (see turn control) |
+| Power Draw + Power Draw | Gale Shot | 40 | 4.2 (3.6) | Hold (1.8 s); breaks Defense, pushes 4 m away |
+| Exposing Shot + Shoot + Shoot + Power Draw | Arrow Rain (finisher) | 55 | 1.6 + 1.6 + 2.6 = 5.8 (4.7) | three volleys on a 2.5 m circle at the target; breaks Defense, **pins** everyone hit: they can turn but not walk until their own next turn starts (status `pinned`) |
 
 Shoot chains only get better as they grow: Triple Shot (4.0) beats Double
 Shot + Shoot (3.5), and four Shoots (Triple Shot + Shoot) tie Double Shot x2
@@ -612,16 +637,17 @@ moves, not only against their plain parts.
 | Skill | AP | Effect |
 |---|---|---|
 | Jump | 30 | move a marker with WASD (up to 8 m) and leap there |
-| Riposte | 40 | counter stance for 4 s: a strike on the Archer is countered (2x attack power) and the enemy is pushed 3 m away |
-| True Sight | 50 | every ally's reach +25% (moves with their own reach too), 3 Archer turns |
-| Agility | 70 | the Archer's attacks get one extra hit, 5 Archer turns |
+| Riposte | 25 | counter stance for 4 s: a strike on the Archer is countered (2x attack power), the enemy is pushed 3 m away and she hops 3 m back (`riposte_hop`; walls and edges stop her) |
+| True Sight | 40 | every ally's reach +25% (moves with their own reach too), and enemy attacks are revealed as soon as they start preparing (at the casting zone, not at `reveal_at`), 3 Archer turns |
+| Agility | 70 | the Archer's attacks get one extra hit at half the first hit's strength (`agility_hit_share`), 5 Archer turns |
 
 ### Mage (100 HP, 90 AP, can Parry, cannot Block)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Fire | 20 | 1.1 | reach 4.5 m (the Mage's own is 3; the Archer keeps the longest, 6); a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 4; 1.1 s) |
+| Fire | 20 | 1.1 | **burns** every enemy hit: 35% of the Mage's attack (5) each time it acts, for its next 2 actions (refreshed, not stacked; `burn`, `burn_turns`; ticks in `_enemy_unleash`). Reach 4.5 m (the Mage's own is 3; the Archer keeps the longest, 6); a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 4; 1.1 s) |
 | Frost | 20 | 0.9 | everyone within 1.8 m of the target; **chills** them: half walking speed until their own next turn (status `chilled`) (Tap 3; 1.0 s) |
 | Gust | 15 | 0.8 | everyone within 3 m of the Mage, pushed 3 m away (Press; 0.6 s) |
+| Arcane Surge | 25 | 0.8, +10% per tap | single target, reach 4.5 m. An **open Tap**: every tap adds 10% (`surge`), up to 10 taps (the cap is a Perfect, so a full Surge is 0.8 x 2.0 x 1.5 = 2.4); taps past the cap are ignored, never a miss. Not part of any Art (Tap; 1.7 s) |
 
 **Arts:**
 
@@ -629,42 +655,42 @@ moves, not only against their plain parts.
 |---|---|---|---|---|
 | Fire + Fire | Fireball | 40 | 3.0 (2.2) | Tap 6; reach 4.5 m; everyone within 2.2 m of the target |
 | Frost + Frost | Blizzard | 40 | 2.4 (1.8) | Tap 6; everyone within 3 m of the target, all chilled |
-| Fire + Frost | Steam Burst | 40 | 2.8 (2.0) | Tap 5; within 1.8 m of the target, breaks Defense |
+| Fire + Frost | Steam Burst | 40 | 3.4 (2.0) | Tap 5; within 1.2 m of the target (her focused spell), breaks Defense |
 | Gust + Fire | Firestorm | 35 | 2.6 (1.9) | everyone within 3.5 m of the Mage, pushed 4 m |
-| Gust + Gust | Tempest | 30 | 2.0 (1.6) | everyone within 4.5 m of the Mage, pushed 7 m |
-| Fire + Frost + Fire + Gust | Meteor Strike (finisher) | 75 | 4.8 (best other reading: Steam Burst + Fire + Gust = 4.7) | Tap 8; every enemy anywhere, breaks Defense, Smash type |
+| Gust + Gust | Tempest | 30 | 2.0 (1.6) | everyone within 4.5 m of the Mage, pushed 5 m |
+| Fire + Frost + Fire + Gust | Meteor Strike (finisher) | 75 | 6.0 (best other reading: Steam Burst + Fire + Gust = 5.3) | Tap 8; every enemy anywhere, breaks Defense, Smash type |
 
 Order matters: Frost + Fire and Fire + Gust are just two spells.
 
 | Skill | AP | Effect |
 |---|---|---|
-| Arcane Barrier | 20 | the next hit on the Mage does nothing; the Mage's next combo costs double |
+| Arcane Barrier | 30 | the next hit on the Mage does nothing |
 | Concentrate | 40 | AP recharges twice as fast for 10 s |
-| Teleport | 60 | appear next to a chosen ally |
+| Teleport | 30 | blink to a spot within 8 m (marker, like Jump), or press Tab to snap the marker to an ally at any distance and appear next to them |
 
 ### Cleric (130 HP, 60 AP, can Block, cannot Parry)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Bash | 10, 20, 30 | 0.8 per hit, x0.9 per earlier Bash in the row | each Bash in a row has one more hit and costs 10 AP more (10, 20, 30: three fill the Cleric's 60 AP bar, 6 timed hits); a Bash after another move starts a new row |
+| Bash | 10 | 0.5 (flurry) | **Flurry:** each Bash right after another in the same combo hits 0.1 harder (0.5, 0.6, 0.7, 0.8, then 0.9 for the rest; `flurry`, `flurry_max`, `_apply_flurry`); any other move in between restarts it. **Rally:** each Bash that lands raises the party's max AP by +5 (a Perfect adds its usual +5: +10 in all), up to the usual ceiling; a mistake resets it like any growth. The only move that grows max AP on purpose. Arts made with Bash don't rally |
 | Holy Light | 20 | 1.2 | reach 9 m; breaks Defense |
 | Divine Barrier | 20 | 1.0 | Hold (1.5 s): gives allies within 4 m a barrier of 10% of their max HP; a Perfect let-go makes it 15% within 5.5 m (the preview shows both circles) |
 
-**Arts** (no Art is Bash + Bash alone, so Bash chains keep growing; support
-effects come with the Art's last hit):
+**Arts** (no Art is Bash + Bash alone, so a row of Bashes stays Bashes,
+each one rallying; support effects come with the Art's last hit):
 
 | Recipe | Art | AP | Hits (parts) | Effect |
 |---|---|---|---|---|
-| Bash + Holy Light | Smite | 30 | 2.4 (2.0) | breaks Defense |
+| Bash + Holy Light | Smite | 30 | 2.4 (1.7) | breaks Defense |
 | Holy Light + Holy Light | Judgment | 40 | 3.2 (2.4) | reach 9 m, everyone within 2 m of the target, breaks Defense |
-| Bash + Divine Barrier | Blessed Strike | 30 | 2.2 (1.8) | Hold; heals allies within 4 m by 8% of max HP (Perfect 12%) |
-| Divine Barrier + Divine Barrier | Sanctuary | 40 | 1.5 (2.0) | Hold; barrier 15% within 5 m (Perfect 22% within 6.5 m) |
+| Bash + Divine Barrier | Blessed Strike | 30 | 2.2 (1.5) | Hold; heals allies within 4 m by 8% of max HP (Perfect 12%) |
+| Divine Barrier + Divine Barrier | Sanctuary | 40 | 2.4 (2.0) | Hold; barrier 20% within 6 m (Perfect 28% within 7.5 m) |
 | Bash + Holy Light + Bash + Divine Barrier | Divine Judgment (finisher) | 60 | 1.2 + 1.2 + 2.6 = 5.0 (other reading: Smite + Blessed Strike = 4.6) | breaks Defense; heals the whole party 15% and gives everyone a 10% barrier |
 
 | Skill | AP | Effect |
 |---|---|---|
 | Healing | 25 | an ally (or self) heals 25% of their max HP |
-| Shielding | 40 | every ally gets a shield of 30% of their max HP |
-| Haste | 50 | an ally runs 20% faster, 3 Cleric turns |
+| Shielding | 40 | every ally gets a shield of 15% of their max HP |
+| Haste | 40 | an ally moves along the timeline 25% faster (`haste_timeline_bonus`: their turns come sooner) and runs 20% faster, for 2 of **their** turns |
 | Full Cure | 60 | an ally is fully healed |
 
 ### Assassin (170 HP, 50 AP, cannot Block or Parry: auto-parries with Marks)
@@ -684,8 +710,8 @@ its focus enemy (`flanks`).
 |---|---|---|
 | Stab | 10 | 1.0; 1.5x from behind; every 3rd Stab hit on a Marked enemy adds a Mark |
 | Shadowstep | 20 | teleports behind the target, then hits: 1.5x if it started in front; reaches any Marked enemy at any range, and moves after it on the bar count as in reach |
-| Backstab | 35 | 2x from behind and adds a Mark; misses from the front |
-| Execute | 100 | 4x from behind; -15 AP per Mark on the target (min 25: fits the 50 AP bar from 4 Marks); spends all the target's Marks |
+| Backstab | 25 | 2x from behind and adds a Mark; misses from the front |
+| Execute | 100 | 4x from behind, and +15% per Mark it spends (`mark_bonus`: 4 Marks 6.4x, 5 Marks 7.0x); -15 AP per Mark on the target (min 25: fits the 50 AP bar from 4 Marks); spends all the target's Marks |
 
 **Arts** (Execute is never part of a recipe, so its Mark discount stays its
 own). Multi-hit Arts keep random timings: the block is cut into one stretch
@@ -695,10 +721,10 @@ added by the last hit (`last_hit: {"add_marks": N}`).
 
 | Recipe | Art | AP | Hits | Effect |
 |---|---|---|---|---|
-| Stab + Stab | Twin Fangs | 20 | 1.25 x2 (1.5x each from behind) | both count as Stab hits for growing Marks |
+| Stab + Stab | Twin Fangs | 20 | 1.1 x2 (1.5x each from behind) | both count as Stab hits for growing Marks |
 | Shadowstep + Stab | Ambush | 30 | 2.4 x1.5 = 3.6 | teleports behind first; +1 Mark; reaches Marked enemies anywhere |
-| Shadowstep + Shadowstep | Phantom Rush | 40 | 1.8 x2 | teleports behind; +1 Mark; reaches Marked enemies anywhere |
-| Stab + Backstab | Cutthroat | 45 | 1.3 x2, x2 from behind = 5.2 | a Mark per hit from behind (+2); misses from the front |
+| Shadowstep + Shadowstep | Phantom Rush | 40 | 1.8 x2, 1.5x from behind = 5.4 | teleports behind; +1 Mark; reaches Marked enemies anywhere |
+| Stab + Backstab | Cutthroat | 35 | 1.3 x2, x2 from behind = 5.2 | a Mark per hit from behind (+2); misses from the front |
 | Stab + Shadowstep + Stab | Thousand Cuts (finisher) | 40 | 0.8 x6, x1.5 from behind = 7.2 (other reading: Stab + Ambush = 5.1) | teleports behind; +2 Marks |
 
 | Skill | AP | Effect |
@@ -782,6 +808,8 @@ moves, shortened to initials when long ("P P P P K HK").
 | K HK | Knee Smash | 25 | Hold | | Rush | one step |
 | Palm Strike + Knee Smash (P P K HK) | Triple Rush | 35 | 2 presses + Hold; ignores Defense | Triple, Rush | Crusher | one step |
 | Heavy Punch + Flash Kick + Knee Smash (HP K K K HK) | Mountain Crusher | 55 | 3 presses + Tap x6; 2.5 m circle | Mountain, Crusher | Triple | one step |
+
+Hits: Palm Strike 1.0, Flash Kick 1.0, Knee Smash 2.5, Triple Rush 0.6 + 0.6 + 3.2 = 4.4, Mountain Crusher 0.9 + 0.5 + 0.5 + 4.4 = 6.3 (raised in the class review so his climb Arts out-damage the Knight's; Palm Strike and Flash Kick now beat their parts).
 | HP HK Headbutt | Tortoise Special (finisher) | 70 | 3 presses; breaks Defense; restarts the bar | Crowd Cheer, the whole climb | | back to 30 |
 
 At bar 30 only Knee Smash fits, so every climb opens the same way; from bar
@@ -817,11 +845,18 @@ party AP) ~420. Tunable in moves.gd (hits, `cashout`) and
 - **Damage order on a party member:** Arcane Barrier (ignores the hit) ->
   Brace (halves it) -> shields -> HP.
 - **The Knight is the tank:** most HP (200), Brace for damage, Taunt for the
-  room, and his guard while Taunt lasts. The Monk (160 HP) tanks one enemy
+  room, and their guard while Taunt lasts. The Monk (160 HP) tanks one enemy
   at a time and for himself; he out-damages the Knight instead.
 - **Block / Parry per class:** one E or Q press still covers everyone caught
   in a strike, but only those whose class can parry/block benefit; the rest
   take the full hit. A missed Parry only penalizes classes that can parry.
+- **Turn control is once per enemy action.** Halts (Guard Strike, Shield
+  Rush) and stuns (Stunning Arrow, Crusader's Edge) set the enemy's
+  `control_used`; until it acts again (`_enemy_unleash` clears it), more of
+  them do nothing ("NO HALT", "NO STUN"), so no class can lock an enemy. A
+  stun cancels the attack and drops it to just before the casting zone
+  (`_cancel_enemy_skill`). The skill triangle's interrupts (an Attack-type
+  hit on a Smash wind-up) are not limited this way.
 - **"Pushes back"** (Gale Shot, Tempest, Riposte) is a physical shove across
   the arena, stopped by walls and rocks.
 - Effects show as tags next to the HP bars (BRACE 2, SHIELD 26, RIPOSTE 3s...).

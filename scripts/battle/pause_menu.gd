@@ -32,7 +32,12 @@ func _ready() -> void:
 
 
 func items() -> Array:
-	return ["Resume", "Restart fight", "Quit to title"]
+	return ["Resume", "Restart fight", "Quit to title", _details_item()]
+
+
+## The move details toggle (it stays on the menu after choosing it).
+func _details_item() -> String:
+	return "Move details: %s" % ("On" if Settings.move_details() else "Off")
 
 
 func _note(item: String) -> String:
@@ -43,6 +48,8 @@ func _note(item: String) -> String:
 			return "Start this fight over"
 		"Quit to title":
 			return "Progress is saved: Continue starts this fight over" if progress_saved else "Leave the fight (it's lost)"
+	if item.begins_with("Move details"):
+		return "The box explaining the highlighted move or Ability"
 	return ""
 
 
@@ -100,6 +107,8 @@ func _select() -> void:
 		"Quit to title":
 			get_tree().paused = false
 			quit_requested.emit()
+		_:
+			Settings.set_move_details(not Settings.move_details())
 
 
 func _process(_delta: float) -> void:

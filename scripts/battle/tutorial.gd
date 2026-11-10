@@ -314,11 +314,11 @@ func _build_steps() -> void:
 
 	# 6. The skill triangle
 	_note(6, "The skill triangle",
-		"Every skill has a place in a triangle:\n- Attack beats Smash (it interrupts it)\n- Smash breaks Defense\n- Defense blocks Attack\n- Counter punishes anything that hits it\n\nIt works both ways: what the enemy prepares changes which of your moves work.",
+		"Every skill has a place in a triangle:\n- Attack beats Smash (it interrupts it)\n- Smash breaks Defense\n- Defense blocks Attack\n- Counter punishes anything that hits it\n\nIt works both ways: what the enemy prepares changes which of your moves work.\n\nWhile you pick moves, the ones that answer what the enemy is doing get a green tag (INTERRUPTS, PIERCES, STUNS...), and the ones that would backfire get a red one (BLOCKED, COUNTERED).",
 		func(): knight.hold = false)
 	_goal(6, "Defense",
-		"The Golem raises its Defense stance, and basic moves like Slash bounce off. Thrust ignores Defense, and Smash (the Art Thrust + Thrust + Slash) breaks it.",
-		"Hit through the Defense with Thrust or Smash",
+		"The Golem raises its Defense stance, and basic moves like Slash bounce off. Thrust ignores Defense, and so does Lunge (the Art Slash + Thrust).",
+		"Hit through the Defense with Thrust or Lunge",
 		func(): return _stat("guard_breaks") >= 1,
 		func():
 			_golem_show("Defense")
@@ -342,7 +342,7 @@ func _build_steps() -> void:
 
 	# 7. More party members and Abilities
 	_note(7, "The Archer",
-		"Each class has its own attacks, Abilities and reactions. Meet them one at a time, starting with the Archer.\n\nThe Archer can't Block or Parry, but its Riposte Ability counters a strike instead.\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
+		"Each class has its own attacks, Abilities and reactions. Meet them one at a time, starting with the Archer.\n\nThe Archer can't Block or Parry, but her Riposte Ability counters a strike instead.\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
 		func():
 			_golem_rest()
 			_set_party(["archer"]))
@@ -354,7 +354,7 @@ func _build_steps() -> void:
 			_soon("archer")
 			_top_up_ap(80.0))
 	_note(7, "The Mage",
-		"The Mage's spells hit areas: Fire runs through a line, Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage.\n\nFire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press.\n\nIts Concentrate Ability doubles AP recharge for a while (the AP meter shows it).",
+		"The Mage's spells hit areas: Fire runs through a line and sets enemies burning (they take damage each time they act, twice), Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage.\n\nFire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press.\n\nArcane Surge is the exception, her single-target spell: tap as fast as you can, every tap adds damage and extra taps are fine.\n\nHer Concentrate Ability doubles AP recharge for a while (the AP meter shows it).",
 		func(): _set_party(["mage"]))
 	_goal(7, "The Mage",
 		"Walk the Mage into range between turns ({move}): Fire reaches 4.5 m, the other spells 3 m. Then attack on its turn.",
@@ -364,7 +364,7 @@ func _build_steps() -> void:
 			_soon("mage")
 			_top_up_ap(80.0))
 	_note(7, "The Cleric",
-		"The Cleric keeps the party alive with Healing, Shielding and Full Cure, and can still fight up close: each Bash in a row adds a hit and costs 10 AP more (10, 20, 30).\n\nIts Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
+		"The Cleric keeps the party alive with Healing, Shielding and Full Cure, and Haste makes an ally's turns come sooner.\n\nShe can still fight up close: Bash costs 10 AP, every Bash that lands raises the party's max AP, and each Bash in a row hits a little harder.\n\nHer Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
 		func(): _set_party(["cleric"]))
 	_goal(7, "The Cleric",
 		"Healing, Shielding, Haste or Full Cure: any of them counts.",
@@ -424,7 +424,7 @@ func _build_steps() -> void:
 
 	# 11. The Assassin: positioning and Marks
 	_note(11, "The Assassin",
-		"One more class: the Assassin. It can't Block or Parry, and most of its damage depends on WHERE it stands: behind an enemy means within 60 degrees of its back (the side away from its nose).\n\nSmall enemies like Goblins and Kobolds have no back to find: their ring is a full violet circle, and every hit counts as from behind.\n\nEnemies turn to face whoever they're after. The Golem is Taunted by the Knight now, so it keeps facing the Knight and leaves its back open. In real fights, the Knight's Taunt does exactly this for the Assassin.",
+		"One more class: the Assassin. He can't Block or Parry, and most of his damage depends on WHERE he stands: behind an enemy means within 60 degrees of its back (the side away from its nose).\n\nSmall enemies like Goblins and Kobolds have no back to find: their ring is a full violet circle, and every hit counts as from behind.\n\nEnemies turn to face whoever they're after. The Golem is Taunted by the Knight now, so it keeps facing the Knight and leaves its back open. In real fights, the Knight's Taunt does exactly this for the Assassin.",
 		func():
 			_golem_rest()
 			_set_party(["knight", "assassin"])  # the Knight's Taunt keeps the Golem's back turned
@@ -461,9 +461,9 @@ func _build_steps() -> void:
 			if assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_note(11, "Spending Marks",
-		"Marks are what the Assassin spends:\n- Execute: 4x from behind, and 15 AP cheaper per Mark on its target (it fits the Assassin's bar from 4 Marks). It uses them all up\n- Auto-parry: while any Mark is out, the Assassin parries strikes by itself, spending one\n- Hook stops an enemy's move (and uses its Marks); Shadow Cloak turns them into a shield\n\nVanish makes enemies lose track of the Assassin until it attacks.")
+		"Marks are what the Assassin spends:\n- Execute: 4x from behind, +15% per Mark it spends, and 15 AP cheaper per Mark on its target (it fits the Assassin's bar from 4 Marks). It uses them all up\n- Auto-parry: while any Mark is out, the Assassin parries strikes by himself, spending one\n- Hook stops an enemy's move (and uses its Marks); Shadow Cloak turns them into a shield\n\nVanish makes enemies lose track of the Assassin until he attacks.")
 	_goal(11, "Execute",
-		"Finish the job: Execute the Golem, from behind for 4x damage.",
+		"Finish the job: Execute the Golem from behind: 4x damage, more for every Mark it spends.",
 		"Use Execute on a Marked Golem",
 		func(): return _stat("executes") >= 1,
 		func():
@@ -530,7 +530,7 @@ func _build_steps() -> void:
 			_soon("monk")
 			_top_up_ap(100.0))
 	_note(12, "Risks and tanking",
-		"Mistakes cost the Monk: a missed timing, an avoidable hit or a Parry pressed too early drops his bar a step and takes his newest token (Crowd Cheer last). Deep Breath heals him and gives that step back.\n\nHe can tank ONE enemy for a while: Provoke makes it come for him, and each Parry meanwhile gives Rush; a Suplex counter gives Mountain. The Knight is still the better tank: his Taunt holds every enemy nearby, and while it lasts, allies close to him share his Block and Parry.")
+		"Mistakes cost the Monk: a missed timing, an avoidable hit or a Parry pressed too early drops his bar a step and takes his newest token (Crowd Cheer last). Deep Breath heals him and gives that step back.\n\nHe can tank ONE enemy for a while: Provoke makes it come for him, and each Parry meanwhile gives Rush; a Suplex counter gives Mountain. The Knight is still the better tank: their Taunt holds every enemy nearby, and while it lasts, allies close to them share their Block and Parry.")
 
 	# 13. Free practice
 	_note(13, "Free practice",

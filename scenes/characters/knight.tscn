@@ -12,7 +12,7 @@ max_hp = 200
 combo_limit = 60.0
 can_block = true
 can_parry = true
-attack_power = 18
+attack_power = 15
 attack_reach = 0.8
 speed = 10.0
 

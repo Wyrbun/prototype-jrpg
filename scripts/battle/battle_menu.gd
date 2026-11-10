@@ -45,6 +45,9 @@ var moves: Array[Dictionary] = []
 ## Per entry: false = greyed out, with the reason in move_notes.
 var move_usable: Array[bool] = []
 var move_notes: PackedStringArray = []
+## Per row of the move / Ability list: [] or [tag, -1/0/1, explanation]
+## (BattleArena._move_answer): what it does against the enemy right now.
+var move_tags: Array = []
 var move_index := 0
 ## Indices into moves, in the order they'll be performed.
 var combo: Array[int] = []
@@ -227,14 +230,24 @@ func _draw_move_list(font: Font) -> void:
 		var desc: String = move["desc"]
 		if not usable and i < move_notes.size() and move_notes[i] != "":
 			desc = move_notes[i]
-		# The description fits between the cost and the timing badge.
+		var tag: Array = move_tags[i] if i < move_tags.size() and usable else []
+		var tag_w := 0.0
+		if not tag.is_empty():
+			tag_w = _answer_tag(font, tag, Vector2(row.end.x - 100, row.position.y + row.size.y / 2.0), row)
+		# The description fits between the cost and the tag / timing badge.
 		var desc_size := 17
-		while desc_size > 12 and font.get_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, -1, desc_size).x > row.size.x - 312 - 100:
+		var desc_room := row.size.x - 312 - 100 - tag_w
+		while desc_size > 12 and font.get_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, -1, desc_size).x > desc_room:
 			desc_size -= 1
+		while desc.length() > 4 and font.get_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, -1, desc_size).x > desc_room:
+			desc = desc.left(desc.length() - 2) + "…"  # the tag needs the room; the details box has it all
 		_text(font, row.position + Vector2(312, 25), desc, desc_size, color.darkened(0.15))
 		_timing_badge(font, move, Vector2(row.end.x - 6, row.position.y + row.size.y / 2.0), not fits)
 	if mode == Mode.COMBO and (not arts.is_empty() or arts_hidden > 0):
 		_draw_arts(font, panel)
+	if Settings.move_details() and not (mode == Mode.COMBO and arts_focus) \
+			and move_index >= 0 and move_index < moves.size():
+		_draw_move_details(font, moves[move_index], panel)
 
 
 ## The Arts panel, right of the move list: known Arts with their recipes,
@@ -271,6 +284,9 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 			draw_rect(row, GOLD, false, 2.0)
 		var name_color: Color = art["color"] if art["known"] else Color(0.55, 0.55, 0.6)
 		_text(font, row.position + Vector2(8, 17), art["name"], 18, name_color)
+		var art_tag: Array = art.get("tag", [])
+		if not art_tag.is_empty() and not heading:
+			_answer_tag(font, art_tag, Vector2(row.end.x - 4, row.position.y + 12), row)
 		if art["finisher"]:
 			var name_w := font.get_string_size(art["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 			_text(font, row.position + Vector2(14 + name_w, 17), "FINISHER", 12, GOLD)
@@ -305,6 +321,9 @@ func _draw_art_details(font: Font, art: Dictionary, below: Rect2) -> void:
 		facts.append("Finisher")
 	lines.append(["  ·  ".join(facts), 15, GOLD])
 	var desc: String = art.get("desc", "")
+	var effects: PackedStringArray = art.get("effects", PackedStringArray())
+	if not effects.is_empty():
+		desc = "\n".join(_bullets(effects))  # the full details replace the one-liner
 	var desc_h := font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16).y if desc != "" else 0.0
 	var height := 44.0 + lines.size() * 22.0 + desc_h + 12.0
 	var box := Rect2(below.position.x, below.position.y - height - 8.0, width, height)
@@ -318,6 +337,55 @@ func _draw_art_details(font: Font, art: Dictionary, below: Rect2) -> void:
 		var pos := Vector2(box.position.x + 14, y - 4 + font.get_ascent(16))
 		draw_multiline_string_outline(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, 4, Color.BLACK)
 		draw_multiline_string(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, Color(0.92, 0.92, 0.95))
+
+
+## The highlighted move or Ability, explained: a box left of the list with
+## its cost and timing and everything it does (MoveInfo). Toggled in the
+## pause menu (Settings.move_details).
+func _draw_move_details(font: Font, move: Dictionary, beside: Rect2) -> void:
+	var width := minf(420.0, beside.position.x - 20.0)
+	if width < 220.0:
+		return  # no room on a narrow window
+	var lines := MoveInfo.lines(move)
+	var tag: Array = move_tags[move_index] if move_index < move_tags.size() else []
+	if not tag.is_empty():
+		lines.insert(0, "NOW: " + String(tag[2]))
+	var text := "\n".join(_bullets(lines))
+	var body_size := 16
+	var body_h := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size).y
+	var height := 70.0 + body_h + 34.0
+	# Bottom-aligned with the list, growing upward, but never down over the
+	# party's HP bars in the bottom-left corner.
+	var bottom := minf(beside.end.y, size.y - 268.0)
+	var box := Rect2(beside.position.x - width - 12.0, bottom - height, width, height)
+	draw_style_box(_panel_style, box)
+	_text(font, box.position + Vector2(14, 30), move["name"], 21, move["color"])
+	_text(font, box.position + Vector2(14, 54), MoveInfo.summary(move), 15, GOLD)
+	var pos := Vector2(box.position.x + 14, box.position.y + 70.0 + font.get_ascent(body_size))
+	draw_multiline_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size, -1, 4, Color.BLACK)
+	draw_multiline_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size, -1, Color(0.92, 0.92, 0.95))
+	_text(font, Vector2(box.position.x + 14, box.end.y - 12), "Esc: turn these details off", 13, Color(0.55, 0.57, 0.65))
+
+
+## A coloured pill right-aligned at "right" (green: it works now, amber:
+## partly, red: it backfires), and a matching outline on the row. Returns
+## the width it took.
+func _answer_tag(font: Font, tag: Array, right: Vector2, row: Rect2) -> float:
+	var color: Color = {1: Color(0.35, 0.9, 0.45), 0: Color(1.0, 0.75, 0.3), -1: Color(1.0, 0.4, 0.35)}.get(int(tag[1]), Color.WHITE)
+	var text: String = tag[0]
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 14.0
+	var pill := Rect2(right.x - w, right.y - 10.0, w, 20.0)
+	_pill(pill, Color(color, 0.25), color, 1.5)
+	_text(font, pill.position + Vector2(7, 15), text, 13, color)
+	draw_rect(row.grow(-1.0), Color(color, 0.8), false, 2.0)
+	return w + 8.0
+
+
+static func _bullets(lines: PackedStringArray) -> PackedStringArray:
+	var out: PackedStringArray = []
+	for line in lines:
+		out.append("• " + line)
+	return out
 
 
 ## "2 two-move, 1 four-move": how many hidden Arts of each length.
