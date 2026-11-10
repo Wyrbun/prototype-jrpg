@@ -4,6 +4,72 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## The Gale Maw gets meaner
+
+Six additions, each measured alone with the bot (standard party, 3 seeds,
+the bot always catches edge saves). Without them the bot wins or nearly
+wins every fight (Maw at 0 to 52 HP).
+
+- **Gust Sprites** (biggest effect): every 4th action the Maw spits out
+  up to 2 sprites (60 HP, a 2.2 m gust that knocks back 2 m). They go
+  down with the Maw. Alone, they left the Maw at ~480-510 HP in all 3 fights.
+- **Stronger Undertow**: the lines run 3.5 m past each target, so standing
+  behind an ally means a double hit, and an Off-Balance fighter gets two
+  lines. Alone: 2 wins, 1 timeout at 155.
+- **Gale Burst**: Exhale, then Gale Lanes 1 s later. Alone: 2 wins, 1
+  timeout at 200.
+- **Breakable rocks**: Exhale, Gale Burst and Breaker crack rocks in their
+  area; 2 cracks shatter one, and it grows back after 3 of the Maw's
+  actions. Alone: 3 wins, but the most damage taken (up to 464, 2-3 down).
+- **Winded**: anyone the Maw pushes or pulls loses 12 on the timeline.
+  Alone: 2 wins, 1 timeout at 45.
+- **The cliff crumbles** at half HP: the south edge breaks away 2.5 m
+  (once); anyone on that strip teeters. Alone: 2 wins, 1 timeout at 86.
+- All six together: the Maw survives every bot fight with 365-786 HP left.
+- Testing: `BattleArena.maw_off` (env `MAW_OFF` in the soak bot) switches
+  features off for comparisons.
+
+## The Gale Maw, a wall boss
+
+- **New boss: the Gale Maw** (Round 11, after the Dragon, on the new Cliff
+  arena). A stone face set into the north wall: it never moves, has no
+  front or back, and every attack pushes or pulls. Inhale drags you toward
+  its mouth, Exhale blows you toward the drop behind you; Maw Bite, Deep
+  Breath, Gale Lanes, Breaker, Wall Sweep and Undertow move the safe spot
+  around. Rocks between you and the wall shelter you. 1,200 HP; Maw Bite
+  80, Breaker 52, Gale Lanes 40, Wall Sweep 46 (tuned up after bot fights
+  showed it far easier than the Dragon).
+- **Defend braces against pushes and pulls:** for classes that can Block
+  (or a guarding Knight covers), the move is half as long, even when the
+  damage can't be blocked. Works against every boss (the Living Armor's
+  throw too).
+- **Edge saves now come back:** the Parry save works when you're pushed or
+  pulled over a drop, not only when you walk off. A caught save leaves you
+  Off-Balance for 3 of your turns (going over again then is a fall); after
+  that you can save again. Several fighters pushed over at once each get
+  their save in turn.
+- Wall boss support: anchored enemies, strip and lane areas (BAND), pushes
+  and pulls straight across the arena, follow-up skills after any strike.
+- Rounds: the mixed boss rounds are now 12 and 13.
+
+## Enemy review
+
+- **Kobold Power Shot** 58 -> 46: still the hit to answer, no longer bigger
+  than a boss's.
+- **Orc Shaman Healing Ritual** heals at most 60 HP per ally (15% of a
+  boss was 135).
+- **Bandit Arcanist Wind Slash** throws whoever it hits 3 m (not on a Parry).
+- **Stone Golem** gains Stone Guard (Defense stance, lets 30% through);
+  Smash + Ceiling Burst casts at 80% like the plain Smash.
+- **Living Armor** gains Parry Stance (Counter stance).
+- **Rounds:** new Round 7 introduces the Monk (Monk + Cleric vs Goblin +
+  Ogre, with a tip). Solo bosses now come first (Golem, Living Armor,
+  Dragon), then the two mixed rounds, then the Special Match. Golem + Kobold
+  + Ogre moves to the Rock Field. Old saves past Round 6 continue at the
+  round with the same number, which is now a different fight.
+- **Roster fixed** to match the game: Power Shot, Curse and Dark Bolt are
+  unavoidable (no Parry, no Defend). A Stagger bar will answer them later.
+
 ## Ceiling Burst keeps off the Golem
 
 - Falling-rock circles no longer land on the Golem or other enemies, so a

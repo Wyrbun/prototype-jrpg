@@ -27,6 +27,7 @@ var shape: int = EnemySkill.Shape.CONE
 ## Line width and donut hole size, used by those shapes.
 var width: float = 1.2
 var inner_radius: float = 0.0
+var lanes: int = 1
 var _live_color := Color.RED
 var _alert := false
 var _base_radius: float
@@ -68,6 +69,7 @@ func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float 
 	angle_degrees = 360.0 if shape == EnemySkill.Shape.CIRCLE else skill.angle
 	width = skill.width
 	inner_radius = skill.inner_radius
+	lanes = skill.lanes
 	_live_color = HIDDEN_COLOR if hidden else skill.color()
 	live = true
 	mesh = _build_mesh()
@@ -103,6 +105,21 @@ func contains(point: Vector3, extra_radius: float = 0.0) -> bool:
 		EnemySkill.Shape.DONUT:
 			# Safe close up and far away.
 			return distance <= radius + extra_radius and distance >= inner_radius - extra_radius
+		EnemySkill.Shape.BAND:
+			# A strip across the arena (split into lanes): wall bosses.
+			var depth := to_point.dot(forward)
+			var across := to_point.dot(forward.cross(Vector3.UP))
+			if depth < inner_radius - extra_radius or depth > radius + extra_radius or absf(across) > width / 2.0 + extra_radius:
+				return false
+			if lanes <= 1:
+				return true
+			var part := width / (2 * lanes - 1)
+			var slot := int(floor((across + width / 2.0) / part))
+			if slot % 2 == 0:
+				return true
+			# In a gap: still caught if the body pokes into a lane next to it.
+			var in_slot := fposmod(across + width / 2.0, part)
+			return in_slot < extra_radius or in_slot > part - extra_radius
 	if distance > radius + extra_radius:
 		return false
 	if distance < 0.001 or angle_degrees >= 360.0:
@@ -140,6 +157,16 @@ func _build_mesh() -> ArrayMesh:
 			var h := width / 2.0
 			var corners := [Vector3(-h, 0, 0), Vector3(h, 0, 0), Vector3(h, 0, -radius), Vector3(-h, 0, -radius)]
 			vertices.append_array([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]])
+		EnemySkill.Shape.BAND:
+			var count := maxi(lanes, 1)
+			var part := width / (2 * count - 1)
+			for lane in count:
+				var x0 := -width / 2.0 + lane * 2 * part
+				var x1 := x0 + part
+				var near := -inner_radius
+				var far := -radius
+				vertices.append_array([Vector3(x0, 0, near), Vector3(x1, 0, near), Vector3(x1, 0, far),
+						Vector3(x0, 0, near), Vector3(x1, 0, far), Vector3(x0, 0, far)])
 		EnemySkill.Shape.DONUT:
 			var inner := clampf(inner_radius, 0.0, radius)
 			for i in SEGMENTS:

@@ -101,6 +101,7 @@ ceiling_damage = 28
 
 [sub_resource type="Resource" id="Skill_8"]
 script = ExtResource("2_skill")
+cast_speed = 0.8
 skill_name = "Right Smash + Ceiling Burst"
 kind = 4
 weight = 1
@@ -120,6 +121,7 @@ ceiling_damage = 28
 
 [sub_resource type="Resource" id="Skill_9"]
 script = ExtResource("2_skill")
+cast_speed = 0.8
 skill_name = "Left Smash + Ceiling Burst"
 kind = 4
 weight = 1
@@ -137,6 +139,15 @@ ceiling_circles = 8
 ceiling_radius = 2.0
 ceiling_damage = 28
 
+[sub_resource type="Resource" id="Skill_10"]
+script = ExtResource("2_skill")
+skill_name = "Stone Guard"
+kind = 2
+weight = 2
+shape = 1
+radius = 2.0
+let_through = 0.3
+
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.6, 1.6, 1.6)
 
@@ -153,7 +164,7 @@ interrupt_resist = 3
 move_speed = 3.5
 turn_speed_degrees = 90.0
 body_radius = 0.95
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9"), SubResource("Skill_10")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)

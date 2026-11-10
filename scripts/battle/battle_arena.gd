@@ -209,12 +209,15 @@ static var tutorial_mode := false
 static var boss_rush_mode := false
 ## True when this Boss Rush was resumed with Continue (for the reports).
 static var continued := false
-## Boss rounds (from Round 7, index PICK_PARTY_FROM) let the player choose
+## Boss rounds (from Round 8, index PICK_PARTY_FROM) let the player choose
 ## the party: the chosen class scenes, and the round they were chosen for.
 ## Retrying the same round keeps the pick; a new round asks again.
-const PICK_PARTY_FROM := 6
+const PICK_PARTY_FROM := 7
 static var chosen_party: Array[String] = []
 static var chosen_for_round := -1
+## Balance testing: wall-boss features to switch off ("burst", "crumble",
+## "rocks", "winded", "sprites", "undertow").
+static var maw_off: PackedStringArray = []
 
 ## The tutorial's fight (data/tutorial.tres).
 @export var tutorial_encounter: Encounter
@@ -274,6 +277,8 @@ var _debris: Array[Dictionary] = []
 ## Walking over a lethal edge: a Parry-like save in progress, or empty.
 ## {"fighter", "time_left", "reacted" (0 none, 1 in time, 2 too early), "ring"}.
 var _edge_save: Dictionary = {}
+## Party members pushed over an edge while another one is already teetering.
+var _edge_queue: Array = []
 const FALLING_ROCK_COLOR := Color(1.0, 0.62, 0.25)
 ## Telegraph arrows being animated: {"node", "base", "dir"}.
 var _telegraph_arrows: Array[Dictionary] = []
@@ -321,6 +326,11 @@ var _exec_reveal_left := 0.0
 ## Walking over a lethal edge: seconds the save ring takes to close (the
 ## timing window is the Parry's, parry_window).
 @export var edge_save_seconds: float = 1.0
+## After a caught fall: for this many of the fighter's own turns, going over
+## an edge again is a fall (no save). Then saves work again.
+@export var off_balance_turns: int = 3
+## Defend against a skill that pushes or pulls: the move is this share as long.
+@export var defend_move_share: float = 0.5
 ## The enemy the combo will hit, locked when the combo bar opens.
 var _combo_target: Combatant = null
 ## Party AP just before the combo was paid, so the bar keeps showing it.
@@ -520,6 +530,35 @@ func _load_round() -> void:
 			party_scenes.append(load(path))
 	party = _spawn(party_scenes, $Party, false)
 	enemies = _spawn(encounter.enemies, $Enemies, true)
+	for enemy in enemies:
+		if enemy.anchored:
+			_anchor_to_wall(enemy)
+			_apply_maw_off(enemy)
+
+
+## Balance testing: strips the wall-boss features listed in maw_off.
+func _apply_maw_off(boss: Combatant) -> void:
+	if maw_off.is_empty():
+		return
+	var kept: Array[EnemySkill] = []
+	for skill in boss.skills:
+		var def := skill
+		if maw_off.has("burst") and def.skill_name == "Gale Burst":
+			continue
+		if maw_off.has("undertow") and def.special == EnemySkill.Special.LINE_TO_EACH:
+			def = def.duplicate()
+			def.line_extend = 1.0
+			def.double_on_off_balance = false
+		kept.append(def)
+	boss.skills = kept
+	if maw_off.has("crumble"):
+		boss.crumble_at_share = 0.0
+	if maw_off.has("rocks"):
+		boss.rock_regrow_turns = 0
+	if maw_off.has("winded"):
+		boss.winded_timeline = 0.0
+	if maw_off.has("sprites"):
+		boss.summon_scene = null
 
 
 func _spawn(scenes: Array[PackedScene], holder: Node3D, enemy_side: bool) -> Array[Combatant]:
@@ -915,6 +954,8 @@ func _set_controlled(fighter: Combatant) -> void:
 ## enemy can be outmaneuvered. While preparing a skill they stand still and
 ## can only turn slowly.
 func _enemy_step(enemy: Combatant, delta: float) -> void:
+	if enemy.anchored:
+		return  # a wall boss never moves
 	var target := _enemy_target(enemy)
 	if target == null:
 		return
@@ -1044,6 +1085,25 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 			if area.shape == EnemySkill.Shape.DONUT \
 					and from_area.length() - area.inner_radius < area.radius - from_area.length():
 				out = -out  # a ring: its safe middle is closer than its outer edge
+			if area.shape == EnemySkill.Shape.BAND:
+				# A strip across the arena: sideways into a gap between lanes,
+				# otherwise out through its nearer edge (toward or away from the wall).
+				var fwd := -area.global_basis.z
+				fwd.y = 0.0
+				fwd = fwd.normalized()
+				var right := fwd.cross(Vector3.UP)
+				var depth := from_area.dot(fwd)
+				if area.lanes > 1:
+					var part := area.width / (2 * area.lanes - 1)
+					var across := from_area.dot(right) + area.width / 2.0
+					var best := INF
+					for k in range(1, 2 * area.lanes - 1, 2):  # gaps are the odd slots
+						var centre := (k + 0.5) * part
+						if absf(centre - across) < absf(best - across):
+							best = centre
+					out = right * signf(best - across)
+				else:
+					out = -fwd if depth - area.inner_radius < area.radius - depth else fwd
 			away += out
 	if away != Vector3.ZERO:
 		ally.step(away, delta)
@@ -1261,12 +1321,14 @@ func _resolve_overlaps() -> void:
 ## drop, a forced move makes the fighter fall (bosses hold on); walking never
 ## does: walkers stop at lethal edges like at walls.
 func _keep_in_arena(fighter: Combatant, forced: bool = false) -> void:
+	if fighter.anchored:
+		return  # set into the wall on purpose
 	if forced and arena.has_drops() and _can_fall(fighter):
 		# Walls and rocks still stop it; drops don't (bosses get the normal
 		# clamp below, so they stop at the brink).
 		arena.keep_inside(fighter, fighter.body_radius, true)
 		if arena.lethal_at(fighter.global_position):
-			_fall(fighter)
+			_teeter_or_fall(fighter)
 		return
 	arena.keep_inside(fighter, fighter.body_radius)
 
@@ -1280,10 +1342,7 @@ func _walk_inside(fighter: Combatant) -> void:
 	arena.keep_inside(fighter, fighter.body_radius, true)
 	if not arena.lethal_at(fighter.global_position):
 		return
-	if fighter.get_meta("edge_saved", false):
-		_fall(fighter)  # its one save is spent
-	else:
-		_begin_edge_save(fighter)
+	_teeter_or_fall(fighter)
 
 
 ## Bosses never fall; everyone else can (party members and regular enemies).
@@ -1325,7 +1384,10 @@ func _fall(fighter: Combatant) -> void:
 ## Teetering on a lethal edge: a ring closes on the fighter; Parry as it turns
 ## gold to catch yourself, otherwise you fall.
 func _begin_edge_save(fighter: Combatant) -> void:
-	fighter.set_meta("edge_saved", true)  # one try per fight, caught or not
+	if not _edge_save.is_empty():
+		if fighter != _edge_save["fighter"] and not _edge_queue.has(fighter):
+			_edge_queue.append(fighter)  # pushed over together: one save at a time
+		return
 	var ring := _make_ring(fighter.body_radius + 0.3, 0.1, Color.WHITE)
 	fighter.add_child(ring)
 	_edge_save = {"fighter": fighter, "time_left": edge_save_seconds, "reacted": 0, "ring": ring}
@@ -1374,10 +1436,27 @@ func _update_edge_save(delta: float) -> void:
 		fighter.global_position += back * (fighter.body_radius + 0.8)
 		arena.keep_inside(fighter, fighter.body_radius)
 		_popup(fighter, "SAVED!", Color(0.5, 1.0, 0.55))
-		_flash("%s catches themselves at the edge (that was the one save this fight)" % fighter.display_name)
+		fighter.add_status("off_balance", off_balance_turns, fighter)
+		_flash("%s catches themselves at the edge: Off-Balance for %d turns (another drop now is a fall)" % [fighter.display_name, off_balance_turns])
 		_count("edge_saves")
 	else:
 		_fall(fighter)
+	while not _edge_queue.is_empty() and _edge_save.is_empty():
+		var next: Combatant = _edge_queue.pop_front()
+		if is_instance_valid(next) and not next.is_down and arena.lethal_at(next.global_position):
+			_begin_edge_save(next)
+
+
+## An area skill reaches someone inside it unless a rock is in the way. A
+## wall boss's breath runs straight across the arena, so the rock has to be
+## between you and the wall straight ahead (that's where it shelters you).
+func _strike_reaches(enemy: Combatant, member: Combatant) -> bool:
+	if not enemy.anchored:
+		return _can_see(enemy, member)
+	var fwd := enemy.flat_forward()
+	var depth := (member.global_position - enemy.global_position).dot(fwd)
+	var at_wall := member.global_position - fwd * depth
+	return arena.has_line_of_sight(at_wall, member.global_position)
 
 
 ## True if nothing (a rock) stands between two fighters.
@@ -1470,6 +1549,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 			_finish_enemy_skill(enemy, reset_timeline)  # burnt out before it could strike
 			_check_enemies()
 			return
+	if enemy.anchored:
+		_wall_boss_acts(enemy)
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
@@ -1495,8 +1576,12 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 			if playtest:
 				playtest.miss(enemy, skill_name)
 			_flash("%s's %s misses!" % [enemy.display_name, skill_name])
+			_crack_rocks(enemy, enemy.loaded_def)
 			_leave_hazards(enemy)
-			_finish_enemy_skill(enemy, reset_timeline)
+			if enemy.loaded_def.follow_up != null and not enemy.loaded_def.push_out:
+				_start_follow_up(enemy, enemy.loaded_def, reset_timeline)
+			else:
+				_finish_enemy_skill(enemy, reset_timeline)
 		else:
 			_begin_strike(enemy, mods, reset_timeline)
 		return
@@ -1622,6 +1707,14 @@ func _build_cast_areas(enemy: Combatant) -> void:
 			add_child(area)
 			area.set_meta("follow", member)
 			enemy.extra_areas.append(area)
+			if def.special == EnemySkill.Special.LINE_TO_EACH and def.double_on_off_balance \
+					and member.statuses.has("off_balance"):
+				# Off-Balance: a second line, a few degrees off the first.
+				var twin := AttackRange.new()
+				add_child(twin)
+				twin.set_meta("follow", member)
+				twin.set_meta("twist", 4.0)
+				enemy.extra_areas.append(twin)
 		_place_party_areas(enemy, true)
 	elif enemy.attack_range:
 		enemy.attack_range.rotation.y = -deg_to_rad(def.aim_offset_degrees)  # 90: its right side
@@ -1656,10 +1749,12 @@ func _place_party_areas(enemy: Combatant, hidden: bool) -> void:
 		else:
 			var from := Vector3(enemy.global_position.x, 0.03, enemy.global_position.z)
 			var to := Vector3(member.global_position.x, 0.03, member.global_position.z)
+			if area.has_meta("twist"):
+				to = from + (to - from).rotated(Vector3.UP, deg_to_rad(float(area.get_meta("twist"))))
 			area.global_position = from
 			if from.distance_to(to) > 0.05:
 				area.look_at(to, Vector3.UP)
-			area.show_skill(def, hidden, from.distance_to(to) + 1.0)
+			area.show_skill(def, hidden, from.distance_to(to) + def.line_extend)
 
 
 ## How big the prepared skill's own area is right now (growing circles
@@ -1748,7 +1843,7 @@ func _strike_targets(enemy: Combatant, preview: bool = false) -> Dictionary:
 		var shielded := false
 		for member in _standing(party):
 			if enemy.attack_range and enemy.attack_range.contains(member.global_position, member.body_radius):
-				if _can_see(enemy, member):
+				if _strike_reaches(enemy, member):
 					result[member] = {"mult": 1.0, "unblockable": false, "one_hp": false}
 				else:
 					shielded = true  # in the area, but a rock was in the way
@@ -1790,7 +1885,10 @@ func _heal_allies(caster: Combatant) -> void:
 	for ally in _standing(enemies):
 		var distance := ally.global_position.distance_to(caster.global_position) - ally.body_radius
 		if ally == caster or distance <= def.radius:
-			var amount := ally.heal(ceili(ally.max_hp * def.heal_share))
+			var share := ceili(ally.max_hp * def.heal_share)
+			if def.heal_cap > 0:
+				share = mini(share, def.heal_cap)  # Healing Ritual: at most 60 on a boss
+			var amount := ally.heal(share)
 			if amount > 0:
 				_popup(ally, "+%d" % amount, Color(0.45, 0.95, 0.5))
 				healed.append("%s +%d" % [ally.display_name, amount])
@@ -1915,6 +2013,28 @@ func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.set_meta("follow_up_at", maxf(TIMELINE_LENGTH - def.follow_up_delay * rate, cast_zone_start + 0.01))
 	if reset_timeline:
 		_send_to_start(enemy)  # on its own turn, _end_turn does this
+
+
+## A strike with a follow_up (Deep Breath: Inhale, then Maw Bite): the next
+## skill is revealed at once and strikes follow_up_delay seconds later.
+func _start_follow_up(enemy: Combatant, def: EnemySkill, reset_timeline: bool) -> void:
+	var next := def.follow_up
+	_clear_telegraphs(enemy)
+	_clear_cast_extras(enemy)
+	enemy.loaded_def = next
+	enemy.loaded_skill = next.kind
+	enemy.skill_revealed = true
+	enemy.last_skill = def
+	enemy.set_meta("ap_penalty_done", false)
+	enemy.set_meta("staggered_chain", false)
+	if enemy.attack_range:
+		enemy.attack_range.show_skill(next)
+	enemy.show_skill_text(next.skill_name.to_upper(), next.color())
+	_add_telegraphs(enemy)
+	var rate := enemy.speed * time_scale * battle_speed
+	enemy.set_meta("follow_up_at", maxf(TIMELINE_LENGTH - def.follow_up_delay * rate, cast_zone_start + 0.01))
+	if reset_timeline:
+		_send_to_start(enemy)
 
 
 ## Orange spheres over everyone a follow-up will hit no matter what.
@@ -2353,16 +2473,28 @@ func _add_telegraphs(enemy: Combatant) -> void:
 		var half := deg_to_rad(area.angle_degrees) / 2.0
 		var full := area.angle_degrees >= 360.0
 		var count := 8 if full else 5
+		if area.shape == EnemySkill.Shape.BAND and area.lanes > 1:
+			count = area.lanes
 		for i in count:
 			var t := (i + 0.5) / count
 			var a := TAU * t if full else -half + 2.0 * half * t
 			var radial := Vector3(sin(a), 0.0, -cos(a))
-			if area.shape == EnemySkill.Shape.LINE:
-				radial = Vector3.FORWARD
+			var straight := area.shape == EnemySkill.Shape.LINE or area.shape == EnemySkill.Shape.BAND or enemy.anchored
+			if straight:
+				radial = Vector3.FORWARD  # wall bosses push and pull straight across
 			var reach := minf(area.radius, 6.0)
 			var base := radial * reach * (0.55 if def.pull > 0.0 else 0.35)
-			if area.shape == EnemySkill.Shape.LINE:
-				base = Vector3((t - 0.5) * area.width * 0.8, 0.0, -reach * 0.5)
+			if straight:
+				var span := area.width if area.shape != EnemySkill.Shape.CONE else minf(arena.size.x, 2.0 * area.radius)
+				var across := (t - 0.5) * span * 0.8
+				if area.shape == EnemySkill.Shape.BAND and area.lanes > 1:
+					# One arrow down the middle of each lane (count = lanes).
+					var part := area.width / (2 * area.lanes - 1)
+					across = -area.width / 2.0 + (2 * mini(i, area.lanes - 1) + 0.5) * part
+				var near := area.inner_radius if area.shape == EnemySkill.Shape.BAND else 0.0
+				if enemy.anchored:
+					near = maxf(near, enemy.body_radius)  # clear of its body
+				base = Vector3(across, 0.0, -near - 2.5)
 			base.y = 0.07
 			var dir := -radial if def.pull > 0.0 else radial
 			var arrow := _make_arrow()
@@ -2648,6 +2780,8 @@ func _skill_reaches(enemy: Combatant, skill: EnemySkill, member: Combatant) -> b
 	offset.y = 0.0
 	var d := offset.length()
 	match skill.shape:
+		EnemySkill.Shape.BAND:
+			return true  # wall bosses: strips across the whole arena
 		EnemySkill.Shape.DONUT:
 			return d >= skill.inner_radius - member.body_radius and d <= skill.radius + member.body_radius
 		EnemySkill.Shape.LINE:
@@ -2796,9 +2930,12 @@ func _try_parry() -> void:
 
 ## Q: Defend. Costs AP, can't be combined with a parry attempt.
 func _try_defend() -> void:
-	if _strike.reaction != Reaction.NONE or _strike.def.is_mechanic():
+	# A push or a pull can always be braced against (shorter move), even when
+	# its damage can't be blocked.
+	var moves := _strike.def.launch > 0.0 or _strike.def.pull > 0.0
+	if _strike.reaction != Reaction.NONE or (_strike.def.is_mechanic() and not moves):
 		return
-	if not _strike.def.blockable():
+	if not _strike.def.blockable() and not moves:
 		_flash("%s can't be blocked!" % _strike.def.skill_name)
 		return
 	if not _strike_targets_can("block"):
@@ -2904,13 +3041,26 @@ func _resolve_strike() -> void:
 			pulled.append(target)
 
 	for target in thrown:
-		_knock_away(target, s.enemy.global_position, s.def.launch)
+		var push := s.def.launch * _brace_share(s, target)
+		if s.enemy.anchored:
+			# Wall boss: straight across the arena, away from its wall.
+			_knock_away(target, target.global_position - s.enemy.flat_forward(), push)
+		else:
+			_knock_away(target, s.enemy.global_position, push)
 		if not target.is_down:
-			_popup(target, "LAUNCHED", Color(1.0, 0.6, 0.3))
+			_popup(target, "BRACED" if push < s.def.launch else "LAUNCHED", Color(1.0, 0.6, 0.3))
+			_wind(s.enemy, target, lines)
 	for target in pulled:
-		_pull_toward(target, s.enemy.global_position, s.def.pull, s.enemy.body_radius + target.body_radius + 0.2)
+		var drag := s.def.pull * _brace_share(s, target)
+		if s.enemy.anchored and s.def.special != EnemySkill.Special.LINE_TO_EACH:
+			_pull_to_wall(target, s.enemy, drag)
+		else:
+			_pull_toward(target, s.enemy.global_position, drag, s.enemy.body_radius + target.body_radius + 0.2)
 		if not target.is_down:
-			_popup(target, "PULLED", Color(1.0, 0.6, 0.3))
+			_popup(target, "BRACED" if drag < s.def.pull else "PULLED", Color(1.0, 0.6, 0.3))
+			_wind(s.enemy, target, lines)
+	if final_hit:
+		_crack_rocks(s.enemy, s.def)
 
 	if parried:
 		# Every hit of a multi-hit strike can be parried, and each Parry grows
@@ -2969,7 +3119,10 @@ func _resolve_strike() -> void:
 				_strike.reaction = Reaction.DEFEND  # one Defend (one AP payment) guards the whole chain
 			return
 	_leave_hazards(s.enemy)
-	_finish_enemy_skill(s.enemy, s.reset_timeline)
+	if s.def.follow_up != null and not s.def.push_out and not s.enemy.is_down and not _standing(party).is_empty():
+		_start_follow_up(s.enemy, s.def, s.reset_timeline)  # Deep Breath: the bite comes next
+	else:
+		_finish_enemy_skill(s.enemy, s.reset_timeline)
 	_flash("\n".join(lines))
 	print(" / ".join(lines))
 	_check_party()
@@ -3122,6 +3275,8 @@ func _true_sight_up() -> bool:
 
 ## Shoves a fighter straight away from a point, stopping at walls and rocks.
 func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
+	if fighter.anchored:
+		return
 	var away := fighter.global_position - from
 	away.y = 0.0
 	if away.length_squared() < 0.0001:
@@ -3130,13 +3285,15 @@ func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
 	for i in steps:
 		fighter.global_position += away.normalized() * meters / steps
 		_keep_in_arena(fighter, true)
-		if fighter.is_down:
+		if fighter.is_down or _teetering(fighter):
 			return  # pushed over a drop
 
 
 ## Drags a fighter towards a point (boss pulls), stopping next to whoever is
 ## there. Being dragged across a hole or a lethal edge means falling.
 func _pull_toward(fighter: Combatant, to: Vector3, meters: float, stop_gap: float) -> void:
+	if fighter.anchored:
+		return
 	var steps := 8
 	for i in steps:
 		var dir := to - fighter.global_position
@@ -3146,8 +3303,57 @@ func _pull_toward(fighter: Combatant, to: Vector3, meters: float, stop_gap: floa
 			return
 		fighter.global_position += dir.normalized() * minf(meters / steps, room)
 		_keep_in_arena(fighter, true)
-		if fighter.is_down:
+		if fighter.is_down or _teetering(fighter):
 			return
+
+
+## Defend against a push or pull: a Block-capable fighter (or one a
+## guarding Knight covers) is moved defend_move_share as far.
+func _brace_share(s: Strike, target: Combatant) -> float:
+	if s.reaction == Reaction.DEFEND and _covered(target, "block"):
+		_count("braced_moves")
+		return defend_move_share
+	return 1.0
+
+
+## Over a drop: a party member teeters (Parry to catch yourself) unless
+## Off-Balance from the last save; anyone else falls.
+func _teeter_or_fall(fighter: Combatant) -> void:
+	if fighter.team == Combatant.Team.PARTY and not fighter.statuses.has("off_balance"):
+		_begin_edge_save(fighter)
+	else:
+		_fall(fighter)
+
+
+## True while a fighter hangs over an edge waiting for its save.
+func _teetering(fighter: Combatant) -> bool:
+	return (not _edge_save.is_empty() and _edge_save["fighter"] == fighter) or _edge_queue.has(fighter)
+
+
+## Wall boss pulls: straight toward its wall, stopping against its body.
+func _pull_to_wall(fighter: Combatant, boss: Combatant, meters: float) -> void:
+	var steps := 8
+	for i in steps:
+		if fighter.gap_to(boss) <= 0.2:
+			return
+		fighter.global_position -= boss.flat_forward() * meters / steps
+		_keep_in_arena(fighter, true)
+		if fighter.is_down or _teetering(fighter):
+			return
+
+
+## A wall boss at the start: its centre on the middle of the far wall (half
+## its body in the wall), facing into the arena.
+func _anchor_to_wall(enemy: Combatant) -> void:
+	var toward_party := arena.global_position - enemy.global_position
+	toward_party.y = 0.0
+	var wall_dir := -toward_party.normalized() if toward_party.length() > 0.1 else Vector3.FORWARD
+	var depth := arena.size.y / 2.0 if absf(wall_dir.z) >= absf(wall_dir.x) else arena.size.x / 2.0
+	var into := Vector3(0, 0, signf(wall_dir.z)) if absf(wall_dir.z) >= absf(wall_dir.x) else Vector3(signf(wall_dir.x), 0, 0)
+	enemy.global_position = arena.global_position + into * depth
+	enemy.anchored = false
+	enemy.look_at(enemy.global_position - into, Vector3.UP)
+	enemy.anchored = true
 
 
 func _check_party() -> void:
@@ -3163,10 +3369,134 @@ func _check_party() -> void:
 		_set_controlled(_standing(party)[0])
 
 
+# --- Wall boss extras (the Gale Maw) ------------------------------------------
+
+## Each action of a wall boss: broken rocks count down to growing back, and
+## every few actions it calls up its summons.
+func _wall_boss_acts(boss: Combatant) -> void:
+	for rock in arena.get_children():
+		if rock is ArenaObstacle and rock.broken and rock.has_meta("broken_by") and rock.get_meta("broken_by") == boss:
+			var left := int(rock.get_meta("regrow_in", 0)) - 1
+			rock.set_meta("regrow_in", left)
+			if left <= 0:
+				rock.regrow()
+				_popup(rock, "ROCK REGROWS", Color(0.8, 0.75, 0.6))
+				for c in combatants:
+					if not c.is_down:
+						_keep_in_arena(c)  # squeezed out of where it grew
+	if boss.summon_scene == null or boss.summon_every <= 0:
+		return
+	var acts := int(boss.get_meta("acts", 0)) + 1
+	boss.set_meta("acts", acts)
+	if acts % boss.summon_every == 0:
+		_summon(boss)
+
+
+## Tops the wall boss's summons back up to summon_count.
+func _summon(boss: Combatant) -> void:
+	var mine: Array = boss.get_meta("summons", [])
+	var standing := 0
+	for c in mine:
+		if is_instance_valid(c) and not c.is_down:
+			standing += 1
+	var made := 0
+	for i in boss.summon_count - standing:
+		var fighter := boss.summon_scene.instantiate() as Combatant
+		var side := -1.0 if (standing + i) % 2 == 0 else 1.0
+		var spot := boss.global_position + boss.flat_forward() * (boss.body_radius + 2.0) \
+				+ boss.flat_forward().cross(Vector3.UP) * side * (boss.body_radius + 1.5)
+		$Enemies.add_child(fighter)
+		fighter.global_position = Vector3(spot.x, boss.global_position.y, spot.z)
+		fighter.look_at(fighter.global_position + boss.flat_forward(), Vector3.UP)
+		fighter.timeline_pos = randf_range(0.0, 20.0)
+		fighter.set_meta("summoner", boss)
+		# Dead summons leave the lists (hidden, still in the tree).
+		for old in mine.duplicate():
+			if is_instance_valid(old) and old.is_down:
+				mine.erase(old)
+				enemies.erase(old)
+				combatants.erase(old)
+				old.process_mode = Node.PROCESS_MODE_DISABLED
+				old.visible = false
+		enemies.append(fighter)
+		combatants.append(fighter)
+		mine.append(fighter)
+		_keep_in_arena(fighter)
+		made += 1
+	boss.set_meta("summons", mine)
+	if made > 0:
+		_count("summons")
+		_flash("%s spits out %d Gust Sprite%s!" % [boss.display_name, made, "" if made == 1 else "s"])
+
+
+## Summons go down with the one who called them.
+func _down_orphan_summons() -> void:
+	for enemy in enemies:
+		if not enemy.has_meta("summoner"):
+			continue
+		var boss: Combatant = enemy.get_meta("summoner")
+		if is_instance_valid(boss) and boss.is_down and not enemy.is_down:
+			enemy.hp = 0
+			enemy._go_down()
+			if enemy.attack_range:
+				_finish_enemy_skill(enemy, false)
+				enemy.attack_range.visible = false
+
+
+## Winded: pushed or pulled by a wall boss, a party member loses ground on
+## the timeline.
+func _wind(boss: Combatant, target: Combatant, lines: PackedStringArray) -> void:
+	if boss.winded_timeline <= 0.0 or target.team != Combatant.Team.PARTY or target.is_down:
+		return
+	_push_back(target, boss.winded_timeline)
+	_count("winded")
+	_popup(target, "WINDED", Color(0.75, 0.9, 1.0))
+	lines.append("%s is winded" % target.display_name)
+
+
+## A rock-breaking blast cracks every rock in its area; enough cracks and
+## the rock crumbles (it grows back later).
+func _crack_rocks(boss: Combatant, def: EnemySkill) -> void:
+	if def == null or not def.breaks_rocks or boss.rock_regrow_turns <= 0 or boss.attack_range == null:
+		return
+	for rock in arena.obstacles():
+		if rock.kind != ArenaObstacle.Kind.ROCK or not boss.attack_range.contains(rock.global_position, rock.radius):
+			continue
+		if rock.crack(boss.rock_crack_limit):
+			rock.set_meta("broken_by", boss)
+			rock.set_meta("regrow_in", boss.rock_regrow_turns)
+			_count("rocks_broken")
+			_popup(rock, "ROCK SHATTERS", Color(0.9, 0.8, 0.6))
+			_flash("The blast shatters a rock!")
+		else:
+			_popup(rock, "CRACKED", Color(0.85, 0.8, 0.7))
+
+
+## Below its crumble share, a wall boss's arena loses its lethal edges'
+## outer strip (once). Anyone standing there teeters.
+func _check_crumble() -> void:
+	for boss in enemies:
+		if not boss.anchored or boss.crumble_at_share <= 0.0 or boss.is_down or boss.get_meta("crumbled", false):
+			continue
+		if boss.hp > boss.max_hp * boss.crumble_at_share:
+			continue
+		boss.set_meta("crumbled", true)
+		for bit in [Arena.SIDE_NORTH, Arena.SIDE_EAST, Arena.SIDE_SOUTH, Arena.SIDE_WEST]:
+			if arena.lethal_sides & bit:
+				arena.crumble(bit, boss.crumble_meters)
+		_count("crumbles")
+		_flash("The cliff edge crumbles away! The drop is %.1f m closer" % boss.crumble_meters, 4.0)
+		for c in combatants:
+			if not c.is_down and not c.boss and arena.lethal_at(c.global_position):
+				_teeter_or_fall(c)
+
+
 ## Ends the battle in victory once every enemy is down.
 func _check_enemies() -> void:
 	if _game_over:
 		return
+	_check_crumble()
+	_down_orphan_summons()
 	for enemy in enemies:
 		if enemy.is_down and enemy.attack_range and (enemy.attack_range.visible or enemy.attack_range.has_meta("faded_for_strike")):
 			enemy.attack_range.remove_meta("faded_for_strike")
@@ -4534,6 +4864,10 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 ## Puts a fighter right behind an enemy, facing it (Shadowstep).
 func _step_behind(mover: Combatant, enemy: Combatant) -> void:
 	var back := -enemy.flat_forward()
+	if enemy.anchored:
+		# Nothing behind a wall: appear at its side (its "cheek") instead.
+		var side := enemy.flat_forward().cross(Vector3.UP)
+		back = side if side.dot(mover.global_position - enemy.global_position) >= 0.0 else -side
 	mover.global_position = enemy.global_position + back * (enemy.body_radius + mover.body_radius + 0.25)
 	_keep_in_arena(mover)
 	mover.face_toward(enemy.global_position - mover.global_position, 1.0, 100000.0)
@@ -5292,7 +5626,12 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			var dir := user.global_position - target.global_position
 			dir.y = 0.0
 			var room := maxf(dir.length() - user.body_radius - target.body_radius - 0.2, 0.0)
-			if room > 0.0:
+			if target.anchored and room > 0.0:
+				# A wall boss can't be moved: the chain pulls the Assassin to it.
+				user.global_position -= dir.normalized() * minf(float(skill["pull"]), room)
+				_keep_in_arena(user)
+				message += " (it doesn't budge: he's pulled to it)"
+			elif room > 0.0:
 				target.global_position += dir.normalized() * minf(float(skill["pull"]), room)
 				_keep_in_arena(target, true)  # dragged over a hole: it falls
 			if target.marks > 0:

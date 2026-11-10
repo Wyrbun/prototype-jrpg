@@ -23,6 +23,7 @@ shape = 1
 radius = 9.0
 special = 4
 heal_share = 0.15
+heal_cap = 60
 interrupt_hits = 3
 interrupt_range = 1.5
 

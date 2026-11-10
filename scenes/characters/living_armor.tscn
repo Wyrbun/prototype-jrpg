@@ -58,6 +58,14 @@ fills_arena = true
 lethal = true
 cover_rock = true
 
+[sub_resource type="Resource" id="Skill_5"]
+script = ExtResource("2_skill")
+skill_name = "Parry Stance"
+kind = 3
+weight = 1
+shape = 1
+radius = 2.4
+
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(1.2, 2.0, 1.0)
 
@@ -74,7 +82,7 @@ interrupt_resist = 3
 move_speed = 4.0
 turn_speed_degrees = 120.0
 body_radius = 0.8
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)

@@ -151,8 +151,15 @@ end-of-fight screen to open the folder.
     in. The steered fighter can walk to the very edge; when its middle goes
     over, the fight pauses on a **save ring** (like a Parry, `edge_save_seconds`
     1.0, window = `parry_window`): Parry as it turns gold to be put back on
-    solid ground, otherwise it falls. **One save per character per fight**
-    (used even if failed); after that, walking over means falling.
+    solid ground, otherwise it falls. The same save applies when a party
+    member is **pushed or pulled** over (several at once queue up, one save
+    at a time). A caught save leaves the fighter **Off-Balance** for
+    `off_balance_turns` (3) of their own turns: going over an edge again in
+    that time is a fall, no save. Then saves work again.
+  - **Bracing:** Defend (`defend_cost` AP) during a strike that pushes or
+    pulls (launch, pull) makes the move `defend_move_share` (half) as long
+    for fighters who can Block (or a guarding Knight covers), even when the
+    damage itself can't be blocked (Inhale, Exhale). Popup: BRACED.
   - Enemy skills with `launch` (throw away) or `pull` (drag towards the
     enemy, on the last hit) show **red arrows** on their area, sliding the
     way you'll be moved. Pulls drag through anything: holes, edges, fire.
@@ -161,14 +168,35 @@ end-of-fight screen to open the folder.
   the east edge lethal, two holes in the middle and one rock.
 - Enemies and allies **steer around** obstacles; an enemy without a clear
   view of its target keeps walking until it has one.
-- Rounds 7-10 use the Round 11 arena for now (no mockup yet).
-- **Party picker** (`scripts/battle/party_picker.gd`): from Round 7
-  (`PICK_PARTY_FROM` = index 6) the fight opens paused behind a "Choose your
+- Rounds 8-10, 13 and the Special Match use the Grand arena; Round 11 (the Gale Maw) the **Cliff** (`arena_cliff.tscn`: 22 x 14, the south edge lethal, two rocks 7 m out from the wall); Round 12 (Golem + Kobold + Ogre) the Rock Field.
+- **Wall bosses** (`anchored`): placed with their centre on the middle of
+  the far wall at the start (`_anchor_to_wall`), half the body in the wall,
+  facing into the arena. They never walk or turn, can't be moved (knockback,
+  Hook, throws), and their pushes and pulls run straight across the arena
+  (perpendicular to the wall; Undertow's lines pull along the line). Rocks
+  shelter you when they stand between you and the wall straight ahead
+  (`_strike_reaches`). Shadowstep lands at their side; Hook pulls the
+  Assassin to them instead. New area shape **BAND**: a strip across the
+  arena from `inner_radius` to `radius`, `width` wide, optionally split into
+  `lanes` with equal gaps. A strike can now have a generic `follow_up` (Deep
+  Breath: Inhale, then Maw Bite `follow_up_delay` s later).
+  Wall-boss extras (exports on `Combatant`): `crumble_at_share` /
+  `crumble_meters` (the arena's lethal sides move in once, `Arena.crumble`),
+  `rock_regrow_turns` / `rock_crack_limit` (skills with `breaks_rocks`
+  crack `ArenaObstacle` rocks in their area; broken rocks drop out of
+  `obstacles()` until they regrow), `winded_timeline` (timeline push on
+  everyone it moves), `summon_scene` / `summon_every` / `summon_count`
+  (summons join `enemies` and `combatants` mid-fight and go down with
+  their summoner). `EnemySkill.line_extend` sets how far LINE_TO_EACH lines
+  run past their target; `double_on_off_balance` gives Off-Balance fighters
+  a second line.
+- **Party picker** (`scripts/battle/party_picker.gd`): from Round 8
+  (`PICK_PARTY_FROM` = index 7) the fight opens paused behind a "Choose your
   party" panel: tick 1 to 4 of the six classes (solo allowed), then start;
   the scene reloads with that party (`chosen_party`, `chosen_for_round`).
   Retrying keeps the pick, a new round asks again, Esc goes to the title.
 - An `Encounter` can have a `tip`, shown for 9 s when the fight starts
-  (Round 6 explains the Assassin).
+  (Round 6 explains the Assassin, Round 7 the Monk).
 
 ## Title screen and tutorial (built)
 

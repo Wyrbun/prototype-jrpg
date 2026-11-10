@@ -1,0 +1,187 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/battle/enemy_skill.gd" id="2_skill"]
+[ext_resource type="PackedScene" path="res://scenes/characters/gust_sprite.tscn" id="3_sprite"]
+
+[sub_resource type="Resource" id="Skill_1"]
+script = ExtResource("2_skill")
+skill_name = "Inhale"
+kind = 4
+weight = 2
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 8
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+pull = 4.0
+cast_speed = 0.8
+fills_arena = true
+
+[sub_resource type="Resource" id="Skill_2"]
+script = ExtResource("2_skill")
+skill_name = "Exhale"
+kind = 4
+weight = 2
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 12
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+launch = 7.0
+cast_speed = 0.8
+fills_arena = true
+breaks_rocks = true
+
+[sub_resource type="Resource" id="Skill_3"]
+script = ExtResource("2_skill")
+skill_name = "Maw Bite"
+kind = 1
+weight = 2
+shape = 0
+radius = 8.0
+angle = 100.0
+damage = 80
+windup = 1.4
+
+[sub_resource type="Resource" id="Skill_4"]
+script = ExtResource("2_skill")
+skill_name = "Deep Breath"
+kind = 4
+weight = 2
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 8
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+pull = 4.0
+cast_speed = 0.8
+fills_arena = true
+follow_up = SubResource("Skill_3")
+follow_up_delay = 1.5
+
+[sub_resource type="Resource" id="Skill_5"]
+script = ExtResource("2_skill")
+skill_name = "Gale Lanes"
+kind = 0
+weight = 2
+shape = 4
+radius = 14.0
+width = 22.0
+inner_radius = 0.0
+lanes = 3
+damage = 40
+windup = 1.2
+launch = 5.0
+
+[sub_resource type="Resource" id="Skill_6"]
+script = ExtResource("2_skill")
+skill_name = "Breaker"
+kind = 1
+weight = 2
+shape = 4
+radius = 14.0
+width = 22.0
+inner_radius = 7.0
+damage = 52
+windup = 1.4
+launch = 4.0
+breaks_rocks = true
+
+[sub_resource type="Resource" id="Skill_7"]
+script = ExtResource("2_skill")
+skill_name = "Wall Sweep"
+kind = 0
+weight = 2
+shape = 4
+radius = 5.5
+width = 22.0
+inner_radius = 0.0
+damage = 46
+windup = 1.1
+launch = 4.0
+
+[sub_resource type="Resource" id="Skill_8"]
+script = ExtResource("2_skill")
+skill_name = "Undertow"
+kind = 4
+weight = 1
+shape = 2
+radius = 24.0
+width = 1.4
+damage = 18
+windup = 1.3
+pull = 3.0
+always_hits = true
+special = 2
+overlap = 1
+line_extend = 3.5
+double_on_off_balance = true
+
+[sub_resource type="Resource" id="Skill_9"]
+script = ExtResource("2_skill")
+skill_name = "Gale Burst"
+kind = 4
+weight = 2
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 12
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+launch = 7.0
+cast_speed = 0.8
+fills_arena = true
+follow_up = SubResource("Skill_5")
+follow_up_delay = 1.0
+breaks_rocks = true
+
+[sub_resource type="CylinderMesh" id="Mesh_body"]
+top_radius = 4.0
+bottom_radius = 4.0
+height = 4.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.42, 0.47, 0.55, 1)
+
+[node name="GaleMaw" instance=ExtResource("1_base")]
+boss = true
+display_name = "Gale Maw"
+max_hp = 1200
+speed = 20.0
+cast_zone_speed = 0.5
+interrupt_resist = 3
+move_speed = 0.0
+no_positionals = true
+anchored = true
+crumble_at_share = 0.5
+crumble_meters = 2.5
+rock_regrow_turns = 3
+rock_crack_limit = 2
+winded_timeline = 12.0
+summon_scene = ExtResource("3_sprite")
+summon_every = 4
+summon_count = 2
+body_radius = 4.0
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9")])
+
+[node name="Body" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+mesh = SubResource("Mesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="Nose" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, -4.1)
+
+[node name="NameLabel" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
+
+[node name="AttackRange" parent="."]
+radius = 8.0

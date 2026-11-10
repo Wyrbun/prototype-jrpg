@@ -24,6 +24,7 @@ radius = 8.0
 width = 1.0
 damage = 26
 windup = 1.2
+launch = 3.0
 stops_at_first_hit = true
 
 [sub_resource type="Resource" id="Skill_3"]

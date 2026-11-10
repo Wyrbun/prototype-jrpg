@@ -61,9 +61,27 @@ func _ready() -> void:
 func obstacles() -> Array[ArenaObstacle]:
 	var list: Array[ArenaObstacle] = []
 	for child in get_children():
-		if child is ArenaObstacle:
+		if child is ArenaObstacle and not child.broken:
 			list.append(child)
 	return list
+
+
+## Rectangle sides that have crumbled away: bit -> meters lost (the Cliff).
+var _insets := {}
+
+
+## A lethal side breaks away: the drop moves `meters` further in.
+func crumble(side: int, meters: float) -> void:
+	_insets[side] = float(_insets.get(side, 0.0)) + meters
+	_rebuild_floor()
+
+
+## [min x, max x, min z, max z] of the standing floor (rectangle).
+func _bounds() -> Array:
+	var hx := size.x / 2.0
+	var hz := size.y / 2.0
+	return [-hx + float(_insets.get(SIDE_WEST, 0.0)), hx - float(_insets.get(SIDE_EAST, 0.0)),
+			-hz + float(_insets.get(SIDE_NORTH, 0.0)), hz - float(_insets.get(SIDE_SOUTH, 0.0))]
 
 
 ## Where a group starts and which way it faces. Fighters stand side by
@@ -108,11 +126,10 @@ func keep_inside(fighter: Node3D, body_radius: float, lethal_open: bool = false)
 			p.x = flat.x
 			p.z = flat.z
 	else:
-		var hx := size.x / 2.0 - body_radius
-		var hz := size.y / 2.0 - body_radius
+		var b := _bounds()
 		var open := lethal_sides if lethal_open else 0
-		p.x = clampf(p.x, -INF if open & SIDE_WEST else -hx, INF if open & SIDE_EAST else hx)
-		p.z = clampf(p.z, -INF if open & SIDE_NORTH else -hz, INF if open & SIDE_SOUTH else hz)
+		p.x = clampf(p.x, -INF if open & SIDE_WEST else b[0] + body_radius, INF if open & SIDE_EAST else b[1] - body_radius)
+		p.z = clampf(p.z, -INF if open & SIDE_NORTH else b[2] + body_radius, INF if open & SIDE_SOUTH else b[3] - body_radius)
 	fighter.global_position = p
 
 
@@ -124,10 +141,9 @@ func lethal_at(point: Vector3) -> bool:
 			return true
 	if shape == Shape.CIRCLE:
 		return lethal_rim and Vector2(p.x, p.z).length() > size.x / 2.0
-	var hx := size.x / 2.0
-	var hz := size.y / 2.0
-	return (lethal_sides & SIDE_EAST and p.x > hx) or (lethal_sides & SIDE_WEST and p.x < -hx) \
-			or (lethal_sides & SIDE_SOUTH and p.z > hz) or (lethal_sides & SIDE_NORTH and p.z < -hz)
+	var b := _bounds()
+	return (lethal_sides & SIDE_EAST and p.x > b[1]) or (lethal_sides & SIDE_WEST and p.x < b[0]) \
+			or (lethal_sides & SIDE_SOUTH and p.z > b[3]) or (lethal_sides & SIDE_NORTH and p.z < b[2])
 
 
 ## Which way is back to safety from a point at (or over) a lethal drop.
@@ -142,9 +158,8 @@ func inward(point: Vector3) -> Vector3:
 	if shape == Shape.CIRCLE:
 		return -p.normalized() if p.length() > 0.01 else Vector3.BACK
 	# The nearest side.
-	var hx := size.x / 2.0
-	var hz := size.y / 2.0
-	var gaps := {Vector3.LEFT: hx - p.x, Vector3.RIGHT: p.x + hx, Vector3.FORWARD: hz - p.z, Vector3.BACK: p.z + hz}
+	var b := _bounds()
+	var gaps := {Vector3.LEFT: b[1] - p.x, Vector3.RIGHT: p.x - b[0], Vector3.FORWARD: b[3] - p.z, Vector3.BACK: p.z - b[2]}
 	var best := Vector3.BACK
 	var best_gap := INF
 	for dir in gaps:
@@ -247,14 +262,17 @@ func _rebuild_floor() -> void:
 				edge.append_array([d0 * (r - EDGE_WIDTH) + lift, d0 * r + lift, d1 * r + lift,
 						d0 * (r - EDGE_WIDTH) + lift, d1 * r + lift, d1 * (r - EDGE_WIDTH) + lift])
 	else:
-		var hx := size.x / 2.0
-		var hz := size.y / 2.0
-		ground.append_array([Vector3(-hx, 0, -hz), Vector3(hx, 0, -hz), Vector3(hx, 0, hz),
-				Vector3(-hx, 0, -hz), Vector3(hx, 0, hz), Vector3(-hx, 0, hz)])
-		var outer := [Vector3(-hx, 0.02, -hz), Vector3(hx, 0.02, -hz), Vector3(hx, 0.02, hz), Vector3(-hx, 0.02, hz)]
+		var b := _bounds()
+		var x0: float = b[0]
+		var x1: float = b[1]
+		var z0: float = b[2]
+		var z1: float = b[3]
+		ground.append_array([Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1),
+				Vector3(x0, 0, z0), Vector3(x1, 0, z1), Vector3(x0, 0, z1)])
+		var outer := [Vector3(x0, 0.02, z0), Vector3(x1, 0.02, z0), Vector3(x1, 0.02, z1), Vector3(x0, 0.02, z1)]
 		var w := EDGE_WIDTH
-		var inner := [Vector3(-hx + w, 0.02, -hz + w), Vector3(hx - w, 0.02, -hz + w),
-				Vector3(hx - w, 0.02, hz - w), Vector3(-hx + w, 0.02, hz - w)]
+		var inner := [Vector3(x0 + w, 0.02, z0 + w), Vector3(x1 - w, 0.02, z0 + w),
+				Vector3(x1 - w, 0.02, z1 - w), Vector3(x0 + w, 0.02, z1 - w)]
 		for i in 4:
 			if lethal_sides & (1 << i):
 				continue  # a drop: drawn as a death wall instead (below)
@@ -289,9 +307,8 @@ func _add_death_walls() -> void:
 				var a1 := TAU * (i + 1) / 72.0
 				paths.append([Vector3(cos(a0), 0, sin(a0)) * r, Vector3(cos(a1), 0, sin(a1)) * r])
 	else:
-		var hx := size.x / 2.0
-		var hz := size.y / 2.0
-		var corners := [Vector3(-hx, 0, -hz), Vector3(hx, 0, -hz), Vector3(hx, 0, hz), Vector3(-hx, 0, hz)]
+		var b := _bounds()
+		var corners := [Vector3(b[0], 0, b[2]), Vector3(b[1], 0, b[2]), Vector3(b[1], 0, b[3]), Vector3(b[0], 0, b[3])]
 		for i in 4:
 			if lethal_sides & (1 << i):
 				paths.append([corners[i], corners[(i + 1) % 4]])

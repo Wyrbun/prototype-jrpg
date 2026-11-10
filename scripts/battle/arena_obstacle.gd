@@ -23,6 +23,10 @@ enum Kind { ROCK, PIT, HOLE }
 		_rebuild()
 
 var _visual: MeshInstance3D = null
+## Breakable rocks (the Gale Maw): how many times it's been cracked, and
+## whether it has crumbled (then it's out of the arena until it regrows).
+var cracks := 0
+var broken := false
 ## Holes: the ring of skulls slowly turns round the drop.
 var _skull_ring: Node3D = null
 const SKULL_TURN_SPEED := 0.25  # radians per second
@@ -35,6 +39,30 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _skull_ring != null and not Engine.is_editor_hint():
 		_skull_ring.rotation.y += SKULL_TURN_SPEED * delta
+
+
+## A wall boss's blast cracks it; at `limit` cracks it crumbles. Returns
+## true when it crumbles.
+func crack(limit: int) -> bool:
+	if kind != Kind.ROCK or broken:
+		return false
+	cracks += 1
+	if cracks >= limit:
+		broken = true
+		visible = false
+		return true
+	if _visual and _visual.material_override:
+		var m := _visual.material_override as StandardMaterial3D
+		m.albedo_color = m.albedo_color.darkened(0.35)  # cracked
+	return false
+
+
+## It grows back whole.
+func regrow() -> void:
+	broken = false
+	cracks = 0
+	visible = true
+	_rebuild()
 
 
 func blocks_sight() -> bool:

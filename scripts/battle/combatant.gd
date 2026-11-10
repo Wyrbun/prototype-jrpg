@@ -81,6 +81,26 @@ enum Team { PARTY, ENEMY }
 ## what its partner is preparing (one readies Ranged Attack, the other a
 ## Power Shot), and only one holds a Defense or Counter stance at a time.
 @export var team_tactics := false
+## Wall bosses (the Gale Maw): set against the middle of the arena's far
+## wall at the start, it never walks or turns, and nothing moves it.
+@export var anchored := false
+## Wall boss: below this share of max HP the arena's lethal sides crumble
+## crumble_meters further in, once (0 = never).
+@export_range(0.0, 1.0) var crumble_at_share: float = 0.0
+@export var crumble_meters: float = 2.5
+## Wall boss: its rock-breaking skills crack arena rocks; this many cracks
+## crumble one, and it grows back after rock_regrow_turns of its actions
+## (0 = rocks never break).
+@export var rock_regrow_turns: int = 0
+@export var rock_crack_limit: int = 2
+## Wall boss: anyone it pushes or pulls is Winded, pushed back this far
+## on the timeline (0 = off).
+@export var winded_timeline: float = 0.0
+## Wall boss: every summon_every of its actions it calls up to summon_count
+## of these (topping up the ones still standing).
+@export var summon_scene: PackedScene = null
+@export var summon_every: int = 4
+@export var summon_count: int = 2
 ## With team_tactics: how far apart partners try to stand, in metres.
 @export var tactics_spread := 8.0
 
@@ -482,7 +502,7 @@ func status_text() -> String:
 			var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
 			tags.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED"}
+			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED", "off_balance": "OFF-BALANCE"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())
@@ -607,6 +627,8 @@ func step(direction: Vector3, delta: float) -> void:
 ## Turns toward a direction, no faster than turn_speed_degrees allows
 ## (or max_degrees_per_second, if given).
 func face_toward(direction: Vector3, delta: float, max_degrees_per_second: float = -1.0) -> void:
+	if anchored:
+		return  # a wall boss always faces into the arena
 	direction.y = 0.0
 	if direction.length_squared() < 0.0001:
 		return

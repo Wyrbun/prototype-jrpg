@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_rock_field.tscn" id="a_rock_field"]
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_grand.tscn" id="a_grand"]
 [ext_resource type="PackedScene" path="res://scenes/arenas/arena_platform.tscn" id="a_platform"]
+[ext_resource type="PackedScene" path="res://scenes/arenas/arena_cliff.tscn" id="a_cliff"]
 [ext_resource type="PackedScene" path="res://scenes/characters/knight.tscn" id="c_knight"]
 [ext_resource type="PackedScene" path="res://scenes/characters/archer.tscn" id="c_archer"]
 [ext_resource type="PackedScene" path="res://scenes/characters/mage.tscn" id="c_mage"]
@@ -22,6 +23,8 @@
 [ext_resource type="PackedScene" path="res://scenes/characters/living_armor.tscn" id="c_living_armor"]
 [ext_resource type="PackedScene" path="res://scenes/characters/dragon_hatchling.tscn" id="c_dragon_hatchling"]
 [ext_resource type="PackedScene" path="res://scenes/characters/assassin.tscn" id="c_assassin"]
+[ext_resource type="PackedScene" path="res://scenes/characters/monk.tscn" id="c_monk"]
+[ext_resource type="PackedScene" path="res://scenes/characters/gale_maw.tscn" id="c_gale_maw"]
 
 [sub_resource type="Resource" id="Round_1"]
 script = ExtResource("2_encounter")
@@ -58,7 +61,7 @@ arena = ExtResource("a_platform")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage")])
 enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_bandit_arcanist"), ExtResource("c_orc_shaman")])
 
-[sub_resource type="Resource" id="Round_Assassin"]
+[sub_resource type="Resource" id="Round_6"]
 script = ExtResource("2_encounter")
 title = "Round 6"
 arena = ExtResource("a_square")
@@ -66,42 +69,58 @@ party = Array[PackedScene]([ExtResource("c_assassin"), ExtResource("c_knight")])
 enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_goblin_fighter")])
 tip = "The Assassin joins! Hit the Ogre from behind: the violet arc of its ring.\nThe Goblin's full ring means any side counts. Backstab from behind adds Marks.\nMarks auto-parry for the Assassin and make Execute cheaper."
 
-[sub_resource type="Resource" id="Round_6"]
+[sub_resource type="Resource" id="Round_7"]
 script = ExtResource("2_encounter")
 title = "Round 7"
-arena = ExtResource("a_grand")
-party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
-enemies = Array[PackedScene]([ExtResource("c_stone_golem")])
+arena = ExtResource("a_square")
+party = Array[PackedScene]([ExtResource("c_monk"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_goblin_fighter"), ExtResource("c_ogre_warrior")])
+tip = "The Monk joins! Knee Smash climbs his bar a step: 30, 50, 80, then 100.\nAll-Perfect Arts leave tokens; at the top, Crowd Cheer opens Tortoise Special.\nProvoke the Ogre and Parry it for Rush; Suplex counters a strike."
 
-[sub_resource type="Resource" id="Round_7"]
+[sub_resource type="Resource" id="Round_8"]
 script = ExtResource("2_encounter")
 title = "Round 8"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
-enemies = Array[PackedScene]([ExtResource("c_living_armor")])
+enemies = Array[PackedScene]([ExtResource("c_stone_golem")])
 
-[sub_resource type="Resource" id="Round_8"]
+[sub_resource type="Resource" id="Round_9"]
 script = ExtResource("2_encounter")
 title = "Round 9"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
-enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_kobold_archer"), ExtResource("c_ogre_warrior")])
-
-[sub_resource type="Resource" id="Round_9"]
-script = ExtResource("2_encounter")
-title = "Round 10"
-arena = ExtResource("a_grand")
-party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
-enemies = Array[PackedScene]([ExtResource("c_living_armor"), ExtResource("c_orc_shaman"), ExtResource("c_goblin_fighter"), ExtResource("c_goblin_fighter")])
+enemies = Array[PackedScene]([ExtResource("c_living_armor")])
 
 [sub_resource type="Resource" id="Round_10"]
 script = ExtResource("2_encounter")
-title = "Round 11"
+title = "Round 10"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
 enemies = Array[PackedScene]([ExtResource("c_dragon_hatchling")])
 
 [sub_resource type="Resource" id="Round_11"]
+script = ExtResource("2_encounter")
+title = "Round 11"
+arena = ExtResource("a_cliff")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_gale_maw")])
+tip = "The Gale Maw never moves: it breathes. Inhale pulls you toward its mouth, Exhale blows you toward the drop.\nHide behind a rock to shelter from its breath. Defend shortens any push or pull.\nGo over the edge and you can Parry to catch yourself, but you're Off-Balance for 3 turns after.\nIts blasts crack the rocks (two cracks and one shatters for a while), and at half HP the cliff edge crumbles closer."
+
+[sub_resource type="Resource" id="Round_12"]
+script = ExtResource("2_encounter")
+title = "Round 12"
+arena = ExtResource("a_rock_field")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_kobold_archer"), ExtResource("c_ogre_warrior")])
+
+[sub_resource type="Resource" id="Round_13"]
+script = ExtResource("2_encounter")
+title = "Round 13"
+arena = ExtResource("a_grand")
+party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
+enemies = Array[PackedScene]([ExtResource("c_living_armor"), ExtResource("c_orc_shaman"), ExtResource("c_goblin_fighter"), ExtResource("c_goblin_fighter")])
+
+[sub_resource type="Resource" id="Round_Special"]
 script = ExtResource("2_encounter")
 title = "Special Match"
 arena = ExtResource("a_grand")
@@ -110,4 +129,4 @@ enemies = Array[PackedScene]([ExtResource("c_stone_golem"), ExtResource("c_livin
 
 [resource]
 script = ExtResource("1_rush")
-rounds = Array[ExtResource("2_encounter")]([SubResource("Round_1"), SubResource("Round_2"), SubResource("Round_3"), SubResource("Round_4"), SubResource("Round_5"), SubResource("Round_Assassin"), SubResource("Round_6"), SubResource("Round_7"), SubResource("Round_8"), SubResource("Round_9"), SubResource("Round_10"), SubResource("Round_11")])
+rounds = Array[ExtResource("2_encounter")]([SubResource("Round_1"), SubResource("Round_2"), SubResource("Round_3"), SubResource("Round_4"), SubResource("Round_5"), SubResource("Round_6"), SubResource("Round_7"), SubResource("Round_8"), SubResource("Round_9"), SubResource("Round_10"), SubResource("Round_11"), SubResource("Round_12"), SubResource("Round_13"), SubResource("Round_Special")])

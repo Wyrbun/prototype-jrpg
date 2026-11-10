@@ -9,7 +9,10 @@ extends Resource
 
 ## The area's shape on the floor. A half-circle is a Cone with a 180 angle;
 ## a circle around the enemy is a Cone with a 360 angle (or Circle).
-enum Shape { CONE, CIRCLE, LINE, DONUT }
+## BAND (wall bosses): a strip across the arena, `width` wide, from
+## inner_radius to radius in front of the enemy; with `lanes` above 1 it's
+## split into that many lanes with equal gaps between them.
+enum Shape { CONE, CIRCLE, LINE, DONUT, BAND }
 ## How the skill works beyond "one area in front of the enemy":
 ## - ON_EACH_TARGET: a circle (radius) dropped on every party member.
 ##   It follows them while hidden and stays put once revealed.
@@ -45,6 +48,9 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var width: float = 1.2
 ## Size of the safe hole in the middle, in meters (Donut only).
 @export var inner_radius: float = 1.5
+## BAND: how many lanes (1 = one solid strip). Lanes and the gaps between
+## them share the width equally: 3 lanes = lane, gap, lane, gap, lane.
+@export_range(1, 6) var lanes: int = 1
 
 @export_group("Hit")
 ## Damage of a hit that isn't Parried or Defended.
@@ -168,6 +174,16 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export_range(0.0, 1.0) var contain_share: float = 0.1
 ## HEAL_ALLIES: share of each ally's max HP healed.
 @export_range(0.0, 1.0) var heal_share: float = 0.2
+## HEAL_ALLIES: the most one ally can be healed per ritual (0 = no cap), so
+## a share of a boss's HP doesn't undo a whole combo.
+@export var heal_cap: int = 0
+## LINE_TO_EACH: how far each line runs past its target (catching anyone
+## lined up behind).
+@export var line_extend: float = 1.0
+## LINE_TO_EACH: an Off-Balance party member gets two lines.
+@export var double_on_off_balance: bool = false
+## Wall bosses: this blast cracks the arena's rocks in its area.
+@export var breaks_rocks: bool = false
 @export var interrupt_hits: int = 3
 @export var interrupt_range: float = 1.5
 

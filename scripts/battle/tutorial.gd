@@ -420,7 +420,7 @@ func _build_steps() -> void:
 	_note(10, "Special skills",
 		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the caster hard to stop them, then step out\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
 	_note(10, "Drops",
-		"Some arenas have drops: holes and edges marked by a glowing red line lined with skulls. Anyone knocked or pulled over one falls out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nWalk into a drop yourself and you teeter: {parry} as the ring turns gold to catch yourself. Each fighter gets that save once per fight.")
+		"Some arenas have drops: holes and edges marked by a glowing red line lined with skulls. Regular enemies knocked or pulled over one fall out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nGo over a drop yourself (walking, pushed or pulled) and you teeter: {parry} as the ring turns gold to catch yourself. After a save you're Off-Balance for 3 turns: going over again in that time is a fall.\n\nPushed or pulled by an enemy? {defend} as it strikes to brace: the move is half as long (for classes that can Block).")
 
 	# 11. The Assassin: positioning and Marks
 	_note(11, "The Assassin",
