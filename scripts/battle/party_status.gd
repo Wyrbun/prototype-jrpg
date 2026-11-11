@@ -62,6 +62,10 @@ func _draw() -> void:
 			var shield_width := minf(BAR_WIDTH * float(c.shield) / c.max_hp, BAR_WIDTH)
 			draw_rect(Rect2(bar.position, Vector2(shield_width, 4)), Color(0.55, 0.8, 1.0))
 
+		var stagger := c.stagger_view() if c.team == Combatant.Team.ENEMY else {}
+		if not stagger.is_empty():
+			_stagger_bar(Rect2(bar.position.x, bar.end.y + 3, BAR_WIDTH, 6), stagger)
+
 		var hp_text := "DOWN" if c.is_down else "%d / %d" % [c.hp, c.max_hp]
 		_text(font, Vector2(bar.end.x + 10, y + 19), hp_text, 17, name_color)
 		var tags := "" if c.is_down else c.status_text()
@@ -78,6 +82,28 @@ func _draw() -> void:
 			while tags.length() > 4 and font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x > room:
 				tags = tags.substr(0, tags.length() - 2) + "…"
 			_text(font, Vector2(bar.position.x, y + 39), tags, tag_size, Color(0.6, 0.85, 1.0))
+
+
+## The Stagger bar under an enemy's HP: gold, flashing when nearly full;
+## split into pips when it counts hits (Healing Ritual).
+func _stagger_bar(rect: Rect2, view: Dictionary) -> void:
+	draw_stagger_bar(self, rect, view, Time.get_ticks_msec() / 1000.0)
+
+
+## Shared with the timeline bar.
+static func draw_stagger_bar(canvas: CanvasItem, rect: Rect2, view: Dictionary, now: float) -> void:
+	var share := clampf(float(view["fill"]) / maxf(float(view["max"]), 1.0), 0.0, 1.0)
+	var gold := Color(1.0, 0.78, 0.25)
+	if share >= 0.75 and share < 1.0:
+		gold = gold.lerp(Color.WHITE, 0.5 + 0.5 * sin(now * 14.0))  # nearly there
+	canvas.draw_rect(rect, Color(0.08, 0.07, 0.04, 0.9))
+	canvas.draw_rect(Rect2(rect.position, Vector2(rect.size.x * share, rect.size.y)), gold)
+	if view.get("hits", false):
+		var pips := int(view["max"])
+		for k in range(1, pips):
+			var x := rect.position.x + rect.size.x * k / pips
+			canvas.draw_line(Vector2(x, rect.position.y), Vector2(x, rect.end.y), Color.BLACK, 2.0)
+	canvas.draw_rect(rect, Color(1.0, 0.85, 0.4), false, 1.0)
 
 
 func _text(font: Font, pos: Vector2, text: String, size: int, color: Color) -> void:

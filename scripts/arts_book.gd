@@ -29,10 +29,38 @@ static func discover(class_id: String, art_name: String) -> bool:
 	return true
 
 
+## Partial hints for hidden Arts: the recipe with only the moves the player
+## has already got right in place ("" where unknown). Kept in a "<class>.hints"
+## section, so count() doesn't see them.
+static func hint(class_id: String, art_name: String) -> Array:
+	return _load().get_value(class_id + ".hints", art_name, [])
+
+
+## Adds the moves in `pattern` ("" = not known) to the Art's hint. Returns
+## how many recipe moves are now known if the hint grew, else 0.
+static func learn_hint(class_id: String, art_name: String, pattern: Array) -> int:
+	var old := hint(class_id, art_name)
+	var merged: Array = []
+	var grew := false
+	for i in pattern.size():
+		var before: String = old[i] if i < old.size() else ""
+		var now: String = pattern[i] if pattern[i] != "" else before
+		if now != before:
+			grew = true
+		merged.append(now)
+	if not grew:
+		return 0
+	_load().set_value(class_id + ".hints", art_name, merged)
+	_file.save(PATH)
+	return merged.filter(func(m): return m != "").size()
+
+
 ## How many Arts have been discovered, across every class.
 static func count() -> int:
 	var total := 0
 	for section in _load().get_sections():
+		if section.ends_with(".hints"):
+			continue
 		for key in _file.get_section_keys(section):
 			if bool(_file.get_value(section, key, false)):
 				total += 1

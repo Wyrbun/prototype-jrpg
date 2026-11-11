@@ -27,6 +27,7 @@ windup = 2.0
 cannot_be_parried = true
 always_hits_target = true
 cast_speed = 0.6
+stagger_bar = 30
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")

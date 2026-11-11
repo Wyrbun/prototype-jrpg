@@ -17,6 +17,7 @@ shared_damage = true
 cast_speed = 0.6
 tracks_target = true
 always_hits_target = true
+stagger_bar = 90
 
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
@@ -45,6 +46,7 @@ trail_damage_per_second = 8.0
 special = 1
 overlap = 2
 always_hits = true
+stagger_bar = 120
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(2.0, 1.5, 2.4)

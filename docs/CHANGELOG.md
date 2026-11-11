@@ -4,6 +4,88 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Archer toned down
+
+The same playtest had the Archer at about twice everyone's damage per turn
+(82-147, against 19-110). Her moves alone weren't the cause; speed, reach,
+a bigger bar and Piercing Arrow stacked up.
+
+- Speed 13 -> 12; combo limit 70 -> 60.
+- Triple Shot 1.1 + 1.1 + 1.8 -> 1.0 + 1.0 + 1.6; Double Shot 1.25 x2 ->
+  1.15 x2 (keeps four Shoots as good as two Double Shots).
+- Piercing Arrow: full damage to the first enemy, 75% to the rest.
+- Agility 70 -> 60 AP (an Ability can't cost more than the combo limit).
+
+## Stagger, toned down after a full playtest
+
+- A playtest run (all 13 rounds won first try) showed Stagger locking
+  bosses out of their turns: the Dragon died without acting (2 Staggers),
+  the Gale Maw acted 3 times in 3 minutes and dealt no damage.
+- A Stagger now knocks the enemy back to 25 before the casting zone,
+  instead of to the start of the timeline: it loses the skill, not a lap.
+- **Stagger resistance:** each Stagger makes that enemy's bars 50% bigger
+  (of their base size) for the rest of the fight.
+
+## Art hints and a bigger combo bar while playing
+
+- **Partial hints for hidden Arts:** when a bar you play gets at least 2
+  moves of a hidden Art's recipe right, in the right places (3+ move Arts),
+  the Arts list shows them under the hidden count, never the name:
+  "??? Thrust + Thrust + ?  (2 of 3)". Hints add up across bars and are
+  saved with the discovered Arts; a flash says "Close to a hidden Art".
+- **Zoomed combo bar while playing:** small blocks (the Monk's 5 AP Punch
+  and Kick) zoom in so the smallest block is about 72 px wide; a long bar
+  scrolls with the playhead (kept a third of the way in), with arrows at
+  the edges. Classes whose blocks are already big enough look the same.
+- **Bigger timing boxes:** at least 14 px wide on the bar. The time you
+  have to press doesn't change.
+
+## Arts inherit their moves
+
+- Every Art now takes on the on-hit effects of the moves it's made of
+  (`Moves._inherit`): the strongest effect wins (Break over Pierce), numbers
+  take the larger value (halt, expose, burn, knockback, rally, front
+  bonus), flags add up (stun, draws aggro, chill, Stab marks), and a
+  barrier comes along (with its Perfect when the Art has the same timing).
+  Shape, reach, timing and class mechanics stay the Art's own.
+- What changed:
+  - Knight: Shield Wall halts 0.5 s; Smash ignores Defense; Crusader's Edge
+    halts 0.5 s.
+  - Archer: Stunning Arrow and Arrow Rain expose (+15% damage taken).
+  - Mage: Fireball, Steam Burst, Firestorm and Meteor Strike burn; Steam
+    Burst and Meteor Strike chill; Meteor Strike pushes 3 m.
+  - Cleric: Smite, Blessed Strike and Divine Judgment rally (+5 max AP);
+    Blessed Strike also gives a 10% barrier within 4 m (Perfect 15%,
+    5.5 m).
+  - Assassin: Ambush, Cutthroat and Thousand Cuts add Stab marks; Ambush,
+    Phantom Rush and Thousand Cuts get Shadowstep's 1.5x from the front.
+  - Monk: Knee Smash, Triple Rush and Mountain Crusher break Defense;
+    Mountain Crusher and Tortoise Special stun.
+
+## Stagger
+
+- **Stagger bars** on unavoidable skills (Power Shot, Fireball, Curse, Dark
+  Bolt, Breath, Burning Spike, and the Gale Maw's Inhale, Exhale, Undertow
+  and Gale Burst). Damage dealt head-on while the enemy prepares fills it;
+  Smash-type moves, breaking moves and Arts count 1.5x. A full bar
+  **Staggers** it: the skill breaks, the enemy goes back to the start of the
+  timeline and takes +25% damage until its next turn. The Maw's Exhale
+  turns into Broken Exhale instead (a ring with a safe middle by the Maw).
+- Healing Ritual and Shadowflare show their own rules (3 close hits; the
+  damage that contains it) as the same bar.
+- Gold bar under the enemy's HP and on its timeline marker; answer tags
+  STAGGERS, STAGGER +N%, NOT HEAD-ON; "Heavy" line in the move details; a
+  new tutorial note.
+- Parry's timeline push is now called **knocked back**.
+- Tuning: the first bars (40 to 200) filled only 0-20% before the skill
+  landed in bot fights, because the party gets about half a turn while an
+  enemy crosses the casting zone. Skills with a bar now cast at half speed
+  there, and bars are smaller (30 to 120). With a bot that steps in front
+  of casters, it breaks about half of them. Living Armor went from mostly
+  lost to won (2 of 2), and the Gale Maw from ~450 HP left to 39-74 HP
+  left. The Dragon is still lost in every bot fight, with or without
+  Stagger.
+
 ## The Gale Maw gets meaner
 
 Six additions, each measured alone with the bot (standard party, 3 seeds,
@@ -25,7 +107,11 @@ wins every fight (Maw at 0 to 52 HP).
   Alone: 2 wins, 1 timeout at 45.
 - **The cliff crumbles** at half HP: the south edge breaks away 2.5 m
   (once); anyone on that strip teeters. Alone: 2 wins, 1 timeout at 86.
-- All six together: the Maw survives every bot fight with 365-786 HP left.
+- All six together: the Maw survives every bot fight with 365-786 HP left,
+  so it's toned down to **1 sprite every 4th action** (if none is up).
+  Bot fights then end with the Maw at 308-380 HP (standard party) and
+  500-687 (Monk, Knight, Cleric); 2 sprites every 5th action was
+  harsher (519-769).
 - Testing: `BattleArena.maw_off` (env `MAW_OFF` in the soak bot) switches
   features off for comparisons.
 

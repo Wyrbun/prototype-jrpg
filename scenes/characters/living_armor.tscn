@@ -28,6 +28,7 @@ windup = 1.4
 special = 1
 overlap = 1
 always_hits = true
+stagger_bar = 70
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")

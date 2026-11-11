@@ -184,6 +184,13 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var double_on_off_balance: bool = false
 ## Wall bosses: this blast cracks the arena's rocks in its area.
 @export var breaks_rocks: bool = false
+## Stagger: unavoidable skills get a bar of this much damage (0 = none).
+## Damage dealt to the caster head-on while it prepares fills it (heavy
+## moves count 1.5x); a full bar Staggers it.
+@export var stagger_bar: int = 0
+## Stagger: instead of being cancelled, the skill turns into this one
+## (Exhale becomes a ring with a safe spot by the Maw).
+@export var stagger_into: EnemySkill = null
 @export var interrupt_hits: int = 3
 @export var interrupt_range: float = 1.5
 

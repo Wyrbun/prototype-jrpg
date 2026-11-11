@@ -409,7 +409,7 @@ Stances still work for any enemy that lists them.
   It turns gold for the last `parry_window` (0.25 s). Windup: Attack 1.0 s,
   Smash 1.4 s (heavier, slower to land).
 - **Parry (E)**: pressed while the ring is gold, no damage, the enemy is
-  **staggered** (pushed back 25 on the timeline), and the party's **max AP
+  **knocked back** (pushed back 25 on the timeline), and the party's **max AP
   rises by 10** for the rest of the fight. Pressed too early: full damage,
   the target's turn is **pushed back 30** on the timeline, the party **loses
   all its AP**, and **max AP resets to 100**. One try per strike.
@@ -423,7 +423,7 @@ Stances still work for any enemy that lists them.
   Combo: 3): every hit still to come shows its own fainter ring, closing in
   so it reaches the marker exactly when that hit lands (later hits come
   every 0.55 x the wind-up). Each hit can be Parried in its own window and
-  the chain goes on: every Parry grows max AP, the enemy is staggered once
+  the chain goes on: every Parry grows max AP, the enemy is knocked back once
   per strike. **One Defend guards the whole chain** for a single
   10 AP. Launch only happens on the last hit; max AP is lost once per chain.
 - Assumption: one Parry/Defend input covers **everyone** caught in the strike.
@@ -489,6 +489,47 @@ How the party reacts when struck:
 
 When the party attacks (milestone 6), enemy stances matter: attacking into
 Defense is blocked unless you Smash, and attacking into Counter gets punished.
+
+## Stagger (built)
+
+Unavoidable enemy skills get a **Stagger bar**: the answer to a skill you
+can't dodge, Parry or Defend.
+
+- **Which skills:** only unavoidable ones (`EnemySkill.stagger_bar` > 0):
+  Kobold Power Shot 30, Arcanist Fireball 30, Shaman Curse 35, Living Armor
+  Dark Bolt 70, Dragon Breath 90 and Burning Spike 120, Gale Maw Inhale 70,
+  Exhale 90, Undertow 80, Gale Burst 120. The size is set per skill, by how
+  dangerous it is.
+- **Resistance:** each Stagger makes that enemy's bars 50% (of their base
+  size) bigger for the rest of the fight (`Combatant.staggers_taken`,
+  `stagger_need`): the first break is easy, chaining them gets hard.
+- **Slower casts:** a skill with a bar moves through the casting zone at
+  half its usual speed (`stagger_cast_speed` 0.5), so the party gets about
+  a turn to answer it. At full speed the party got about half a turn per
+  cast and bot fights filled bars only 0-20%.
+- **Filling:** damage dealt to the caster from the moment it starts
+  preparing (the bar shows once the skill is revealed). Only hits from in
+  front of it count (its front half; any side of a boss without
+  positionals); a hit from behind pops NOT HEAD-ON. **Heavy moves** (Smash
+  type, breaking moves, Arts) count 1.5x (`stagger_heavy_mult`). Burns and
+  Ripostes don't fill it.
+- **A full bar: STAGGERED.** The skill breaks (follow-ups included), the
+  enemy is knocked back to 25 before the casting zone (`stagger_knockback`:
+  it loses the skill, not a whole lap), and it takes **+25% damage**
+  (`staggered_bonus`) until its next turn. Some skills change instead of
+  breaking (`stagger_into`): the Gale Maw's Exhale becomes **Broken
+  Exhale**, a ring with a safe middle by the Maw (8 m), push 5 m. Then the
+  enemy keeps its place on the timeline.
+- **Shown:** a gold bar under the enemy's HP and under its timeline marker,
+  flashing past 75%. The skill label reads "STAGGER IT", the warning line
+  "(stagger it head-on)". Healing Ritual (3 close hits, as pips) and
+  Shadowflare (the damage that contains it) show their own rules as the
+  same bar (`Combatant.stagger_view`).
+- **Answer tags:** STAGGERS (this move should fill it), STAGGER +N% (how
+  much it adds), NOT HEAD-ON (warning). The move details box says "Heavy:
+  fills Stagger bars 1.5x faster".
+- Parry's timeline push is now called **knocked back**, so "Stagger" only
+  means the bar.
 
 ## Knockdown (ideas)
 
@@ -590,7 +631,7 @@ timing boxes.
 | Slash + Slash | Double Slash | 20 | 1.25 x2 = 2.5 (2.0) | basic |
 | Slash + Thrust | Lunge | 25 | 2.6 (2.4) | ignores Defense |
 | Guard Strike + Slash | Shield Rush | 25 | 1.2 x2 = 2.4 (1.9) | halts it 1 s (same once-per-action rule); draws its aggro |
-| Guard Strike + Guard Strike | Shield Wall | 30 | 1.5 (1.8) | sweep around the Knight (3 m circle): draws the aggro of every enemy hit; 10% max HP barrier to allies within 3 m |
+| Guard Strike + Guard Strike | Shield Wall | 30 | 1.5 (1.8) | sweep around the Knight (3 m circle): stops every enemy hit 0.5 s (from Guard Strike) and draws its aggro; 10% max HP barrier to allies within 3 m |
 | Thrust + Thrust + Slash | Smash | 40 | 4.2 (3.8) | Smash type, knocks it 4 m back (doesn't break Defense) |
 | Slash + Slash + Thrust + Guard Strike | Crusader's Edge (finisher) | 50 | 1.4 + 1.4 + 3.2 = 6.0 (4.3) | breaks Defense, cancels its attack (a stun, once per enemy action), knocks it 3 m back; draws its aggro |
 

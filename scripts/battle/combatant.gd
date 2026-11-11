@@ -111,7 +111,7 @@ var recoverable: int = 0
 ## True once HP reaches 0. A downed fighter takes no turns.
 var is_down := false
 ## Extra distance to send this fighter back on the timeline the next time
-## they return to the start (from a missed parry or a stagger).
+## they return to the start (from a missed parry or a knock-back).
 var timeline_penalty: float = 0.0
 ## Where this fighter is on the timeline. 0 is the start; reaching the
 ## battle's TIMELINE_LENGTH means it's their turn.
@@ -175,6 +175,8 @@ var extra_areas: Array[AttackRange] = []
 ## close-range hits taken during it (Healing Ritual), whether a growing
 ## area was contained, and the last skill used (to avoid repeating it).
 var cast_damage_taken := 0
+## Stagger: weighted damage dealt head-on to the skill being prepared.
+var stagger_fill := 0.0
 var interrupt_count := 0
 var contained := false
 var last_skill: EnemySkill = null
@@ -493,6 +495,24 @@ func current_move_speed() -> float:
 
 
 ## Short tags for the HP panel, e.g. "BRACE 2  SHIELD 26".
+## The Stagger bar to draw for the skill being prepared, once it's
+## revealed: {fill, max, hits} (hits: counted in hits, not damage), or {}.
+## Healing Ritual (close-range hits) and Shadowflare (damage contains it)
+## show their own rules as a bar too.
+func stagger_view() -> Dictionary:
+	var def := loaded_def
+	if def == null or not skill_revealed or is_down:
+		return {}
+	if def.stagger_bar > 0:
+		return {"fill": minf(stagger_fill, def.stagger_bar), "max": float(def.stagger_bar), "hits": false}
+	if def.special == EnemySkill.Special.HEAL_ALLIES and def.interrupt_hits > 0:
+		return {"fill": float(mini(interrupt_count, def.interrupt_hits)), "max": float(def.interrupt_hits), "hits": true}
+	if def.special == EnemySkill.Special.GROWING and def.contain_share > 0.0:
+		var need := float(ceili(max_hp * def.contain_share))
+		return {"fill": need if contained else minf(cast_damage_taken, need), "max": need, "hits": false}
+	return {}
+
+
 func status_text() -> String:
 	var tags: PackedStringArray = []
 	if climbs():
@@ -502,7 +522,7 @@ func status_text() -> String:
 			var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
 			tags.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED", "off_balance": "OFF-BALANCE"}
+			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED", "off_balance": "OFF-BALANCE", "staggered": "STAGGERED"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())

@@ -63,6 +63,11 @@ func _draw() -> void:
 			var name_pos := icon + Vector2(-name_size.x / 2.0, direction * (radius + 22.0) + 5.0)
 			draw_string_outline(font, name_pos, skill_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color.BLACK)
 			draw_string(font, name_pos, skill_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, skill_color)
+			var stagger := c.stagger_view()
+			if not stagger.is_empty():
+				# Its Stagger bar, just past the skill name.
+				var bar_y := icon.y + direction * (radius + 30.0) - (0.0 if direction > 0 else 5.0)
+				PartyStatus.draw_stagger_bar(self, Rect2(icon.x - 24.0, bar_y, 48.0, 5.0), stagger, _time)
 		if c == target:
 			var pulse := 0.5 + 0.5 * sin(_time * 6.0)
 			var gold := Color(1.0, 0.85, 0.3)

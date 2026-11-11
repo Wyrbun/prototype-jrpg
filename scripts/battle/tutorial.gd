@@ -300,7 +300,7 @@ func _build_steps() -> void:
 
 	# 5. Parry and Defend
 	_note(5, "Parry",
-		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets. Press {parry} as the ring turns gold to Parry: no damage, the enemy is staggered, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
+		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets. Press {parry} as the ring turns gold to Parry: no damage, the enemy is knocked back on the timeline, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
 	_goal(5, "Parry",
 		"Stand inside the revealed area and wait for the ring.",
 		"Parry a strike ({parry} when the ring turns gold)",
@@ -417,6 +417,8 @@ func _build_steps() -> void:
 	# 10. Special enemy skills (later enemies; the Training Golem doesn't use them)
 	_note(10, "Special skills",
 		"Later enemies have skills marked UNAVOIDABLE. Those can't be dodged, Parried or Defended: their circles and lines follow their targets until they land, and they just deal their damage. What matters is answering them:\n- Red sphere over everyone: spread out, so circles don't overlap\n- Arrows pointing inward: stack up, to share the damage\n- A circle on one person: they should stand alone\n\nGetting the answer wrong costs a max AP segment, like any avoidable hit.")
+	_note(10, "Stagger",
+		"Most of them can be broken, though. A skill marked STAGGER IT shows a gold Stagger bar under the enemy's HP and on the timeline. Damage you deal from in front of it fills the bar (Smash-type moves, breaking moves and Arts count 1.5x).\n\nFill it and the enemy is STAGGERED: the skill breaks (a few change into something weaker instead), it goes back to the start of the timeline, and it takes +25% damage until its next turn.\n\nMoves that fill the bar are tagged STAGGER or STAGGERS in the menu. Healing Ritual and growing circles show their own rules as the same bar.")
 	_note(10, "Special skills",
 		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the caster hard to stop them, then step out\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
 	_note(10, "Drops",

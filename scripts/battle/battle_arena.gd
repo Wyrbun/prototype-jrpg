@@ -30,7 +30,7 @@ extends Node3D
 ##
 ## Strikes: touching a live Attack/Smash area, or an enemy reaching the end
 ## of the bar, starts a strike. A ring shrinks onto each target in real time.
-##   E (Parry)  while the ring is gold: no damage, enemy staggered.
+##   E (Parry)  while the ring is gold: no damage, enemy knocked back.
 ##              Too early: full damage, turn pushed back, half your AP lost.
 ##   Q (Defend) any time: costs AP, you take part of the damage, and that
 ##              part comes back at your next turn if you aren't hit again.
@@ -218,6 +218,8 @@ static var chosen_for_round := -1
 ## Balance testing: wall-boss features to switch off ("burst", "crumble",
 ## "rocks", "winded", "sprites", "undertow").
 static var maw_off: PackedStringArray = []
+## Balance testing: Stagger bars never fill.
+static var stagger_off := false
 
 ## The tutorial's fight (data/tutorial.tres).
 @export var tutorial_encounter: Encounter
@@ -317,6 +319,14 @@ var _exec_reveal_left := 0.0
 @export var haste_timeline_bonus: float = 0.25
 ## Archer's Exposing Shot: extra damage an Exposed enemy takes from everyone.
 @export var exposed_bonus: float = 0.15
+## Stagger: heavy moves (Smash type, breaking moves, Arts) fill bars this
+## much faster; a Staggered enemy takes this much more damage until its
+## next turn.
+@export var stagger_heavy_mult: float = 1.5
+@export var staggered_bonus: float = 0.25
+## Stagger: skills with a bar move through the casting zone at this share
+## of their usual speed, so the party gets a real chance to fill it.
+@export var stagger_cast_speed: float = 0.5
 ## Archer's Agility: the extra hit deals this share of the move's first hit.
 @export var agility_hit_share: float = 0.5
 ## Archer's Riposte: meters she hops back after countering.
@@ -1016,8 +1026,12 @@ func _cast_speed(fighter: Combatant) -> float:
 	if bait >= 0.0:
 		return bait
 	if fighter.loaded_def != null and fighter.loaded_skill != Skills.NONE and fighter.timeline_pos >= cast_zone_start:
-		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed
+		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed * _stagger_slow(fighter.loaded_def)
 	return 1.0
+
+
+func _stagger_slow(def: EnemySkill) -> float:
+	return stagger_cast_speed if def.stagger_bar > 0 else 1.0
 
 
 ## Real seconds until a fighter reaches the end of the timeline.
@@ -1481,6 +1495,7 @@ func _begin_cast(enemy: Combatant) -> void:
 	var kind := enemy.loaded_def.kind
 	enemy.stance = kind if kind == Skills.Kind.DEFENSE or kind == Skills.Kind.COUNTER else Skills.NONE
 	enemy.cast_damage_taken = 0
+	enemy.stagger_fill = 0.0
 	enemy.interrupt_count = 0
 	enemy.set_meta("smash_hits", 0)
 	enemy.contained = false
@@ -1516,6 +1531,8 @@ func _reveal_skill(enemy: Combatant) -> void:
 		text += " STANCE"
 	if def.lethal:
 		text += "  -  HIDE BEHIND THE ROCK"
+	elif def.stagger_bar > 0:
+		text += "  -  STAGGER IT"
 	elif def.is_mechanic():
 		text += "  -  UNAVOIDABLE"
 	if def.ceiling_circles > 0:
@@ -1551,6 +1568,10 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 			return
 	if enemy.anchored:
 		_wall_boss_acts(enemy)
+	if enemy.loaded_def != null and enemy.loaded_def.stagger_bar > 0:
+		# Balance numbers: how full Stagger bars get before the skill lands.
+		_count("stagger_casts")
+		stats["stagger_fill_pct"] = int(stats.get("stagger_fill_pct", 0)) + roundi(100.0 * enemy.stagger_fill / enemy.loaded_def.stagger_bar)
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
@@ -1666,6 +1687,8 @@ func _update_attack_ranges() -> void:
 		var skill_name := enemy.loaded_def.skill_name
 		if enemy.loaded_def.lethal:
 			skill_name += " (hide behind the rock!)"
+		elif enemy.loaded_def.stagger_bar > 0:
+			skill_name += " (stagger it head-on)"
 		elif enemy.loaded_def.is_mechanic():
 			skill_name += " (unavoidable)"
 		var verb := "will push back" if enemy.loaded_def.push_out else "will hit"
@@ -2745,7 +2768,7 @@ func _bait_speed(enemy: Combatant) -> float:
 		return -1.0
 	var normal := 1.0
 	if enemy.timeline_pos >= cast_zone_start:
-		normal = enemy.loaded_def.cast_speed * enemy.cast_zone_speed
+		normal = enemy.loaded_def.cast_speed * enemy.cast_zone_speed * _stagger_slow(enemy.loaded_def)
 	var left: float  # world seconds until it should reach the end
 	if enemy.has_meta("bait_left"):
 		left = float(enemy.get_meta("bait_left"))
@@ -3064,12 +3087,12 @@ func _resolve_strike() -> void:
 
 	if parried:
 		# Every hit of a multi-hit strike can be parried, and each Parry grows
-		# max AP; the enemy is staggered once per strike.
+		# max AP; the enemy is knocked back once per strike.
 		_count("parries")
 		if not s.enemy.get_meta("staggered_chain", false):
 			s.enemy.set_meta("staggered_chain", true)
 			s.enemy.timeline_penalty += stagger_push
-			lines.append("%s is staggered" % s.enemy.display_name)
+			lines.append("%s is knocked back" % s.enemy.display_name)
 		lines.append(_grow_max_ap(parry_max_ap_gain, s.targets[0]))
 		for target in s.targets:
 			if target.climbs() and target.statuses.has("provoking") and not target.is_down:
@@ -3823,6 +3846,9 @@ func _move_answer(move: Dictionary, target: Combatant) -> Array:
 			if target.control_used:
 				return ["NO HALT", Answer.WARN, "%s was already halted or stunned since it last acted." % who]
 			return ["HALTS", Answer.GOOD, "Stops %s's timeline for %s s before its %s." % [who, MoveInfo._num(float(move["freeze"])), attack_name]]
+	var stagger := _stagger_answer(move, target)
+	if not stagger.is_empty():
+		return stagger
 	if float(move.get("behind_mult", 1.0)) > 1.0 and (target.is_behind(controlled.global_position) or move.get("teleport_behind", false)):
 		return ["FROM BEHIND", Answer.GOOD, "%sx from behind %s." % [MoveInfo._num(float(move["behind_mult"])), who]]
 	return []
@@ -3866,7 +3892,37 @@ func _skill_answer(skill: Dictionary) -> Array:
 			var reach := float(skill.get("radius", skill.get("range", 0.0)))
 			if at_ally != null and controlled.gap_to(at_ally) <= reach:
 				return ["DRAWS IT", Answer.GOOD, "%s's %s is aimed at an ally: this pulls it onto you." % [at_ally.display_name, at_ally.loaded_def.skill_name]]
+	if skill.has("hits"):
+		# A damaging Ability: does it fill a Stagger bar in its reach?
+		var reach := float(skill.get("reach", skill.get("range", Moves.UNLIMITED)))
+		for enemy in _standing(enemies):
+			if controlled.gap_to(enemy) <= reach:
+				var answer := _stagger_answer(skill, enemy)
+				if not answer.is_empty():
+					return answer
 	return []
+
+
+## STAGGERS / STAGGER +40% / NOT HEAD-ON for a damaging move against an
+## enemy preparing a skill with a Stagger bar; [] otherwise.
+func _stagger_answer(move: Dictionary, target: Combatant) -> Array:
+	var def := target.loaded_def
+	if def == null or def.stagger_bar <= 0 or not target.skill_revealed or not move.has("hits"):
+		return []
+	var who := target.display_name
+	if not _head_on(controlled, target):
+		return ["NOT HEAD-ON", Answer.WARN, "Only hits from in front of %s fill its Stagger bar." % who]
+	var total := 0.0
+	for h in move["hits"]:
+		total += float(h)
+	var estimate := controlled.attack_power * total * (stagger_heavy_mult if heavy_move(move) else 1.0)
+	var left := def.stagger_bar - target.stagger_fill
+	if estimate >= left:
+		var result := "becomes %s" % def.stagger_into.skill_name if def.stagger_into != null else "breaks"
+		return ["STAGGERS", Answer.GOOD, "Should fill %s's Stagger bar: its %s %s." % [who, def.skill_name, result]]
+	return ["STAGGER +%d%%" % roundi(estimate / def.stagger_bar * 100.0), Answer.GOOD,
+			"Fills about %d%% of %s's Stagger bar (%d of %d left)%s." % [roundi(estimate / def.stagger_bar * 100.0), who,
+			ceili(left), def.stagger_bar, ", heavy: 1.5x" if heavy_move(move) else ""]]
 
 
 ## Cleric's Bash: each Bash right after another hits harder (0.5, 0.6,
@@ -4246,6 +4302,56 @@ func _update_arts_list() -> void:
 	battle_menu.arts = rows
 	battle_menu.arts_hidden = hidden
 	battle_menu.arts_hidden_sizes = hidden_sizes
+	var hints: PackedStringArray = []
+	for art in all:
+		if ArtsBook.known(controlled.class_id, art["name"]):
+			continue
+		var pattern := ArtsBook.hint(controlled.class_id, art["name"])
+		if pattern.is_empty():
+			continue
+		var right := pattern.filter(func(m): return m != "").size()
+		hints.append("%s  (%d of %d)" % [" + ".join(pattern.map(func(m): return m if m != "" else "?")), right, pattern.size()])
+	battle_menu.arts_hints = hints
+
+
+## Partial hints: a played bar that gets at least 2 moves of a hidden Art's
+## recipe right (in place, 3+ move Arts) adds them to that Art's hint in the
+## Arts list ("Thrust + Thrust + ?  (2 of 3)"), never its name.
+const HINT_MIN_RIGHT := 2
+
+
+func _learn_art_hints(names: Array) -> void:
+	var cls := _exec_attacker.class_id
+	var best_news := ""
+	for art in Moves.arts(cls):
+		var recipe: Array = art["recipe"]
+		var n := recipe.size()
+		if n < 3 or ArtsBook.known(cls, art["name"]):
+			continue
+		# Slide the recipe along the bar (it may hang off either end).
+		var best: Array = []
+		var best_right := 0
+		for start in range(-(n - 1), names.size()):
+			var pattern: Array = []
+			var right := 0
+			for j in n:
+				var i := start + j
+				if i >= 0 and i < names.size() and names[i] == recipe[j]:
+					pattern.append(recipe[j])
+					right += 1
+				else:
+					pattern.append("")
+			if right > best_right:
+				best_right = right
+				best = pattern
+		if best_right < HINT_MIN_RIGHT or best_right >= n:
+			continue  # (all of it: the Art itself is about to be found)
+		var known_now := ArtsBook.learn_hint(cls, art["name"], best)
+		if known_now > 0:
+			_count("art_hints")
+			best_news = "Close to a hidden Art: %d of its %d moves found" % [known_now, n]
+	if best_news != "":
+		_flash(best_news, 3.0)
 
 
 ## The Arts list's recipe line. Monk Arts built from smaller ones read
@@ -4378,6 +4484,7 @@ func _execute_combo() -> void:
 		_popup(_exec_attacker, "REVEALED", Color(0.7, 0.7, 0.8))
 	_count("combos")
 	_count("combos_" + _exec_attacker.class_id)
+	_learn_art_hints(battle_menu.combo.map(func(k): return _moves[k]["name"]))
 	_exec_attacker.face_toward(_combo_target.global_position - _exec_attacker.global_position, 1.0, 100000.0)
 	battle_menu.slot_results.clear()
 	battle_menu.consumed_slots = 0
@@ -5221,8 +5328,12 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 
 	if target.statuses.has("exposed"):
 		multiplier *= 1.0 + exposed_bonus  # Archer's Exposing Shot
+	if target.statuses.has("staggered"):
+		multiplier *= 1.0 + staggered_bonus
 	var damage := ceili(attacker.attack_power * multiplier)
 	var dealt := target.take_damage(damage, false)
+	if _fill_stagger(attacker, target, dealt, move):
+		note = "Staggered!"
 	if playtest:
 		playtest.deal(attacker, dealt)
 	if combo_counter and _menu_mode == BattleMenu.Mode.EXECUTING and attacker == _exec_attacker:
@@ -5315,6 +5426,70 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 	if target.is_down:
 		_flash("%s is defeated!" % target.display_name)
 	return true
+
+
+# --- Stagger -------------------------------------------------------------------
+
+## True for Smash-type moves, breaking moves and Arts: they fill Stagger
+## bars faster.
+static func heavy_move(move: Dictionary) -> bool:
+	return int(move.get("kind", Skills.Kind.ATTACK)) == Skills.Kind.SMASH \
+			or int(move.get("effect", Moves.Effect.NONE)) == Moves.Effect.BREAK or move.has("recipe")
+
+
+## Head-on: in front of it (its front half), or any side of a boss
+## without positionals.
+func _head_on(attacker: Combatant, target: Combatant) -> bool:
+	if target.no_positionals:
+		return true
+	var to := attacker.global_position - target.global_position
+	to.y = 0.0
+	return to.length() < 0.01 or target.flat_forward().dot(to.normalized()) >= 0.0
+
+
+## A hit fills the target's Stagger bar if it's preparing a skill with one
+## and the hit came head-on. Returns true when it Staggers.
+func _fill_stagger(attacker: Combatant, target: Combatant, dealt: int, move: Dictionary) -> bool:
+	var def := target.loaded_def
+	if def == null or def.stagger_bar <= 0 or target.is_down or dealt <= 0 or stagger_off:
+		return false
+	if not _head_on(attacker, target):
+		if target.skill_revealed:
+			_popup(target, "NOT HEAD-ON", Color(0.7, 0.7, 0.75))
+		return false
+	target.stagger_fill += dealt * (stagger_heavy_mult if heavy_move(move) else 1.0)
+	if target.stagger_fill < def.stagger_bar:
+		return false
+	_stagger(target)
+	return true
+
+
+## A full Stagger bar: the skill breaks (or turns into its stagger_into
+## form), the enemy goes back to the start of the timeline unless its skill
+## only changed, and it takes extra damage until its next turn.
+func _stagger(enemy: Combatant) -> void:
+	var def := enemy.loaded_def
+	_count("staggers")
+	enemy.add_status("staggered", 1, enemy)
+	_popup(enemy, "STAGGERED", Color(1.0, 0.8, 0.25))
+	if def.stagger_into != null:
+		var revealed := enemy.skill_revealed
+		_clear_cast_extras(enemy)
+		enemy.loaded_def = def.stagger_into
+		enemy.loaded_skill = enemy.loaded_def.kind
+		enemy.stagger_fill = 0.0
+		enemy.skill_revealed = false
+		_build_cast_areas(enemy)
+		if revealed:
+			_reveal_skill(enemy)
+		_flash("%s is Staggered! Its %s becomes %s" % [enemy.display_name, def.skill_name, enemy.loaded_def.skill_name], 3.5)
+		return
+	if enemy.has_meta("follow_up_at"):
+		enemy.remove_meta("follow_up_at")
+	_finish_enemy_skill(enemy, false)
+	enemy.timeline_pos = -enemy.timeline_penalty
+	enemy.timeline_penalty = 0.0
+	_flash("%s is Staggered! Its %s breaks, and it takes +%d%% damage until its next turn" % [enemy.display_name, def.skill_name, roundi(staggered_bonus * 100.0)], 3.5)
 
 
 ## The enemy loses its prepared skill (and stance) and is knocked back

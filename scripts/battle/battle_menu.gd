@@ -21,6 +21,15 @@ const LEAD_IN_PX := 70.0
 ## The bar never grows wider than the move list above it (long bars, like the
 ## Monk's, shrink to fit instead of running under the Arts panel and HUD).
 const MAX_BAR_PX := 720.0
+## While a combo plays, small blocks (the Monk's 5 AP Punch and Kick) zoom in
+## so the smallest one is at least this wide; the bar then scrolls with the
+## playhead inside a window of at most PLAY_VIEW_PX.
+const MIN_PLAY_BLOCK_PX := 72.0
+const PLAY_MAX_PX_PER_AP := 16.0
+const PLAY_VIEW_PX := 900.0
+## Timing boxes are drawn at least this wide (the window to press in doesn't
+## change, only how easy it is to see).
+const MIN_BOX_PX := 14.0
 const GOLD := Color(0.95, 0.78, 0.35)
 ## Timing types: Press boxes are white squares, Hold is blue and rounded,
 ## Tap is pink with diamonds.
@@ -84,6 +93,8 @@ var arts_index := 0
 var arts_hidden := 0
 ## Hidden Arts by recipe length ({2: 3, 4: 1}): the only hint about them.
 var arts_hidden_sizes := {}
+## Partial hints for hidden Arts ("Thrust + Thrust + ?  (2 of 3)").
+var arts_hints: PackedStringArray = []
 ## While a hidden Art reveals itself mid-combo: its name and the banner's
 ## progress (0 -> 1).
 var reveal_name := ""
@@ -263,6 +274,8 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 	var hidden_size := Vector2.ZERO
 	if arts_hidden > 0:
 		hidden_line = ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
+		for h in arts_hints:
+			hidden_line += "\n??? " + h
 		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14)
 	var extra := hidden_size.y + 10.0 if arts_hidden > 0 else 0.0  # wraps on a narrow panel
 	# Bottom-aligned with the move list, growing upward: it never reaches
@@ -408,6 +421,14 @@ func _draw_combo_bar(font: Font) -> void:
 	if mode == Mode.COMBO and not step_marks.is_empty():
 		span = maxf(span, step_marks[-1])
 	_px = minf(PX_PER_AP, minf(MAX_BAR_PX, size.x - LEAD_IN_PX - 60.0) / maxf(span, 1.0))
+	if mode == Mode.EXECUTING:
+		# Zoom: the smallest block gets room for its name and timing box.
+		var smallest := INF
+		for entry in plan:
+			if float(entry["cost"]) > 0.0:
+				smallest = minf(smallest, float(entry["cost"]))
+		if smallest < INF and smallest * _px < MIN_PLAY_BLOCK_PX:
+			_px = maxf(_px, minf(MIN_PLAY_BLOCK_PX / smallest, PLAY_MAX_PX_PER_AP))
 	# Which slots are on the bar. Building: the part before a Headbutt restart
 	# folds into a small "+70 AP" tag, so the bar shows the fresh part. Playing:
 	# blocks used up by a buff (or before a restart) are gone, and what comes
@@ -432,6 +453,19 @@ func _draw_combo_bar(font: Font) -> void:
 			shown += float(plan[slot]["cost"])
 		capacity = maxf(shown, 10.0)  # only what's left to play in this bar
 	var bar_width := capacity * _px
+	# Playing a bar longer than the view: it scrolls, keeping the playhead
+	# about a third of the way in.
+	var scroll := 0.0
+	if mode == Mode.EXECUTING:
+		var view_w := minf(PLAY_VIEW_PX, size.x - LEAD_IN_PX - 80.0)
+		if bar_width > view_w:
+			var played := 0.0
+			for slot in range(first_visible, mini(executing_slot, plan.size())):
+				played += float(plan[slot]["cost"])
+			if executing_slot >= 0 and executing_slot < plan.size():
+				played += float(plan[executing_slot]["cost"]) * maxf(slot_progress, 0.0)
+			scroll = clampf(played * _px - view_w * 0.35, 0.0, bar_width - view_w)
+			bar_width = view_w
 	# While building, the bar sits under the move list; while the combo plays,
 	# it drops to the bottom edge of the screen.
 	var bar_y := size.y - 52 if mode == Mode.EXECUTING else size.y - 232
@@ -443,7 +477,7 @@ func _draw_combo_bar(font: Font) -> void:
 	if mode == Mode.EXECUTING:
 		bar_x += LEAD_IN_PX / 2.0  # keep lead-in + strip centered together
 	var bar := Rect2(bar_x, bar_y, bar_width, 34)
-	_origin = bar.position.x - hidden_ap * _px  # where slot 0 would start
+	_origin = bar.position.x - hidden_ap * _px - scroll  # where slot 0 would start
 	var origin := _origin
 	var used := combo_cost() - segment_start
 	var affordable := minf(combo_limit, segment_available)
@@ -464,6 +498,9 @@ func _draw_combo_bar(font: Font) -> void:
 	# The part of the bar you can't afford right now.
 	if affordable < combo_limit:
 		var locked := Rect2(origin + (segment_start + affordable) * _px, bar.position.y, (combo_limit - affordable) * _px, bar.size.y)
+		locked = locked.intersection(bar)
+		if locked.size.x < 1.0:
+			locked = Rect2(bar.end.x, bar.position.y, 0.0, bar.size.y)
 		draw_rect(locked, Color(0.35, 0.12, 0.12, 0.8))
 		var x := locked.position.x + 4.0
 		while x < locked.end.x:
@@ -486,16 +523,22 @@ func _draw_combo_bar(font: Font) -> void:
 		if slot < first_visible or slot > last_visible:
 			cursor = segment.end.x  # folded away / not on this bar yet
 			continue
+		# Scrolling: only the part inside the bar's window is drawn.
+		var shown := Rect2(maxf(segment.position.x, bar.position.x), segment.position.y,
+				minf(segment.end.x, bar.end.x) - maxf(segment.position.x, bar.position.x), segment.size.y)
+		if shown.size.x <= 1.0:
+			cursor = segment.end.x
+			continue
 		var color: Color = move["color"]
 		if mode == Mode.EXECUTING and slot < executing_slot:
 			color = color.darkened(0.5)
-		draw_rect(segment.grow(-2), color)
+		draw_rect(shown.grow(-2), color)
 		if mode == Mode.EXECUTING and slot == executing_slot:
-			draw_rect(segment.grow(-1), Color.WHITE, false, 3.0)
+			draw_rect(shown.grow(-1), Color.WHITE, false, 3.0)
 		# One timing box per hit, ending where that hit lands (the last one at
 		# the end of the block): press J while the playhead is inside it.
 		var times: Array = move["times"]
-		var box_width := segment.size.x * float(move["window"])
+		var box_width := minf(maxf(segment.size.x * float(move["window"]), MIN_BOX_PX), segment.size.x)
 		var timing: int = int(move.get("timing", 0))
 		var playing := mode == Mode.EXECUTING and slot == executing_slot
 		var untimed: Array = move.get("untimed", [])
@@ -506,6 +549,8 @@ func _draw_combo_bar(font: Font) -> void:
 				draw_line(Vector2(hit_x, segment.position.y + 4), Vector2(hit_x, segment.end.y - 4), Color(1, 1, 1, 0.55), 2.0)
 				continue
 			var box := Rect2(hit_x - box_width, segment.position.y - 3, box_width, segment.size.y + 6)
+			if hit_x < bar.position.x + 1.0 or hit_x - segment.size.x * 0.75 > bar.end.x:
+				continue  # scrolled out of the window
 			var result := 0
 			if slot < slot_results.size() and hit < (slot_results[slot] as Array).size():
 				result = slot_results[slot][hit]
@@ -547,15 +592,20 @@ func _draw_combo_bar(font: Font) -> void:
 		# The move's name goes on top of its timing marks so it stays readable.
 		var label := String(move["name"]).to_upper()
 		var label_size := 14
-		while label_size > 8 and font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > segment.size.x - 8:
+		while label_size > 8 and font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > shown.size.x - 8:
 			label_size -= 1
 		var label_width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
-		_text(font, Vector2(segment.position.x + (segment.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
+		if label_width <= shown.size.x - 4:
+			_text(font, Vector2(shown.position.x + (shown.size.x - label_width) / 2.0, segment.position.y + 22), label, label_size, Color.WHITE)
 		cursor = segment.end.x
-		if reset_slots.has(slot) and slot < plan.size() - 1:
+		if reset_slots.has(slot) and slot < plan.size() - 1 and cursor <= bar.end.x:
 			# Headbutt: a fresh bar comes after it.
 			_text(font, Vector2(cursor - 64, bar.end.y + 30), "FRESH BAR >", 12, GOLD)
 	draw_rect(bar, GOLD, false, 2.0)
+	if scroll > 0.5:
+		_text(font, Vector2(bar.position.x + 4, bar.position.y + 23), "◀", 16, GOLD)
+	if scroll < capacity * _px - bar.size.x - 0.5:
+		_text(font, Vector2(bar.end.x - 18, bar.position.y + 23), "▶", 16, GOLD)
 	if future > 0.0:
 		# The rest of the climb: a dim extension with a notch at each step.
 		var ext := Rect2(bar.end.x + 2.0, bar.position.y + 4.0, future - 2.0, bar.size.y - 8.0)

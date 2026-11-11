@@ -19,6 +19,21 @@ cannot_be_blocked = true
 pull = 4.0
 cast_speed = 0.8
 fills_arena = true
+stagger_bar = 70
+
+[sub_resource type="Resource" id="Skill_10"]
+script = ExtResource("2_skill")
+skill_name = "Broken Exhale"
+kind = 4
+shape = 3
+radius = 40.0
+inner_radius = 8.0
+damage = 12
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+launch = 5.0
+fills_arena = true
 
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
@@ -36,6 +51,8 @@ launch = 7.0
 cast_speed = 0.8
 fills_arena = true
 breaks_rocks = true
+stagger_bar = 90
+stagger_into = SubResource("Skill_10")
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")
@@ -123,6 +140,7 @@ special = 2
 overlap = 1
 line_extend = 3.5
 double_on_off_balance = true
+stagger_bar = 80
 
 [sub_resource type="Resource" id="Skill_9"]
 script = ExtResource("2_skill")
@@ -142,6 +160,7 @@ fills_arena = true
 follow_up = SubResource("Skill_5")
 follow_up_delay = 1.0
 breaks_rocks = true
+stagger_bar = 120
 
 [sub_resource type="CylinderMesh" id="Mesh_body"]
 top_radius = 4.0
@@ -168,7 +187,7 @@ rock_crack_limit = 2
 winded_timeline = 12.0
 summon_scene = ExtResource("3_sprite")
 summon_every = 4
-summon_count = 2
+summon_count = 1
 body_radius = 4.0
 skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9")])
 

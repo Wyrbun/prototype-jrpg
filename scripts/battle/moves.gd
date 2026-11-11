@@ -205,10 +205,10 @@ static func arts(class_id: String) -> Array[Dictionary]:
 				_art(["Guard Strike", "Slash"], "Shield Rush", [1.2, 1.2], 0.9, 0.16, GREEN, "Two hits; stops its timeline 1 s, draws its aggro",
 						{"freeze": 1.0, "draws_aggro": true}),
 				_art(["Guard Strike", "Guard Strike"], "Shield Wall", [1.5], 1.0, 0.16, GREEN,
-						"Shield sweep around you: draws every enemy hit, barrier to allies near you",
-						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "draws_aggro": true,
+						"Shield sweep around you: stops every enemy hit 0.5 s, draws their aggro, barrier to allies near you",
+						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "draws_aggro": true, "freeze": 0.5,
 						"barrier": 0.10, "barrier_radius": 3.0}),
-				_art(["Thrust", "Thrust", "Slash"], "Smash", [4.2], 1.2, 0.18, ORANGE, "Heavy blow: Smash type, knocks it back 4 m",
+				_art(["Thrust", "Thrust", "Slash"], "Smash", [4.2], 1.2, 0.18, ORANGE, "Heavy blow: Smash type, ignores Defense, knocks it back 4 m",
 						{"kind": Skills.Kind.SMASH, "knockback": 4.0}),
 				_art(["Slash", "Slash", "Thrust", "Guard Strike"], "Crusader's Edge", [1.4, 1.4, 3.2], 1.8, 0.18, GOLD,
 						"Finisher: breaks Defense, cancels its turn, knocks it back, draws its aggro",
@@ -216,11 +216,11 @@ static func arts(class_id: String) -> Array[Dictionary]:
 			]
 		"archer":
 			list = [
-				_art(["Shoot", "Shoot"], "Double Shot", [1.25, 1.25], 0.9, 0.16, PURPLE, "Two strong arrows"),
-				_art(["Shoot", "Shoot", "Shoot"], "Triple Shot", [1.1, 1.1, 1.8], 1.4, 0.15, PURPLE, "3 arrows; the delayed last one ignores Defense",
+				_art(["Shoot", "Shoot"], "Double Shot", [1.15, 1.15], 0.9, 0.16, PURPLE, "Two strong arrows"),
+				_art(["Shoot", "Shoot", "Shoot"], "Triple Shot", [1.0, 1.0, 1.6], 1.4, 0.15, PURPLE, "3 arrows; the delayed last one ignores Defense",
 						{"times": [0.2, 0.4, 1.0], "last_hit": {"effect": Effect.PIERCE}}),
-				_art(["Shoot", "Power Draw"], "Piercing Arrow", [3.3], 1.5, 0.18, TEAL, "Hold: flies through every enemy in a line",
-						{"area": Area.LINE, "area_size": 1.2, "falloff": 1.0, "effect": Effect.PIERCE,
+				_art(["Shoot", "Power Draw"], "Piercing Arrow", [3.3], 1.5, 0.18, TEAL, "Hold: flies through every enemy in a line (75% after the first)",
+						{"area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "effect": Effect.PIERCE,
 						"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
 				_art(["Exposing Shot", "Power Draw"], "Stunning Arrow", [3.1], 1.5, 0.18, GOLD, "Hold: cancels an attack about to strike",
 						{"stun": true, "timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85]}),
@@ -299,7 +299,7 @@ static func arts(class_id: String) -> Array[Dictionary]:
 				_art(["Kick", "Heavy Kick"], "Knee Smash", [2.5], 1.0, 0.16, GREEN, "Hold: climbs a step; Perfect: grants Rush",
 						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Rush": 1}, "climb": true}),
 				_art(["Punch", "Punch", "Kick", "Heavy Kick"], "Triple Rush", [0.6, 0.6, 3.2], 1.0, 0.16, PURPLE,
-						"Hold: ignores Defense; climbs a step; uses Triple + Rush; Perfect: Crusher",
+						"Hold: breaks Defense; climbs a step; uses Triple + Rush; Perfect: Crusher",
 						{"effect": Effect.PIERCE, "timing": TimingType.HOLD, "hold_start": 0.5, "times": [0.15, 0.3, 0.9],
 						"contains": ["Palm Strike", "Knee Smash"], "recipe_text": "Palm Strike + Knee Smash",
 						"consumes": ["Triple", "Rush"], "grants": {"Crusher": 1}, "climb": true}),
@@ -316,7 +316,43 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"consumes": ["Crowd Cheer"], "needs_token": "Crowd Cheer", "cashout": [[80.0, 1.5], [100.0, 2.5]],
 						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
 			]
+	_inherit(list, attacks(class_id))
 	return list
+
+
+## What an Art takes on from the moves it's made of: their on-hit effects.
+## The strongest effect wins (Break > Pierce), numbers take the larger value,
+## flags add up. Shape, reach, timing and class mechanics (marks, flurry,
+## Monk timing, teleports) stay the Art's own.
+const INHERITED_MAX := ["freeze", "expose", "burn", "burn_turns", "knockback", "rally", "front_mult"]
+const INHERITED_FLAGS := ["stun", "draws_aggro", "chill", "stab_marks"]
+
+
+static func _inherit(list: Array[Dictionary], basics: Array[Dictionary]) -> void:
+	var by_name := {}
+	for move in basics:
+		by_name[move["name"]] = move
+	for art in list:
+		for part_name in art["recipe"]:
+			var part: Dictionary = by_name.get(part_name, {})
+			if part.is_empty():
+				continue
+			art["effect"] = maxi(int(art.get("effect", Effect.NONE)), int(part.get("effect", Effect.NONE)))
+			for key in INHERITED_MAX:
+				if part.has(key):
+					art[key] = maxf(float(art.get(key, 0.0)), float(part[key]))
+			for key in INHERITED_FLAGS:
+				if part.get(key, false):
+					art[key] = true
+			if float(part.get("barrier", 0.0)) > float(art.get("barrier", 0.0)):
+				art["barrier"] = part["barrier"]
+				art["barrier_radius"] = maxf(float(art.get("barrier_radius", 0.0)), float(part["barrier_radius"]))
+				if part.has("perfect_barrier") and int(art.get("timing", 0)) == int(part.get("timing", 0)):
+					# Same timing (a Hold): its Perfect barrier comes along too.
+					art["perfect_barrier"] = part["perfect_barrier"]
+					art["perfect_barrier_radius"] = part["perfect_barrier_radius"]
+		if art.has("burn_turns"):
+			art["burn_turns"] = int(art["burn_turns"])
 
 
 static func _art(recipe: Array, art_name: String, hits: Array, duration: float, window: float,
@@ -341,7 +377,7 @@ static func skills(class_id: String) -> Array[Dictionary]:
 				_skill("Jump", 30, Target.POINT, TEAL, "Leap to a spot you choose", {"range": 8.0}),
 				_skill("Riposte", 25, Target.SELF, GOLD, "Counter stance for 4 s; hop 3 m back after", {"seconds": 4.0}),
 				_skill("True Sight", 40, Target.NONE, BLUE, "Allies' reach +25%; see enemy attacks early, 3 turns", {"turns": 3}),
-				_skill("Agility", 70, Target.SELF, PURPLE, "+1 half-strength hit on every attack, 5 turns", {"turns": 5}),
+				_skill("Agility", 60, Target.SELF, PURPLE, "+1 half-strength hit on every attack, 5 turns", {"turns": 5}),
 			]
 		"mage":
 			list = [

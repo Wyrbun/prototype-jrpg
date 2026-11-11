@@ -31,7 +31,7 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Right/Left Golem Smash (half the room, it can't turn), Ceiling Burst (falling circles that leave rocks for ~10 s), the two combined, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns), Stone Guard (Defense stance, lets 30% through) | |
 | Living Armor | 900 | Doom Gaze (arena-wide instant death: hide behind the rock it drops), Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows from 2 to 11 m over a slow cast; dealing 10% of its HP during the cast contains it, so you can step out), Parry Stance (Counter stance) | |
 | Dragon Hatchling | 960 | **Closes in** (`closes_in`): while none of its aimed skills reaches anyone it walks 2.5x faster, so keeping away doesn't leave it casting only Burning Spike. Breath (unavoidable on its target, tracks it exactly; massive cone; damage shrinks the more people it hits: stack up; slow cast, 60% speed), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (unavoidable: a circle on each party member; anyone in an overlap drops to 1 HP; each circle keeps burning for 3 Dragon turns, 8 HP/s) | |
-| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, cone in front of its mouth), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it spits out Gust Sprites (up to 2; 60 HP, a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls | |
+| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, cone in front of its mouth), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it spits out a Gust Sprite (if none is up; 60 HP, a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls | |
 
 ## Normal enemies
 
@@ -71,12 +71,28 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Healing Ritual | Special | Very large circle | Heals all enemies inside 15% of their max HP, at most 60 each; interrupted by 3 close-range hits |
 | Curse | Special | One line toward each party member | Unavoidable (no Parry or Defend); where lines overlap: double damage; a rock blocks a line |
 
-## Stagger (planned)
+## Stagger bars
 
-Most unavoidable skills (Power Shot, Fireball, Curse, Dark Bolt, Breath,
-Burning Spike...) will get a Stagger bar once the Stagger system is built:
-facing one head-on and filling its bar interrupts it. Until then they stay
-unavoidable; keep this in mind when tuning their damage.
+Unavoidable skills have a Stagger bar (damage dealt head-on while it
+prepares; heavy moves 1.5x). A full bar breaks the skill, sends the enemy
+back to the start of the timeline and leaves it taking +25% damage until
+its next turn. Skills with a bar cast at half speed in the casting zone.
+Rules in `battle-design.md`.
+
+| Enemy | Skill | Bar | When full |
+|---|---|---|---|
+| Kobold Archer | Power Shot | 30 | Breaks |
+| Bandit Arcanist | Fireball | 30 | Breaks |
+| Orc Shaman | Curse | 35 | Breaks |
+| Orc Shaman | Healing Ritual | 3 close hits (its own rule, shown as a bar) | Interrupted |
+| Living Armor | Dark Bolt | 70 | Breaks |
+| Living Armor | Shadowflare | 10% of its HP (its own rule, shown as a bar) | Stops growing |
+| Dragon Hatchling | Breath | 90 | Breaks |
+| Dragon Hatchling | Burning Spike | 120 | Breaks |
+| Gale Maw | Inhale | 70 | Breaks |
+| Gale Maw | Exhale | 90 | Becomes Broken Exhale: a ring, safe within 8 m of the Maw, push 5 m |
+| Gale Maw | Undertow | 80 | Breaks |
+| Gale Maw | Gale Burst | 120 | Breaks (no lanes after) |
 
 ## Bosses
 
@@ -114,7 +130,7 @@ unavoidable; keep this in mind when tuning their damage.
 | Undertow | Special | A line to each party member, running 3.5 m past them | 18 damage, pulls 3 m along the line, double where lines cross (so standing behind an ally doubles it); an Off-Balance fighter gets two lines; a rock in the line blocks it |
 | Gale Burst | Special | Exhale, then Gale Lanes 1 s later | The push lands you somewhere new, then the lanes come |
 
-Also: Exhale, Gale Burst and Breaker **crack rocks** in their area (2 cracks shatter one; it grows back after 3 Maw actions). At **half HP** the south edge **crumbles** 2.5 m (once; anyone standing there teeters). Every push or pull **Winds** the party member (12 back on the timeline). Every 4th action: **Gust Sprites** (top up to 2).
+Also: Exhale, Gale Burst and Breaker **crack rocks** in their area (2 cracks shatter one; it grows back after 3 Maw actions). At **half HP** the south edge **crumbles** 2.5 m (once; anyone standing there teeters). Every push or pull **Winds** the party member (12 back on the timeline). Every 4th action: a **Gust Sprite** (one at a time).
 
 ### Gust Sprite (summoned by the Gale Maw)
 | Skill | Kind | Shape | Rules |

@@ -126,6 +126,8 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 		out.append("The last hit ignores Defense.")
 	if int(move.get("kind", Skills.Kind.ATTACK)) == Skills.Kind.SMASH:
 		out.append("Smash type: it can't interrupt an enemy's Smash.")
+	if BattleArena.heavy_move(move):
+		out.append("Heavy: fills Stagger bars 1.5x faster.")
 	# Control
 	if move.get("stun", false):
 		out.append("Stun: an enemy about to strike loses its attack. Once per enemy action.")

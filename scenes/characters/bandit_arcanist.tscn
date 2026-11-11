@@ -39,6 +39,7 @@ damage = 33
 windup = 1.2
 special = 5
 always_hits = true
+stagger_bar = 30
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(0.8, 1.1, 0.8)
