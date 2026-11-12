@@ -680,7 +680,7 @@ Every class has Arts now.
 | Shield Bash | 30 | rushes next to an enemy within 9 m (in sight); next turn starts a third of the way along, like Wait |
 | Taunt | 40 | enemies within 6 m go after the Knight for 3 Knight turns; meanwhile they **guard**: allies within 3 m (`guard_radius`) are covered by Block and Parry even if their class can't do them |
 
-### Archer (150 HP, 70 AP, cannot Block or Parry)
+### Archer (150 HP, 60 AP, speed 12, cannot Block or Parry)
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
 | Shoot | 10 | 1.0 | basic |
@@ -691,16 +691,16 @@ Every class has Arts now.
 
 | Recipe | Art | AP | Hits (parts) | Effect |
 |---|---|---|---|---|
-| Shoot + Shoot | Double Shot | 20 | 1.25 x2 = 2.5 (2.0) | basic |
-| Shoot x3 | Triple Shot | 30 | 1.1 + 1.1 + 1.8 = 4.0 (3.0) | last arrow delayed (20%, 40%, 100%) and ignores Defense (`last_hit`) |
-| Shoot + Power Draw | Piercing Arrow | 30 | 3.3 (2.8) | Hold (1.5 s); LINE 1.2 m wide, full damage to every enemy in it, ignores Defense |
+| Shoot + Shoot | Double Shot | 20 | 1.15 x2 = 2.3 (2.0) | basic |
+| Shoot x3 | Triple Shot | 30 | 1.0 + 1.0 + 1.6 = 3.6 (3.0) | last arrow delayed (20%, 40%, 100%) and ignores Defense (`last_hit`) |
+| Shoot + Power Draw | Piercing Arrow | 30 | 3.3 (2.8) | Hold (1.5 s); LINE 1.2 m wide, full damage to the first enemy and 75% to the rest (`falloff`), ignores Defense |
 | Exposing Shot + Power Draw | Stunning Arrow | 35 | 3.1 (2.7) | Hold (1.5 s); an enemy preparing an attack loses it and drops back to just before the casting zone (like an interrupt). Once per enemy action (see turn control) |
 | Power Draw + Power Draw | Gale Shot | 40 | 4.2 (3.6) | Hold (1.8 s); breaks Defense, pushes 4 m away |
 | Exposing Shot + Shoot + Shoot + Power Draw | Arrow Rain (finisher) | 55 | 1.6 + 1.6 + 2.6 = 5.8 (4.7) | three volleys on a 2.5 m circle at the target; breaks Defense, **pins** everyone hit: they can turn but not walk until their own next turn starts (status `pinned`) |
 
-Shoot chains only get better as they grow: Triple Shot (4.0) beats Double
-Shot + Shoot (3.5), and four Shoots (Triple Shot + Shoot) tie Double Shot x2
-at 5.0. When adding Arts, check them against other Arts made from the same
+Shoot chains only get better as they grow: Triple Shot (3.6) beats Double
+Shot + Shoot (3.3), and four Shoots (Triple Shot + Shoot) tie Double Shot x2
+at 4.6. When adding Arts, check them against other Arts made from the same
 moves, not only against their plain parts.
 
 | Skill | AP | Effect |
@@ -708,7 +708,7 @@ moves, not only against their plain parts.
 | Jump | 30 | move a marker with WASD (up to 8 m) and leap there |
 | Riposte | 25 | counter stance for 4 s: a strike on the Archer is countered (2x attack power), the enemy is pushed 3 m away and she hops 3 m back (`riposte_hop`; walls and edges stop her) |
 | True Sight | 40 | every ally's reach +25% (moves with their own reach too), and enemy attacks are revealed as soon as they start preparing (at the casting zone, not at `reveal_at`), 3 Archer turns |
-| Agility | 70 | the Archer's attacks get one extra hit at half the first hit's strength (`agility_hit_share`), 5 Archer turns |
+| Agility | 60 | the Archer's attacks get one extra hit at half the first hit's strength (`agility_hit_share`), 5 Archer turns |
 
 ### Mage (100 HP, 90 AP, can Parry, cannot Block)
 | Attack | AP | Hits | Notes |

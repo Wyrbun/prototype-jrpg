@@ -4,6 +4,19 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## One reveal per new Art
+
+- Playing a hidden Art twice in one bar used to show "NEW ART!" twice. Now
+  the first one reveals it; the second just forms, with its name popping up
+  like any known Art.
+
+## Minimum timing window
+
+- Every timing window now lasts at least 75 ms (`Moves.MIN_WINDOW_SECONDS`).
+  Windows are a share of the move's length, so the Monk's 0.3 s Punch and
+  Kick had only 36 ms (about 2 frames); now 75 ms, like the Cleric's Bash.
+  Longer moves are unchanged.
+
 ## Archer toned down
 
 The same playtest had the Archer at about twice everyone's damage per turn

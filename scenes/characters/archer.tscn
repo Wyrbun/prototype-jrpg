@@ -9,12 +9,12 @@ albedo_color = Color(0.3, 0.75, 0.4, 1)
 display_name = "Archer"
 class_id = "archer"
 max_hp = 150
-combo_limit = 70.0
+combo_limit = 60.0
 can_block = false
 can_parry = false
 attack_power = 12
 attack_reach = 6.0
-speed = 13.0
+speed = 12.0
 move_speed = 5.5
 
 [node name="Body" parent="."]

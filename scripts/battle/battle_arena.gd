@@ -327,6 +327,9 @@ var _exec_reveal_left := 0.0
 ## Stagger: skills with a bar move through the casting zone at this share
 ## of their usual speed, so the party gets a real chance to fill it.
 @export var stagger_cast_speed: float = 0.5
+## Stagger: a broken skill knocks the enemy back to this far before the
+## casting zone (it loses the skill, not a whole lap of the timeline).
+@export var stagger_knockback: float = 25.0
 ## Archer's Agility: the extra hit deals this share of the move's first hit.
 @export var agility_hit_share: float = 0.5
 ## Archer's Riposte: meters she hops back after countering.
@@ -1571,7 +1574,7 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.loaded_def != null and enemy.loaded_def.stagger_bar > 0:
 		# Balance numbers: how full Stagger bars get before the skill lands.
 		_count("stagger_casts")
-		stats["stagger_fill_pct"] = int(stats.get("stagger_fill_pct", 0)) + roundi(100.0 * enemy.stagger_fill / enemy.loaded_def.stagger_bar)
+		stats["stagger_fill_pct"] = int(stats.get("stagger_fill_pct", 0)) + roundi(100.0 * enemy.stagger_fill / enemy.stagger_need(enemy.loaded_def))
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
@@ -3916,13 +3919,14 @@ func _stagger_answer(move: Dictionary, target: Combatant) -> Array:
 	for h in move["hits"]:
 		total += float(h)
 	var estimate := controlled.attack_power * total * (stagger_heavy_mult if heavy_move(move) else 1.0)
-	var left := def.stagger_bar - target.stagger_fill
+	var need := target.stagger_need(def)
+	var left := need - target.stagger_fill
 	if estimate >= left:
 		var result := "becomes %s" % def.stagger_into.skill_name if def.stagger_into != null else "breaks"
 		return ["STAGGERS", Answer.GOOD, "Should fill %s's Stagger bar: its %s %s." % [who, def.skill_name, result]]
-	return ["STAGGER +%d%%" % roundi(estimate / def.stagger_bar * 100.0), Answer.GOOD,
-			"Fills about %d%% of %s's Stagger bar (%d of %d left)%s." % [roundi(estimate / def.stagger_bar * 100.0), who,
-			ceili(left), def.stagger_bar, ", heavy: 1.5x" if heavy_move(move) else ""]]
+	return ["STAGGER +%d%%" % roundi(estimate / need * 100.0), Answer.GOOD,
+			"Fills about %d%% of %s's Stagger bar (%d of %d left)%s." % [roundi(estimate / need * 100.0), who,
+			ceili(left), roundi(need), ", heavy: 1.5x" if heavy_move(move) else ""]]
 
 
 ## Cleric's Bash: each Bash right after another hits harder (0.5, 0.6,
@@ -4159,6 +4163,8 @@ func _reveal_art(slot: int) -> void:
 	for key in _pending_reveals:
 		shifted[key - (count - 1) if key > slot else key] = _pending_reveals[key]
 	_pending_reveals = shifted
+	if ArtsBook.known(_exec_attacker.class_id, art["name"]):
+		return  # found earlier in this same bar: it just forms, no second "NEW ART!"
 	_exec_reveal_left = art_reveal_seconds
 	battle_menu.reveal_name = String(art["name"]).to_upper()
 	battle_menu.reveal_progress = 0.0
@@ -5458,18 +5464,20 @@ func _fill_stagger(attacker: Combatant, target: Combatant, dealt: int, move: Dic
 			_popup(target, "NOT HEAD-ON", Color(0.7, 0.7, 0.75))
 		return false
 	target.stagger_fill += dealt * (stagger_heavy_mult if heavy_move(move) else 1.0)
-	if target.stagger_fill < def.stagger_bar:
+	if target.stagger_fill < target.stagger_need(def):
 		return false
 	_stagger(target)
 	return true
 
 
 ## A full Stagger bar: the skill breaks (or turns into its stagger_into
-## form), the enemy goes back to the start of the timeline unless its skill
-## only changed, and it takes extra damage until its next turn.
+## form), the enemy is knocked back to just before the casting zone unless
+## its skill only changed, and it takes extra damage until its next turn.
+## Each Stagger makes that enemy's bars bigger (resistance).
 func _stagger(enemy: Combatant) -> void:
 	var def := enemy.loaded_def
 	_count("staggers")
+	enemy.staggers_taken += 1  # resistance: its next bars are bigger
 	enemy.add_status("staggered", 1, enemy)
 	_popup(enemy, "STAGGERED", Color(1.0, 0.8, 0.25))
 	if def.stagger_into != null:
@@ -5487,7 +5495,7 @@ func _stagger(enemy: Combatant) -> void:
 	if enemy.has_meta("follow_up_at"):
 		enemy.remove_meta("follow_up_at")
 	_finish_enemy_skill(enemy, false)
-	enemy.timeline_pos = -enemy.timeline_penalty
+	enemy.timeline_pos = minf(enemy.timeline_pos, cast_zone_start - stagger_knockback)
 	enemy.timeline_penalty = 0.0
 	_flash("%s is Staggered! Its %s breaks, and it takes +%d%% damage until its next turn" % [enemy.display_name, def.skill_name, roundi(staggered_bonus * 100.0)], 3.5)
 

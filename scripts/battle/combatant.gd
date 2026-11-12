@@ -177,6 +177,14 @@ var extra_areas: Array[AttackRange] = []
 var cast_damage_taken := 0
 ## Stagger: weighted damage dealt head-on to the skill being prepared.
 var stagger_fill := 0.0
+## Stagger resistance: how many times this fighter has been Staggered this
+## fight. Each one makes its bars 50% (of their base size) bigger.
+var staggers_taken := 0
+
+
+## The damage needed to Stagger this skill now (resistance included).
+func stagger_need(def: EnemySkill) -> float:
+	return float(def.stagger_bar) * (1.0 + 0.5 * staggers_taken)
 var interrupt_count := 0
 var contained := false
 var last_skill: EnemySkill = null
@@ -504,7 +512,7 @@ func stagger_view() -> Dictionary:
 	if def == null or not skill_revealed or is_down:
 		return {}
 	if def.stagger_bar > 0:
-		return {"fill": minf(stagger_fill, def.stagger_bar), "max": float(def.stagger_bar), "hits": false}
+		return {"fill": minf(stagger_fill, stagger_need(def)), "max": stagger_need(def), "hits": false}
 	if def.special == EnemySkill.Special.HEAL_ALLIES and def.interrupt_hits > 0:
 		return {"fill": float(mini(interrupt_count, def.interrupt_hits)), "max": float(def.interrupt_hits), "hits": true}
 	if def.special == EnemySkill.Special.GROWING and def.contain_share > 0.0:

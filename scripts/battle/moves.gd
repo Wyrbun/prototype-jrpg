@@ -183,6 +183,7 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		_:
 			list = [_attack("Attack", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack")]
+	_min_window(list)
 	return list
 
 
@@ -317,7 +318,21 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
 			]
 	_inherit(list, attacks(class_id))
+	_min_window(list)
 	return list
+
+
+## Every timing window lasts at least this long (seconds): a window is a
+## share of its move's length, and the Monk's 0.3 s Punch and Kick would get
+## only 36 ms (2 frames).
+const MIN_WINDOW_SECONDS := 0.075
+
+
+static func _min_window(list: Array[Dictionary]) -> void:
+	for move in list:
+		var duration := float(move.get("duration", 0.0))
+		if duration > 0.0 and move.has("window"):
+			move["window"] = maxf(float(move["window"]), MIN_WINDOW_SECONDS / duration)
 
 
 ## What an Art takes on from the moves it's made of: their on-hit effects.
