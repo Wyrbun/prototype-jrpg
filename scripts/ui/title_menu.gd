@@ -10,7 +10,7 @@ enum Page { MAIN, ROUNDS, CONTROLS, KEYS }
 
 const GOLD := Color(0.95, 0.78, 0.35)
 const ROW_HEIGHT := 44.0
-const MAIN_NOTES := {"Boss Rush": "All 12 rounds, from the start", "Tutorial": "Learn every mechanic in a guided fight",
+const MAIN_NOTES := {"Boss Rush": "All 13 rounds and a Special Match", "Tutorial": "Learn every mechanic in a guided fight",
 		"Round Select": "Jump straight to any round", "Controls": "Every key at a glance",
 		"Change Keys": "Set your own keys", "Quit": ""}
 const FORGET_ROW := "Forget Arts"

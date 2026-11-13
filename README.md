@@ -9,6 +9,7 @@ battle systems:
 - **Legend of Legaia**: combos built in an AP bar, timed button presses, and secret Arts
 
 Placeholder art throughout (capsules and boxes): this stage is about a fun core loop.
+The screenshots are from the latest source, so a few things in them arrive with the next build.
 
 ![The Stone Golem's Ceiling Burst: falling rocks to dodge, with the timeline at the top](docs/screenshots/battle.png)
 
@@ -21,24 +22,44 @@ Placeholder art throughout (capsules and boxes): this stage is about a fun core 
 
 ## What's in it
 
-- **A 12-round boss rush** with auto-save, Round Select, and a party picker for the boss rounds (1 to 4 fighters, solo allowed)
-- **A guided tutorial** that teaches every mechanic, step by step
-- **Six classes**: Knight, Archer, Mage, Cleric, Assassin and Monk, each with its own attacks, skills, reactions and secret **Arts**
+- **A boss rush of 13 rounds plus a Special Match**, with auto-save, Round Select, and a party picker for the boss rounds (1 to 4 fighters, solo allowed)
+- **Four bosses with their own mechanics:** the Stone Golem's rocks that stay and explode, the Living Armor's Shadow Sprites, the Dragon Hatchling, and the Gale Maw, which pushes you toward a cliff edge
+- **Six classes**: Knight, Archer, Mage, Cleric, Assassin and Monk, each with its own attacks, Abilities, reactions and secret **Arts**
 - **Enemies with readable skills**: cones, lines, donuts, half-room cleaves, falling rocks, instant-death gazes you hide from, and more
 - **Arenas with drops**: holes and lethal edges you can knock enemies into, or be thrown into yourself
+- **A guided tutorial** that teaches every mechanic, step by step
 - **Play-test reports** written after every fight (press O on the end screen)
 
 ## How a fight works
 
-Everyone slides along the **timeline** at the top; reaching the end is a turn.
-Between turns you **steer** a party member in real time (Tab switches) while
-enemies prepare skills, shown on the floor in grey, then revealed late.
-Get out of the area before it lands, or **Parry** (E) / **Defend** (Q) the strike.
+Everyone slides along the **timeline** at the top. While it runs you **steer**
+one party member in real time (Tab switches who), and the others move on
+their own. Enemies entering the **CAST** zone prepare a skill: first a grey
+area on the floor, then the real one, revealed late. Get out of it before it
+lands, or **Parry** (E) or **Defend** (Q) the strike.
 
-On your turn, **Attack** opens a combo bar: fill it with moves, then hit each
-timing as the playhead passes (Press, Hold or Tap) for a **Perfect**. Moves in
-the right order merge into **Arts**, secret until you find them mid-combo.
-Perfects and Parries grow the party's max AP; mistakes reset it.
+**Your turn comes in two steps (Windup).** When a fighter reaches the gold
+**command point**, time stops and you choose: **Attack** (any enemy, near or
+far), one **Ability** (and you can still attack after it), or **Wait**. Then
+time runs again while that fighter winds up toward **ACT**; get them in reach
+of their target before they get there. Out of reach, the turn turns into a
+Wait. Prefer the old way? *Command timing: Classic* in the pause menu opens
+the menu right at the end of the bar.
+
+**Attacking** opens a combo bar: fill it with moves, then hit each timing as
+the playhead passes (Press, Hold or Tap) for a **Perfect**. Moves in the right
+order merge into **Arts**, secret until you find them mid-combo. Each move
+shows tags for how it answers what the enemy is doing right now (breaks
+Defense, interrupts, pushes, and so on). Hit an enemy in **Counter** stance and
+the playhead stops: press the hit key again on the beat to **parry it**,
+break the stance and power up the rest of the combo.
+
+**AP** is shared by the whole party. Perfects and Parries raise its maximum
+for the rest of the fight; a missed Perfect or Parry drops it back to 100.
+
+**Bosses push back:** cancel one of their skills and they shrug off the next
+few cancels, and their biggest moves can't be stopped at all. Unavoidable
+skills fill a **Stagger** bar instead: fill it with hits to break the cast.
 
 ## How to play
 
@@ -65,8 +86,8 @@ click **Import**, pick this folder's `project.godot`, and press **F5**.
 
 **First steps:**
 
-1. Start with **Tutorial** on the title screen. It teaches everything in about 15 minutes, and you can't lose.
-2. Then play **Boss Rush**: 12 rounds that get harder, with auto-save (**Continue** picks up where you left off).
+1. Start with **Tutorial** on the title screen. It teaches everything step by step, and you can't lose.
+2. Then play **Boss Rush**: 13 rounds that get harder, then a Special Match, with auto-save (**Continue** picks up where you left off).
 3. Stuck on a round? **Round Select** jumps to any of them.
 
 **Feedback is very welcome!** After every fight the game writes a short
@@ -78,13 +99,14 @@ report; press **O** on the end screen to open the folder (on Windows,
 
 | Key | Action |
 |---|---|
-| WASD | Move (between turns) / choose in menus |
+| WASD | Move the fighter you steer / choose in menus |
 | Tab | Switch party member / open the Arts list in the combo bar |
-| J / K (Enter / Backspace) | Confirm / back; J is also the timed-hit key |
+| J / K (Enter / Backspace) | Confirm / back; J is also the timed-hit key (and parries a Counter) |
 | Space | Begin the combo |
 | E / Q | Parry / Defend an enemy strike |
-| Z / C, right-drag, wheel | Camera |
-| Esc | Pause |
+| Z / C, right-drag, wheel | Camera (V resets it) |
+| Esc | Pause (settings, Command timing) |
+| R / O (end screen) | Fight again / open the play-test reports |
 
 **Change Keys** on the title screen rebinds them.
 
@@ -113,6 +135,10 @@ report; press **O** on the end screen to open the folder (on Windows,
 - [x] Pause menu, Boss Rush auto-save, rebindable keys, party picker for boss rounds
 - [x] Roster building blocks: multi-hit attacks, marked targets, hazards, healing
 - [x] Play-test reports after every fight (O on the end screen opens them)
-- [ ] Stagger gauge and knockdown (push away, disable or reshape enemy areas)
+- [x] Stagger bars: break unavoidable casts with hits
+- [x] Windup turns (Grandia-style), counter-parry, boss cancel resistance
+- [x] HUD restyle; move tags that show how each move answers the enemy
+- [x] Bosses with set-piece mechanics: Golem rocks, Shadow Sprites, Gust Sprites
+- [ ] Knockdown (push away, disable or reshape enemy areas)
 - [ ] Complete fight: proper victory and defeat screens, balance pass
 - [ ] Items (the menu entry is there, marked "coming later")
