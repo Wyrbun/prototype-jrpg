@@ -9,7 +9,6 @@ battle systems:
 - **Legend of Legaia**: combos built in an AP bar, timed button presses, and secret Arts
 
 Placeholder art throughout (capsules and boxes): this stage is about a fun core loop.
-The screenshots are from the latest source, so a few things in them arrive with the next build.
 
 ![The Stone Golem's Ceiling Burst: falling rocks to dodge, with the timeline at the top](docs/screenshots/battle.png)
 
@@ -63,18 +62,18 @@ skills fill a **Stagger** bar instead: fill it with hits to break the cast.
 
 ## How to play
 
-**Current build: [0.4.0](../../releases/tag/v0.4.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [0.5.0](../../releases/tag/v0.5.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.4.0-windows.zip`](../../releases/download/v0.4.0/PrototypeJRPG-0.4.0-windows.zip),
+[`PrototypeJRPG-0.5.0-windows.zip`](../../releases/download/v0.5.0/PrototypeJRPG-0.5.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.4.0-linux.tar.gz`](../../releases/download/v0.4.0/PrototypeJRPG-0.4.0-linux.tar.gz), then:
+[`PrototypeJRPG-0.5.0-linux.tar.gz`](../../releases/download/v0.5.0/PrototypeJRPG-0.5.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.4.0-linux.tar.gz
+tar -xzf PrototypeJRPG-0.5.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 

@@ -24,6 +24,24 @@ of every play-test report.
 
 ---
 
+## 0.5.0: Windup turns and boss mechanics
+
+- **Windup turns, now the default:** you choose a fighter's move at the gold **command point**, then time runs while they wind up toward **ACT**. Attack picks any enemy, so steer into reach before the turn lands (out of reach, it becomes a Wait). The old way is still there: *Command timing: Classic* in the pause menu. The tutorial is rewritten for it
+- **One Ability per turn, and you can still attack after it.** The Ability you used shows as a chip in the menu and a badge on the timeline
+- **Counter-parry:** hit an enemy in Counter stance and the combo stops; press the hit key on the beat to parry it, break the stance and power up the rest of the combo. You can also back out at ACT when your target is in Counter
+- **Stagger bars:** skills you can't dodge, Parry or Defend fill a gold bar with your hits (head-on, while the enemy prepares). Fill it to break the skill and knock the enemy back
+- **Bosses resist being cancelled:** after one of their skills is stopped they shrug off the next cancels for a while, and their biggest moves can't be stopped at all
+- **Stone Golem:** fallen rocks stay (it drops them twice per fight, always once by 75% HP) and its Golem Smashes blow up the rocks in their half. New double Smashes hit one side, then the other, clearing the whole arena
+- **Living Armor:** Shadowflare now calls 3 Shadow Sprites that circle the growing ring; hit each one once to stop it. It grows slower but can reach almost the whole arena
+- **Gale Maw:** Gust Sprites are very tough but light: push them off the ledge. **Every class can now push** (the Assassin's Ambush, the Cleric's Smite and the Monk's Flash Kick do), and if you don't know a push Art yet, the game shows you its recipe
+- **New look:** the timeline, menus, panels and title screen share one style; big titles in a slanted font, easier-to-read text everywhere else
+- **Arts:** every Art takes on the effects of the moves it's made of; partial hints for hidden Arts ("??? Thrust + Thrust + ?  (2 of 3)"); the combo bar zooms in for small moves
+- **Monk:** Punch and Kick need no timing, his playhead runs at half speed, and his build bar no longer overlaps the AP preview
+- **Fairer timing:** a press just after a hit lands shows LATE instead of breaking the combo; skipping a timed hit no longer costs max AP; getting hit by an avoidable attack no longer costs max AP
+- **Balance:** solo bosses have more HP and speed, the Archer is toned down, the Mage hits 10% harder, Triple Shot is retuned, shields wear off after 2 of their caster's turns, and the Assassin gets one Execute per bar
+- **Smarter allies:** AI party members dodge falling rocks and blasts by taking the shortest clear way out
+- **Fixes:** a softlock at ACT when no move could reach the target, controls no longer jump to another party member (only Tab switches), Art descriptions no longer cut off, the party comes out in the order you picked it
+
 ## 0.4.0: the Gale Maw
 
 - **New boss: the Gale Maw** (Round 11, after the Dragon, on the new Cliff arena). A stone face set into the wall: it never moves, and every attack pushes or pulls you. Inhale drags you toward its mouth, Exhale blows you toward the drop
