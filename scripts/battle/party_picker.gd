@@ -24,6 +24,9 @@ const CLASSES := [
 var round_title := ""
 var index := 0
 var picked: Array[bool] = []
+## Ticked classes in the order they were ticked: the party comes out in this
+## order (the first one starts under your control).
+var order: Array[int] = []
 var _names: Array[String] = []
 var _hp: Array[int] = []
 var _colors: Array[Color] = []
@@ -57,8 +60,13 @@ func _ready() -> void:
 func open(title: String, ticked: Array) -> void:
 	round_title = title
 	picked.clear()
+	order.clear()
 	for entry in CLASSES:
 		picked.append(ticked.has(entry[0]))
+	for path in ticked:  # keep the last pick's order
+		for i in CLASSES.size():
+			if CLASSES[i][0] == path and not order.has(i):
+				order.append(i)
 	index = 0
 	_message = ""
 	visible = true
@@ -112,15 +120,18 @@ func _select() -> void:
 			_message = "A party holds up to %d: untick someone first" % MAX_PARTY
 			return
 		picked[index] = not picked[index]
+		if picked[index]:
+			order.append(index)
+		else:
+			order.erase(index)
 		_message = ""
 		return
 	if _count() == 0:
 		_message = "Pick at least one fighter"
 		return
 	var paths: Array[String] = []
-	for i in CLASSES.size():
-		if picked[i]:
-			paths.append(CLASSES[i][0])
+	for i in order:
+		paths.append(CLASSES[i][0])
 	get_tree().paused = false
 	chosen.emit(paths)
 
@@ -154,21 +165,22 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.6))
 	var font := ThemeDB.fallback_font
 	var panel := _panel()
-	draw_style_box(_style, panel)
+	HudStyle.draw_panel(self, panel, 0.96)
 	_text(font, "CHOOSE YOUR PARTY", Vector2(panel.get_center().x, panel.position.y + 42.0), 30, GOLD, true)
-	var sub := "%s  -  pick 1 to %d (going solo is allowed)   %d chosen" % [round_title, MAX_PARTY, _count()]
+	var sub := "%s  -  pick 1 to %d in turn order: the first starts in control (solo is allowed)   %d chosen" % [round_title, MAX_PARTY, _count()]
 	_text(font, sub, Vector2(panel.get_center().x, panel.position.y + 70.0), 15, Color(0.7, 0.72, 0.8), true)
 	for i in _rows():
 		var row := _row(i)
 		var selected := i == index
 		if selected:
-			draw_rect(row, Color(GOLD, 0.22))
+			HudStyle.draw_selection(self, row, GOLD)
 		if i < CLASSES.size():
 			var box := Rect2(row.position + Vector2(12, 12), Vector2(20, 20))
 			draw_rect(box, Color(0.1, 0.1, 0.14))
 			draw_rect(box, GOLD if selected else Color(0.7, 0.7, 0.75), false, 2.0)
 			if picked[i]:
-				draw_rect(box.grow(-5), GOLD)
+				draw_rect(box.grow(-2), GOLD)
+				_text(font, str(order.find(i) + 1), box.get_center() + Vector2(0, 6), 15, Color.WHITE, true)
 			draw_circle(row.position + Vector2(56, 22), 11.0, _colors[i])
 			var full := picked[i] or _count() < MAX_PARTY
 			_text(font, _names[i], row.position + Vector2(78, 22), 20, Color.WHITE if full else Color(0.55, 0.55, 0.6), false)

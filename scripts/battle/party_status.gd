@@ -37,7 +37,7 @@ func _draw() -> void:
 	# Bars start after the longest name, so names like "Stone Golem" fit.
 	var bar_x := BAR_X
 	for c in party:
-		bar_x = maxf(bar_x, font.get_string_size(c.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x + 12.0)
+		bar_x = maxf(bar_x, HudStyle.header_width(c.display_name, 19) + 14.0)
 	var row_height := ROW_HEIGHT if party.size() <= MAX_ROWS else size.y / party.size()
 	if not tags_on_left and party.size() * TAG_ROW_HEIGHT <= size.y:
 		row_height = TAG_ROW_HEIGHT
@@ -46,16 +46,15 @@ func _draw() -> void:
 		var c := party[i]
 		var y := top + i * row_height
 		var name_color := Color(0.5, 0.5, 0.5) if c.is_down else (Color(1.0, 0.82, 0.2) if c == controlled else Color.WHITE)
-		_text(font, Vector2(0, y + 19), c.display_name, 19, name_color)
+		HudStyle.draw_header(self, Vector2(0, y + 19), c.display_name, 19, name_color)
 
 		var bar := Rect2(bar_x, y + 5, BAR_WIDTH, BAR_HEIGHT)
-		draw_rect(bar, Color(0.08, 0.09, 0.13, 0.85))
 		var hp_width := BAR_WIDTH * float(c.hp) / c.max_hp
 		var recoverable_width := BAR_WIDTH * float(c.recoverable) / c.max_hp
 		var hp_color := Color(0.35, 0.85, 0.4) if float(c.hp) / c.max_hp > 0.3 else Color(0.95, 0.35, 0.25)
-		draw_rect(Rect2(bar.position, Vector2(hp_width, BAR_HEIGHT)), hp_color)
-		draw_rect(Rect2(bar.position + Vector2(hp_width, 0), Vector2(recoverable_width, BAR_HEIGHT)), Color(1, 1, 1, 0.45))
-		draw_rect(bar, Color(0.8, 0.8, 0.9), false, 1.5)
+		HudStyle.draw_gauge(self, bar, float(c.hp) / c.max_hp, hp_color)
+		if recoverable_width > 0.0:
+			draw_rect(Rect2(bar.position + Vector2(hp_width, 0), Vector2(recoverable_width, BAR_HEIGHT)), Color(1, 1, 1, 0.45))
 
 		if c.shield > 0 and not c.is_down:
 			# Barrier/shield: a light-blue strip along the top of the bar.

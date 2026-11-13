@@ -220,6 +220,21 @@ func has_line_of_sight(from: Vector3, to: Vector3) -> bool:
 
 
 ## A rough size, used to place the camera.
+## True if a fighter of this size can stand here: inside the arena's edge
+## and not inside a rock. (For AI path checks; keep_inside does the pushing.)
+func walkable(point: Vector3, body_radius: float) -> bool:
+	for obstacle in obstacles():
+		var off := point - obstacle.global_position
+		off.y = 0.0
+		if off.length() < obstacle.radius + body_radius:
+			return false
+	if shape == Shape.CIRCLE:
+		return Vector2(point.x, point.z).length() <= size.x / 2.0 - body_radius
+	var b := _bounds()
+	return point.x >= b[0] + body_radius and point.x <= b[1] - body_radius \
+			and point.z >= b[2] + body_radius and point.z <= b[3] - body_radius
+
+
 func extent() -> float:
 	return maxf(size.x, size.y) / 2.0
 

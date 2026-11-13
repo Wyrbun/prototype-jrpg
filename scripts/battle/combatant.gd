@@ -20,6 +20,24 @@ enum Team { PARTY, ENEMY }
 ## Enemies: Attack-type hits needed to interrupt a Smash it's preparing
 ## (bosses: 3). Breaking moves interrupt at once.
 @export var interrupt_resist: int = 1
+## Bosses: their skills can be cancelled (interrupt, stun, Hook) only once
+## every this many of their actions; each cancel this fight adds one more
+## action of immunity ("IMMUNE"), up to 3. 0 = no limit (breaking a Defense
+## stance always works).
+@export var cancel_every: int = 0
+## Golem: only this many Ceiling Bursts leave rocks; later ones still drop
+## their circles, but no new rocks (so the arena doesn't fill up). 0 = no
+## limit.
+@export var max_rock_bursts: int = 0
+## Share of incoming damage it actually takes (Gust Sprites: very tough, 0.2).
+@export_range(0.0, 1.0) var damage_taken_share: float = 1.0
+## How far pushes send it, as a multiple (Gust Sprites: light, pushed far).
+@export var knockback_taken: float = 1.0
+var rock_bursts := 0
+## Actions left before its skills can be cancelled again, and how many
+## cancels it has taken this fight.
+var cancel_lock := 0
+var cancels_taken := 0
 
 @export_group("Combat")
 ## Party only: which class's attacks and skills this fighter uses
@@ -36,6 +54,11 @@ enum Team { PARTY, ENEMY }
 ## Party only: the class's AP: the most it can spend in one turn (the
 ## combo bar's length, and the limit for a skill's cost).
 @export var combo_limit: float = 50.0
+## How fast the combo playhead runs for this fighter (1 = the usual 15 AP per
+## second). The Monk's moves are cheap, so at full speed his Holds and Taps
+## were squeezed into a third of a second; he plays at half speed, so a
+## 5 AP move lasts as long as a 10 AP move does for everyone else.
+@export var playhead_speed: float = 1.0
 ## Monk: the bar lengths its climb steps through ([30, 50, 80, 100]; empty
 ## = a normal class). It starts on the first; Arts raise it a step at a
 ## time, mistakes drop it one, Tortoise Special spends it all.
@@ -138,8 +161,22 @@ var stance: int = Skills.NONE
 ## Each counts down on its caster's turns: {"turns": n, "caster": Combatant}.
 ## Effects without a turn count last until used up (e.g. "arcane_barrier").
 var statuses := {}
-## Barrier/shield HP: soaks up damage before HP does.
-var shield: int = 0
+## Barrier/shield HP: soaks up damage before HP does. Each shield given is
+## its own stack ({amount, turns, caster}) that runs out after SHIELD_TURNS of
+## its caster's turns; a new shield never refreshes older ones. `shield` is
+## their total (setting it replaces them all with one stack, e.g. 0 clears).
+const SHIELD_TURNS := 2
+var shield_stacks: Array[Dictionary] = []
+var shield: int:
+	get:
+		var total := 0
+		for stack in shield_stacks:
+			total += int(stack["amount"])
+		return total
+	set(value):
+		shield_stacks.clear()
+		if value > 0:
+			shield_stacks.append({"amount": value, "turns": SHIELD_TURNS, "caster": null})
 ## Archer's Riposte (and the Monk's Suplex): seconds of counter stance left,
 ## and what the counter is called.
 var riposte_left := 0.0
@@ -191,7 +228,8 @@ var last_skill: EnemySkill = null
 
 ## Enemies only: Assassin's Marks on this enemy (0 to MAX_MARKS).
 var marks := 0
-const MAX_MARKS := 5
+## 4, not 5: at 5 Marks Execute cost 25 AP, so two fit in the 50 AP bar.
+const MAX_MARKS := 4
 
 var _skill_label: Label3D = null
 var _marks_label: Label3D = null
@@ -306,12 +344,18 @@ func take_damage(amount: int, recoverable_hit: bool) -> int:
 	if statuses.has("arcane_barrier"):
 		statuses.erase("arcane_barrier")
 		return 0
+	if damage_taken_share < 1.0:
+		amount = maxi(ceili(amount * damage_taken_share), 1)  # Gust Sprites shrug most of it off
 	if statuses.has("brace"):
 		amount = ceili(amount * 0.5)
-	if shield > 0:
-		var absorbed := mini(shield, amount)
-		shield -= absorbed
+	# Shields soak it up, oldest first.
+	while amount > 0 and not shield_stacks.is_empty():
+		var stack: Dictionary = shield_stacks[0]
+		var absorbed := mini(int(stack["amount"]), amount)
+		stack["amount"] = int(stack["amount"]) - absorbed
 		amount -= absorbed
+		if int(stack["amount"]) <= 0:
+			shield_stacks.remove_at(0)
 	if amount <= 0:
 		return 0
 	recoverable = 0
@@ -334,11 +378,14 @@ func heal(amount: int) -> int:
 	return hp - before
 
 
-## Adds barrier HP, up to half of max HP.
-func add_shield(amount: int) -> int:
-	var before := shield
-	shield = mini(shield + amount, max_hp / 2)
-	return shield - before
+## Adds a new shield stack (up to half of max HP in all), lasting
+## SHIELD_TURNS of the caster's turns. Older stacks keep their own countdown.
+func add_shield(amount: int, caster: Combatant = null) -> int:
+	var gained := mini(amount, max_hp / 2 - shield)
+	if gained <= 0:
+		return 0
+	shield_stacks.append({"amount": gained, "turns": SHIELD_TURNS, "caster": caster})
+	return gained
 
 
 ## Monk: true for a class whose bar climbs in steps.
@@ -408,9 +455,9 @@ func _make_climb_label(height: float, font_size: int) -> Label3D:
 ## Monk: a mistake drops the bar one step and takes the most recent token
 ## (Crowd Cheer last, so a drop can still leave a cash-out). Returns a short
 ## note, or "" when there was nothing to lose.
-func drop_step() -> String:
+func drop_step(keep_step := false) -> String:
 	var lost: PackedStringArray = []
-	if bar_step() > 0:
+	if bar_step() > 0 and not keep_step:
 		lost_step = combo_limit
 		combo_limit = bar_steps[bar_step() - 1]
 		lost.append("bar %d" % int(combo_limit))
@@ -489,6 +536,17 @@ func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
 		if entry["turns"] <= 0:
 			statuses.erase(status_name)
 			ended.append(status_name)
+	# Shield stacks given by this turn's fighter count down too.
+	var shield_ended := false
+	for stack in shield_stacks.duplicate():
+		if stack["caster"] != turn_owner:
+			continue
+		stack["turns"] = int(stack["turns"]) - 1
+		if int(stack["turns"]) <= 0:
+			shield_stacks.erase(stack)
+			shield_ended = true
+	if shield_ended:
+		ended.append("shield")
 	return ended
 
 
@@ -515,6 +573,13 @@ func stagger_view() -> Dictionary:
 		return {"fill": minf(stagger_fill, stagger_need(def)), "max": stagger_need(def), "hits": false}
 	if def.special == EnemySkill.Special.HEAL_ALLIES and def.interrupt_hits > 0:
 		return {"fill": float(mini(interrupt_count, def.interrupt_hits)), "max": float(def.interrupt_hits), "hits": true}
+	if def.special == EnemySkill.Special.GROWING and def.orbit_sprites > 0:
+		# Shadowflare: one pip per Shadow Sprite hit.
+		var down := def.orbit_sprites
+		for sprite in get_meta("orbiters", []):
+			if is_instance_valid(sprite) and not sprite.is_down:
+				down -= 1
+		return {"fill": float(def.orbit_sprites if contained else down), "max": float(def.orbit_sprites), "hits": true}
 	if def.special == EnemySkill.Special.GROWING and def.contain_share > 0.0:
 		var need := float(ceili(max_hp * def.contain_share))
 		return {"fill": need if contained else minf(cast_damage_taken, need), "max": need, "hits": false}

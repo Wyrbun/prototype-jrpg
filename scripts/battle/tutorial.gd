@@ -1,6 +1,9 @@
 class_name TutorialDirector
 extends Node
 ## Runs the tutorial: one guided fight against the Training Golem.
+## It teaches Windup command timing (the default): choose at the COM mark,
+## get in reach, act at ACT. The old Classic version is kept in
+## archive/tutorial_classic.gd.
 ##
 ## The tutorial is a list of steps. A step is either a note (the fight pauses
 ## until J / Enter / Space) or a goal (the fight runs until the goal is met). Each
@@ -17,6 +20,9 @@ const MAGE := preload("res://scenes/characters/mage.tscn")
 const CLERIC := preload("res://scenes/characters/cleric.tscn")
 const ASSASSIN := preload("res://scenes/characters/assassin.tscn")
 const MONK := preload("res://scenes/characters/monk.tscn")
+
+## "Soon": a moment before the COM mark (party_command_at, 65).
+const SOON_AT := 59.0
 
 var battle: BattleArena
 var panel: TutorialPanel
@@ -163,8 +169,8 @@ func _golem_rest() -> void:
 
 ## Brings the Knight's next turn close.
 func _knight_soon() -> void:
-	if battle.active != knight and knight.timeline_pos < 70.0:
-		knight.timeline_pos = 70.0
+	if battle.active != knight and not knight.has_meta("windup_target") and knight.timeline_pos < SOON_AT:
+		knight.timeline_pos = SOON_AT
 
 
 func _top_up_ap(amount: float) -> void:
@@ -213,8 +219,8 @@ func id_member(id: String) -> Combatant:
 ## Brings a party member's next turn close.
 func _soon(id: String) -> void:
 	var member := id_member(id)
-	if member != null and battle.active != member and member.timeline_pos < 70.0:
-		member.timeline_pos = 70.0
+	if member != null and battle.active != member and not member.has_meta("windup_target") and member.timeline_pos < SOON_AT:
+		member.timeline_pos = SOON_AT
 
 
 # --- The lessons ------------------------------------------------------------
@@ -234,39 +240,68 @@ func _build_steps() -> void:
 
 	# 2. The timeline
 	_note(2, "The timeline",
-		"The bar at the top is the timeline. Every fighter's icon slides right at their own speed, and reaching the right end starts their turn. Party icons sit above the bar, enemies below.\n\nThe orange stretch at the end is the casting zone, where enemies prepare their skills.")
+		"The bar at the top is the timeline. Every fighter's icon slides right at their own speed. Party icons sit above the bar, enemies below.\n\nA party member's turn comes in two parts:\n- COM (the gold mark): you choose what to do, and the fight pauses while you do\n- ACT (the end of the bar): the attack you chose happens\n\nThe orange stretch, CAST, is where enemies prepare their skills. They strike when they reach ACT.")
 	_goal(2, "The timeline",
 		"The gold ring around the Knight shows its reach: an enemy touching the ring can be attacked.",
 		"Walk up until the Training Golem is inside your gold ring",
 		func(): return knight.gap_to(golem) <= knight.reach())
 	_goal(2, "The timeline",
-		"Now let the Knight's icon reach the end of the bar.",
-		"Wait for the Knight's turn",
+		"Now let the Knight's icon reach the gold COM mark.",
+		"Wait for the Knight's command (COM)",
 		func(): return battle.active == knight,
 		func():
 			knight.hold = false
-			knight.timeline_pos = maxf(knight.timeline_pos, 75.0))
+			knight.timeline_pos = maxf(knight.timeline_pos, SOON_AT))
 
 	# 3. Your turn
 	_note(3, "Your turn",
-		"On a turn, the fighter is locked in place and the command menu opens:\n- Attack: build a combo (greyed out when no enemy is in reach, or the party can't afford a move that reaches one)\n- Abilities: use one Ability (a class's special actions)\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.")
+		"At COM the command menu opens:\n- Attack: choose who to go after. You don't need to be in reach yet\n- Abilities: use one Ability (a class's special actions) right away. Then you can still Attack or Wait\n- Wait: skip the turn, and the next one comes sooner\n\nEvery turn adds 30 AP to the party's pool. Use {up} / {down} to choose, {confirm} (or Enter) to select, and {cancel} (or Backspace) to go back.",
+		func():
+			# Out of reach on purpose: the next lesson is getting there.
+			knight.hold = true
+			var away := knight.global_position - golem.global_position
+			away.y = 0.0
+			if away.length() < 0.1:
+				away = Vector3(0, 0, 1)
+			knight.global_position = golem.global_position + away.normalized() * (golem.body_radius + 5.5)
+			battle._keep_in_arena(knight))
+	_goal(3, "Go after it",
+		"The Knight is out of reach now. That's fine: choose Attack anyway, and the Golem as the target.\n\nThe fight runs again, and the Knight's icon heads from COM to ACT.",
+		"Choose Attack at COM",
+		func(): return _stat("windups") >= 1,
+		func():
+			knight.hold = false
+			_knight_soon()
+			_top_up_ap(60.0))
+	_goal(3, "Get in reach",
+		"Walk ({move}) until the Golem is inside your gold ring before the Knight's icon reaches ACT. A short grace at the end still counts.\n\nToo far when it ends, and the turn becomes a Wait (TOO FAR): choose Attack again on the next one.",
+		"Get in reach before ACT",
+		func(): return battle.active == knight and battle._menu_mode == BattleMenu.Mode.COMBO,
+		func(): pass)
+	steps[-1]["tick"] = func():
+		# Missed it: bring the next command around for another try.
+		if battle.active == null and not knight.has_meta("windup_target"):
+			_knight_soon()
 	_goal(3, "Combos",
-		"Attack opens the combo bar. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins.",
+		"At ACT the combo bar opens on your target. Each move fills part of the bar with its AP cost, and the bar's length is the most this class can spend in a turn. The AP the combo will spend shows as a dark section on the AP meter.\n\n{confirm} (or Enter) adds the selected move, {cancel} (or Backspace) removes the last one, and {begin} begins. You chose Attack at COM, so there's no going back to the menu now.",
 		"Build a combo and press {begin}",
 		func(): return _stat("combos") >= 1,
 		func(): _top_up_ap(60.0))
+	steps[-1]["tick"] = func():
+		if battle.active == null and not knight.has_meta("windup_target"):
+			_knight_soon()
 	_note(3, "Timed hits",
 		"While the combo plays, a white playhead sweeps across the bar after a short READY lead-in. Every hit has a small box: press {confirm} (or Enter) as the playhead enters it for a Perfect (+50% damage). The hit count and damage add up on the right of the screen.\n\nPress at the wrong moment and the chain ends, and the party loses all its AP.\n\nTimed hits are optional: if you can't hit one, just don't press. The hit still lands at normal damage.")
 	_goal(3, "Timed hits",
-		"Try it on this combo or on the Knight's next turn. Remember: when in doubt, don't press. A skipped timing is a normal hit, a wrong press ends the combo.",
+		"Try it on this combo or on the Knight's next one (Attack at COM, then get in reach). Remember: when in doubt, don't press. A skipped timing is a normal hit, a wrong press ends the combo.",
 		"Land a Perfect hit",
 		func(): return _stat("perfects") >= 1,
 		func():
 			_knight_soon()
 			_top_up_ap(60.0))
 	_goal(3, "Waiting",
-		"Wait spends no AP. The Knight's next turn starts a third of the way along the bar instead of at the beginning.",
-		"Choose Wait on the Knight's next turn",
+		"Wait spends no AP. The Knight's icon goes back a third of the way along the bar instead of to the beginning, so the next COM comes sooner.",
+		"Choose Wait at the Knight's next COM",
 		func(): return _stat("waits") >= 1,
 		func(): _knight_soon())
 	_note(3, "Arts",
@@ -279,7 +314,7 @@ func _build_steps() -> void:
 			_knight_soon()
 			_top_up_ap(60.0))
 	_goal(3, "The Arts list",
-		"Known Arts can also go on the bar in one go. In the combo bar, press {swap} to move into the ARTS panel, choose an Art with {up} / {down}, and {confirm} adds its whole recipe. {swap} or {cancel} goes back to the moves.\n\nAn Art picked from the list stays itself even after other moves, and the chosen Art's details (its cost, timing and what it does) show above the panel.",
+		"Known Arts can also go on the bar in one go. In the combo bar, press {swap} to move into the ARTS panel, choose an Art with {up} / {down}, and {confirm} adds its whole recipe. {swap} or {cancel} goes back to the moves.\n\nAn Art picked from the list stays itself even after other moves, and the chosen Art's details (its cost, timing and what it does) show left of the moves.",
 		"Add an Art from the list ({swap}) and play it",
 		func(): return _stat("arts_picked") >= 1 and _stat("combos") > _combos_before_list,
 		func():
@@ -289,7 +324,7 @@ func _build_steps() -> void:
 
 	# 4. Reading the enemy
 	_note(4, "Reading the enemy",
-		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. It strikes when its icon reaches the end of the bar, hitting anyone still inside the area.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area. A line at the top of the screen names anyone who would be hit.",
+		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. It strikes when its icon reaches ACT, hitting anyone still inside the area.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area. A line at the top of the screen names anyone who would be hit.",
 		func():
 			knight.hold = true
 			_golem_repeat("Attack"))
@@ -314,7 +349,7 @@ func _build_steps() -> void:
 
 	# 6. The skill triangle
 	_note(6, "The skill triangle",
-		"Every skill has a place in a triangle:\n- Attack beats Smash (it interrupts it)\n- Smash breaks Defense\n- Defense blocks Attack\n- Counter punishes anything that hits it\n\nIt works both ways: what the enemy prepares changes which of your moves work.\n\nWhile you pick moves, the ones that answer what the enemy is doing get a green tag (INTERRUPTS, PIERCES, STUNS...), and the ones that would backfire get a red one (BLOCKED, COUNTERED).",
+		"Every skill has a place in a triangle:\n- Attack beats Smash (it interrupts it)\n- Smash breaks Defense\n- Defense blocks Attack\n- Counter catches anything that hits it and swings back\n\nIt works both ways: what the enemy prepares changes which of your moves work.\n\nWhile you pick moves, the ones that answer what the enemy is doing get a green tag (INTERRUPTS, PIERCES, STUNS...), and the ones that would backfire get a red one (BLOCKED). A yellow one is a risk you can take (COUNTER: PARRY IT).",
 		func(): knight.hold = false)
 	_goal(6, "Defense",
 		"The Golem raises its Defense stance, and basic moves like Slash bounce off. Thrust ignores Defense, and so does Lunge (the Art Slash + Thrust).",
@@ -325,8 +360,8 @@ func _build_steps() -> void:
 			_knight_soon()
 			_top_up_ap(60.0))
 	_goal(6, "Counter",
-		"Now it holds Counter. Anything that hits it gets punished, and your combo stops. The answer is patience: let the stance run out.",
-		"Choose Wait while the Counter stance is up",
+		"Now it holds Counter. Your first hit is caught and it swings back: the playhead stops and a red line closes in. Press {confirm} as it reaches the red box to parry it: the stance breaks and the rest of your combo hits harder. Miss and you're countered: damage, and the combo stops.\n\nThe safe answer is patience: Wait and let the stance run out. If it goes into Counter after you chose Attack, {cancel} at ACT backs off (your turn becomes a Wait).",
+		"Choose Wait at COM while the Counter stance is up",
 		func(): return _stat("counter_waits") >= 1,
 		func():
 			_golem_show("Counter")
@@ -347,7 +382,7 @@ func _build_steps() -> void:
 			_golem_rest()
 			_set_party(["archer"]))
 	_goal(7, "Abilities",
-		"Abilities lists a class's special actions. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. You can use one Ability per turn: after it, Abilities greys out but you can still Attack or Wait.",
+		"Abilities lists a class's special actions. Some ask for a target: {up} / {down} picks an ally or enemy, and Jump lets you place a marker with {move}. You can use one Ability per turn: after it, Abilities shows the one you used and you can still Attack or Wait.",
 		"Use an Ability with the Archer",
 		func(): return _stat("skills_archer") >= 1,
 		func():
@@ -357,7 +392,7 @@ func _build_steps() -> void:
 		"The Mage's spells hit areas: Fire runs through a line and sets enemies burning (they take damage each time they act, twice), Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage.\n\nFire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press.\n\nArcane Surge is the exception, her single-target spell: tap as fast as you can, every tap adds damage and extra taps are fine.\n\nHer Concentrate Ability doubles AP recharge for a while (the AP meter shows it).",
 		func(): _set_party(["mage"]))
 	_goal(7, "The Mage",
-		"Walk the Mage into range between turns ({move}): Fire reaches 4.5 m, the other spells 3 m. Then attack on its turn.",
+		"Choose Attack at the Mage's COM, then walk her into range ({move}) before ACT: Fire reaches 4.5 m, the other spells 3 m.",
 		"Attack with the Mage",
 		func(): return _stat("combos_mage") >= 1,
 		func():
@@ -376,7 +411,7 @@ func _build_steps() -> void:
 
 	# 8. Max AP
 	_note(8, "Max AP",
-		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and never past 500. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Taking a hit you could have avoided costs one segment: the meter pulses red while someone stands in harm's way. Skipping timed hits slowly drains the bonus too.",
+		"AP is shared by the whole party and recharges over time. Every Perfect and every Parry raises max AP for the rest of the fight, up to 100 per party member plus 100, and never past 500. The meter grows a new coloured segment for every 100, and a bigger max recharges faster (up to twice as fast).\n\nMiss a timed hit or a Parry and the party loses all its AP, and max AP drops back to 100. Skipping a timed hit is safe: it just lands as a normal hit.",
 		func(): _set_party(["knight"]))
 	_goal(8, "Max AP",
 		"Land Perfect hits or Parry the Golem's strikes. It's attacking again.",
@@ -416,11 +451,11 @@ func _build_steps() -> void:
 
 	# 10. Special enemy skills (later enemies; the Training Golem doesn't use them)
 	_note(10, "Special skills",
-		"Later enemies have skills marked UNAVOIDABLE. Those can't be dodged, Parried or Defended: their circles and lines follow their targets until they land, and they just deal their damage. What matters is answering them:\n- Red sphere over everyone: spread out, so circles don't overlap\n- Arrows pointing inward: stack up, to share the damage\n- A circle on one person: they should stand alone\n\nGetting the answer wrong costs a max AP segment, like any avoidable hit.")
+		"Later enemies have skills marked UNAVOIDABLE. Those can't be dodged, Parried or Defended: their circles and lines follow their targets until they land, and they just deal their damage. What matters is answering them:\n- Red sphere over everyone: spread out, so circles don't overlap\n- Arrows pointing inward: stack up, to share the damage\n- A circle on one person: they should stand alone\n\nGetting the answer wrong means taking more damage than you had to.")
 	_note(10, "Stagger",
 		"Most of them can be broken, though. A skill marked STAGGER IT shows a gold Stagger bar under the enemy's HP and on the timeline. Damage you deal from in front of it fills the bar (Smash-type moves, breaking moves and Arts count 1.5x).\n\nFill it and the enemy is STAGGERED: the skill breaks (a few change into something weaker instead), it goes back to the start of the timeline, and it takes +25% damage until its next turn.\n\nMoves that fill the bar are tagged STAGGER or STAGGERS in the menu. Healing Ritual and growing circles show their own rules as the same bar.")
 	_note(10, "Special skills",
-		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the caster hard to stop them, then step out\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
+		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the sprites circling their edge (one hit each) to stop them, or run to the side it can't reach\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
 	_note(10, "Drops",
 		"Some arenas have drops: holes and edges marked by a glowing red line lined with skulls. Regular enemies knocked or pulled over one fall out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nGo over a drop yourself (walking, pushed or pulled) and you teeter: {parry} as the ring turns gold to catch yourself. After a save you're Off-Balance for 3 turns: going over again in that time is a fall.\n\nPushed or pulled by an enemy? {defend} as it strikes to brace: the move is half as long (for classes that can Block).")
 
@@ -436,7 +471,7 @@ func _build_steps() -> void:
 				battle._set_controlled(assassin)
 			golem.add_status("taunt", 99, knight))
 	_goal(11, "Get behind",
-		"Between turns, switch to the Assassin ({swap}) and walk round to the Golem's back. While you steer the Assassin, every enemy has a ring on the floor: the arrow is its front, and the violet arc is its back, glowing when you stand in it. On the Assassin's turn, attack: Stab deals 1.5x from behind, and FROM BEHIND pops up when it counts.",
+		"Choose Attack at the Assassin's COM, then walk round to the Golem's back before ACT. While you steer the Assassin, every enemy has a ring on the floor: the arrow is its front, and the violet arc is its back, glowing when you stand in it. Stab deals 1.5x from behind, and FROM BEHIND pops up when it counts.",
 		"Hit the Golem from behind",
 		func(): return _stat("behind_hits") >= 1,
 		func():
@@ -445,7 +480,7 @@ func _build_steps() -> void:
 			if assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_goal(11, "Shadowstep",
-		"Walking round takes time. Shadowstep teleports the Assassin behind its target, then strikes, and deals 1.5x if it started in FRONT. Moves after it on the combo bar land from behind. Its timings are random, but the first move of a combo always comes in the middle or late part of its box.",
+		"Walking round takes time, and ACT doesn't wait. Shadowstep teleports the Assassin behind its target, then strikes, and deals 1.5x if it started in FRONT. Moves after it on the combo bar land from behind. Its timings are random, but the first move of a combo always comes in the middle or late part of its box.",
 		"Use Shadowstep",
 		func(): return _stat("shadowsteps") >= 1,
 		func():
@@ -453,7 +488,7 @@ func _build_steps() -> void:
 			if assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_note(11, "Assassin's Marks",
-		"Marks sit on enemies (up to 5): you see MARK x3 over the enemy and violet diamonds by its timeline icon. Ways to add them:\n- Backstab from behind: 2x damage and a Mark (from the front it always misses)\n- Death Sentence (Abilities): 3 Marks at once\n- Every 3rd Stab on a Marked enemy adds one")
+		"Marks sit on enemies (up to 4): you see MARK x3 over the enemy and violet diamonds by its timeline icon. Ways to add them:\n- Backstab from behind: 2x damage and a Mark (from the front it always misses)\n- Death Sentence (Abilities): 3 Marks at once\n- Every 3rd Stab on a Marked enemy adds one")
 	_goal(11, "Assassin's Marks",
 		"Build up Marks on the Golem.",
 		"Put 4 Marks on the Golem",
@@ -486,7 +521,7 @@ func _build_steps() -> void:
 
 	# 12. The Monk: build the bar, then cash out
 	_note(12, "The Monk",
-		"The last class: the Monk. Weak alone, he builds his bar up over a fight, then spends it all at once.\n\nHis bar starts at 30 AP and climbs in steps: 50, 80, 100. Every CLIMB Art (Knee Smash, Triple Rush, Mountain Crusher) raises it one step, whichever step he's on. On his turn, pips over his head show the steps he's climbed, and the same pips sit by his timeline icon. He spends party AP like everyone else.\n\nPunch and Kick have one timed hit each; their other hits land by themselves (the small ticks on the bar).",
+		"The last class: the Monk. Weak alone, he builds his bar up over a fight, then spends it all at once.\n\nHis bar starts at 30 AP and climbs in steps: 50, 80, 100. Every CLIMB Art (Knee Smash, Triple Rush, Mountain Crusher) raises it one step, whichever step he's on. On his turn, pips over his head show the steps he's climbed, and the same pips sit by his timeline icon. He spends party AP like everyone else.\n\nPunch and Kick have no timing: their hits land by themselves (the small ticks on the bar). His heavy moves and Arts are where the timing is.",
 		func():
 			_golem_rest()
 			golem.statuses.erase("taunt")
@@ -532,11 +567,11 @@ func _build_steps() -> void:
 			_soon("monk")
 			_top_up_ap(100.0))
 	_note(12, "Risks and tanking",
-		"Mistakes cost the Monk: a missed timing, an avoidable hit or a Parry pressed too early drops his bar a step and takes his newest token (Crowd Cheer last). Deep Breath heals him and gives that step back.\n\nHe can tank ONE enemy for a while: Provoke makes it come for him, and each Parry meanwhile gives Rush; a Suplex counter gives Mountain. The Knight is still the better tank: their Taunt holds every enemy nearby, and while it lasts, allies close to them share their Block and Parry.")
+		"Mistakes cost the Monk: an avoidable hit or a Parry pressed too early drops his bar a step and takes his newest token (Crowd Cheer last). A missed timing only takes the token: the climb holds. Deep Breath heals him and gives a lost step back.\n\nHe can tank ONE enemy for a while: Provoke makes it come for him, and each Parry meanwhile gives Rush; a Suplex counter gives Mountain. The Knight is still the better tank: their Taunt holds every enemy nearby, and while it lasts, allies close to them share their Block and Parry.")
 
 	# 13. Free practice
 	_note(13, "Free practice",
-		"That's everything! For the final test, the Knight, Archer, Mage and Cleric fight the Training Golem together, and it can be defeated.\n\nWith a full party, {swap} switches who you steer between turns. The others move on their own: they stay out of danger, stand near their attack range, and stack up or spread out when an enemy skill calls for it.\n\nEsc pauses; quit to the menu from there, where the Boss Rush is waiting.",
+		"That's everything! For the final test, the Knight, Archer, Mage and Cleric fight the Training Golem together, and it can be defeated.\n\nWith a full party, {swap} switches who you steer; only {swap} changes it. A member whose COM comes up takes over for the menu, then control goes back to whoever you were steering. The others move on their own: they stay out of danger, stand near their attack range, stack up or spread out when an enemy skill calls for it, and after you choose Attack for them, walk to their target by themselves.\n\nEsc pauses; quit to the menu from there, where the Boss Rush is waiting.",
 		func():
 			_set_party(["knight", "archer", "mage", "cleric"])
 			_practice = true

@@ -55,6 +55,8 @@ spike_damage = 16
 [sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
 skill_name = "Right Golem Smash"
+uncancellable = true
+smash_blasts_rocks = true
 kind = 1
 weight = 1
 shape = 0
@@ -72,6 +74,8 @@ fills_arena = true
 [sub_resource type="Resource" id="Skill_6"]
 script = ExtResource("2_skill")
 skill_name = "Left Golem Smash"
+uncancellable = true
+smash_blasts_rocks = true
 kind = 1
 weight = 1
 shape = 0
@@ -89,6 +93,9 @@ fills_arena = true
 [sub_resource type="Resource" id="Skill_7"]
 script = ExtResource("2_skill")
 skill_name = "Ceiling Burst"
+uncancellable = true
+sure_below_hp = 0.75
+ceiling_rock_seconds = 0.0
 kind = 4
 weight = 2
 shape = 1
@@ -103,6 +110,9 @@ ceiling_damage = 28
 script = ExtResource("2_skill")
 cast_speed = 0.8
 skill_name = "Right Smash + Ceiling Burst"
+uncancellable = true
+smash_blasts_rocks = true
+ceiling_rock_seconds = 0.0
 kind = 4
 weight = 1
 shape = 0
@@ -123,6 +133,9 @@ ceiling_damage = 28
 script = ExtResource("2_skill")
 cast_speed = 0.8
 skill_name = "Left Smash + Ceiling Burst"
+uncancellable = true
+smash_blasts_rocks = true
+ceiling_rock_seconds = 0.0
 kind = 4
 weight = 1
 shape = 0
@@ -154,8 +167,94 @@ size = Vector3(1.6, 1.6, 1.6)
 [sub_resource type="StandardMaterial3D" id="Mat_body"]
 albedo_color = Color(0.55, 0.5, 0.45, 1)
 
+[sub_resource type="Resource" id="Skill_12"]
+script = ExtResource("2_skill")
+skill_name = "Left Golem Smash"
+uncancellable = true
+smash_blasts_rocks = true
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = -90.0
+locks_facing = true
+fills_arena = true
+
+[sub_resource type="Resource" id="Skill_11"]
+script = ExtResource("2_skill")
+skill_name = "Right + Left Golem Smash"
+uncancellable = true
+rock_clear_weight = 0.3
+rock_settle_seconds = 12.0
+smash_blasts_rocks = true
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = 90.0
+locks_facing = true
+fills_arena = true
+follow_up = SubResource("Skill_12")
+follow_up_delay = 1.5
+
+[sub_resource type="Resource" id="Skill_14"]
+script = ExtResource("2_skill")
+skill_name = "Right Golem Smash"
+uncancellable = true
+smash_blasts_rocks = true
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = 90.0
+locks_facing = true
+fills_arena = true
+
+[sub_resource type="Resource" id="Skill_13"]
+script = ExtResource("2_skill")
+skill_name = "Left + Right Golem Smash"
+uncancellable = true
+rock_clear_weight = 0.3
+rock_settle_seconds = 12.0
+smash_blasts_rocks = true
+kind = 1
+weight = 1
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 48
+windup = 1.4
+cannot_be_parried = true
+cannot_be_blocked = true
+cast_speed = 0.8
+aim_offset_degrees = -90.0
+locks_facing = true
+fills_arena = true
+follow_up = SubResource("Skill_14")
+follow_up_delay = 1.5
+
 [node name="StoneGolem" instance=ExtResource("1_base")]
 boss = true
+cancel_every = 2
+max_rock_bursts = 2
 display_name = "Stone Golem"
 max_hp = 960
 speed = 20.0
@@ -164,7 +263,7 @@ interrupt_resist = 3
 move_speed = 3.5
 turn_speed_degrees = 90.0
 body_radius = 0.95
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9"), SubResource("Skill_10")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9"), SubResource("Skill_10"), SubResource("Skill_11"), SubResource("Skill_13")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)

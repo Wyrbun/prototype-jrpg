@@ -52,11 +52,11 @@ func _draw() -> void:
 	if text == "":
 		height -= 12.0
 	var box := Rect2(size.x - WIDTH - 20.0, 96.0, WIDTH, height)
-	draw_style_box(_style, box)
+	HudStyle.draw_panel(self, box, 0.94)
 
 	var x := box.position.x + PAD
 	var title_baseline := box.position.y + PAD + 18.0
-	_line(font, Vector2(x, title_baseline), lesson, 20, GOLD)
+	HudStyle.draw_header(self, Vector2(x, title_baseline), lesson, 21, GOLD)
 	if lesson_total > 0:
 		var count := "%d / %d" % [lesson_number, lesson_total]
 		var count_width := font.get_string_size(count, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
@@ -65,7 +65,7 @@ func _draw() -> void:
 	if text != "":
 		draw_multiline_string(font, Vector2(x, body_top + font.get_ascent(16)), text, HORIZONTAL_ALIGNMENT_LEFT, inner, 16, -1, Color(0.92, 0.92, 0.95))
 	var y := body_top + body_size.y + 8.0
-	draw_line(Vector2(x, y), Vector2(box.end.x - PAD, y), Color(GOLD, 0.35), 1.0)
+	draw_line(Vector2(x, y), Vector2(box.end.x - PAD, y), Color(HudStyle.EDGE, 0.35), 1.0)
 	y += 6.0
 	var color := Color(0.6, 0.6, 0.65)
 	if goal_text != "":

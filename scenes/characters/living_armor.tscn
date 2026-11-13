@@ -2,6 +2,7 @@
 
 [ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="1_base"]
 [ext_resource type="Script" path="res://scripts/battle/enemy_skill.gd" id="2_skill"]
+[ext_resource type="PackedScene" path="res://scenes/characters/shadow_sprite.tscn" id="3_sprite"]
 
 [sub_resource type="Resource" id="Skill_1"]
 script = ExtResource("2_skill")
@@ -33,6 +34,7 @@ stagger_bar = 70
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")
 skill_name = "Shadowflare"
+uncancellable = true
 kind = 4
 weight = 1
 shape = 1
@@ -42,7 +44,10 @@ windup = 1.8
 special = 3
 max_radius = 11.0
 contain_share = 0.1
-cast_speed = 0.6
+orbit_sprites = 3
+orbit_scene = ExtResource("3_sprite")
+max_radius_fits_arena = true
+cast_speed = 0.35
 
 [sub_resource type="Resource" id="Skill_4"]
 script = ExtResource("2_skill")
@@ -75,6 +80,7 @@ albedo_color = Color(0.25, 0.25, 0.32, 1)
 
 [node name="LivingArmor" instance=ExtResource("1_base")]
 boss = true
+cancel_every = 2
 display_name = "Living Armor"
 max_hp = 900
 speed = 20.0

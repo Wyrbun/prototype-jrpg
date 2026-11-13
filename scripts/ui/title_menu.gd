@@ -285,7 +285,7 @@ func _row_at(point: Vector2) -> int:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.1, 0.15))
 	var font := ThemeDB.fallback_font
-	_centered(font, "PROTOTYPE JRPG", 120.0, 56, GOLD)
+	HudStyle.draw_header(self, Vector2((size.x - HudStyle.header_width("PROTOTYPE JRPG", 60)) / 2.0, 120.0), "PROTOTYPE JRPG", 60, GOLD)
 	_centered(font, "A battle system prototype", 165.0, 20, Color(0.7, 0.72, 0.8))
 	# The build's version (Project Settings > Application > Config > Version),
 	# so play-testers can say which build they played.
@@ -297,7 +297,7 @@ func _draw() -> void:
 		# Rows shrink on short windows so the whole table and the hint fit.
 		var row_height := clampf((size.y - 215.0 - 36.0 - 50.0) / CONTROLS.size(), 22.0, 34.0)
 		var panel := Rect2((size.x - 900.0) / 2.0, 215.0, 900.0, 36.0 + CONTROLS.size() * row_height)
-		draw_style_box(_style, panel)
+		HudStyle.draw_panel(self, panel, 0.94)
 		for i in CONTROLS.size():
 			var row: Array = CONTROLS[i]
 			var y := panel.position.y + 36.0 + i * row_height
@@ -309,7 +309,7 @@ func _draw() -> void:
 		return
 
 	var list := _list_rect()
-	draw_style_box(_style, list)
+	HudStyle.draw_panel(self, list, 0.94)
 	var items := _items()
 	var shown := _visible_rows()
 	_scroll = clampi(_scroll, 0, maxi(items.size() - shown, 0))  # never scrolled past what exists
@@ -319,7 +319,7 @@ func _draw() -> void:
 		var row := _row_rect(slot)
 		var selected := i == index
 		if selected:
-			draw_rect(row, Color(GOLD, 0.22))
+			HudStyle.draw_selection(self, row, GOLD)
 			_text(font, row.position + Vector2(10, baseline), ">", 22, GOLD)
 		var font_size := 22 if page == Page.MAIN else 17
 		_text(font, row.position + Vector2(36, baseline), items[i], font_size, Color.WHITE if selected else Color(0.85, 0.85, 0.9))

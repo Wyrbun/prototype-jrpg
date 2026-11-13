@@ -10,7 +10,14 @@ battle systems:
 
 Placeholder art throughout (capsules and boxes): this stage is about a fun core loop.
 
-![The arenas](docs/arenas.png)
+![The Stone Golem's Ceiling Burst: falling rocks to dodge, with the timeline at the top](docs/screenshots/battle.png)
+
+| | |
+|---|---|
+| ![Building a combo: moves, Arts list and the AP bar](docs/screenshots/combo.png) | ![Living Armor's Shadowflare: hit the Shadow Sprites to stop the circle](docs/screenshots/shadowflare.png) |
+| **Combos and Arts:** fill the bar with moves; the right order merges them into secret Arts | **Living Armor:** hit each Shadow Sprite once to stop the growing circle |
+| ![Gale Maw: Gale Lanes and a Gust Sprite to push off the ledge](docs/screenshots/gale-maw.png) | ![Title screen](docs/screenshots/title.png) |
+| **Gale Maw:** dodge the Gale Lanes and push the tough Gust Sprite off the ledge | **Title screen:** Boss Rush, Tutorial, Round Select and more |
 
 ## What's in it
 

@@ -32,7 +32,12 @@ func _ready() -> void:
 
 
 func items() -> Array:
-	return ["Resume", "Restart fight", "Quit to title", _details_item()]
+	return ["Resume", "Restart fight", "Quit to title", _details_item(), _timing_item()]
+
+
+## Command timing: Windup (the default) or Classic.
+func _timing_item() -> String:
+	return "Command timing: %s" % ("Windup" if Settings.command_windup() else "Classic")
 
 
 ## The move details toggle (it stays on the menu after choosing it).
@@ -50,6 +55,8 @@ func _note(item: String) -> String:
 			return "Progress is saved: Continue starts this fight over" if progress_saved else "Leave the fight (it's lost)"
 	if item.begins_with("Move details"):
 		return "The box explaining the highlighted move or Ability"
+	if item.begins_with("Command timing"):
+		return "Windup (default): choose at COM, act at ACT. Restart to apply"
 	return ""
 
 
@@ -107,8 +114,11 @@ func _select() -> void:
 		"Quit to title":
 			get_tree().paused = false
 			quit_requested.emit()
-		_:
-			Settings.set_move_details(not Settings.move_details())
+		var item:
+			if String(item).begins_with("Command timing"):
+				Settings.set_command_windup(not Settings.command_windup())
+			else:
+				Settings.set_move_details(not Settings.move_details())
 
 
 func _process(_delta: float) -> void:
@@ -140,8 +150,8 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.55))
 	var font := ThemeDB.fallback_font
 	var panel := _panel()
-	draw_style_box(_style, panel)
-	_text(font, "PAUSED", Vector2(panel.get_center().x, panel.position.y + 46.0), 34, GOLD, true)
+	HudStyle.draw_panel(self, panel, 0.96)
+	HudStyle.draw_header(self, Vector2(panel.get_center().x - HudStyle.header_width("PAUSED", 36) / 2.0, panel.position.y + 46.0), "PAUSED", 36, GOLD)
 	if message != "":
 		_text(font, message, Vector2(panel.get_center().x, panel.position.y + 70.0), 15, Color(0.5, 0.95, 0.55), true)
 	var list := items()
@@ -149,7 +159,7 @@ func _draw() -> void:
 		var row := _row(i)
 		var selected := i == index
 		if selected:
-			draw_rect(row, Color(GOLD, 0.22))
+			HudStyle.draw_selection(self, row, GOLD)
 			_text(font, ">", row.position + Vector2(12, 31), 22, GOLD, false)
 		_text(font, list[i], row.position + Vector2(40, 22), 22, Color.WHITE if selected else Color(0.85, 0.85, 0.9), false)
 		_text(font, _note(list[i]), row.position + Vector2(40, 41), 14, Color(0.6, 0.62, 0.7), false)

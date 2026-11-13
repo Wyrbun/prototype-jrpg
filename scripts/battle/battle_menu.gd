@@ -24,12 +24,21 @@ const MAX_BAR_PX := 720.0
 ## While a combo plays, small blocks (the Monk's 5 AP Punch and Kick) zoom in
 ## so the smallest one is at least this wide; the bar then scrolls with the
 ## playhead inside a window of at most PLAY_VIEW_PX.
-const MIN_PLAY_BLOCK_PX := 72.0
-const PLAY_MAX_PX_PER_AP := 16.0
+const MIN_PLAY_BLOCK_PX := 96.0
+const PLAY_MAX_PX_PER_AP := 20.0
 const PLAY_VIEW_PX := 900.0
 ## Timing boxes are drawn at least this wide (the window to press in doesn't
 ## change, only how easy it is to see).
 const MIN_BOX_PX := 14.0
+## While building, a class with small moves (the Monk's 5 AP Punch and Kick)
+## gets a wider bar, so its smallest move is at least this wide.
+## The party's HP list on the left reaches about this far: the build bar
+## starts right of it when centring it would overlap.
+const LEFT_HUD_CLEAR := 430.0
+const MIN_BUILD_BLOCK_PX := 60.0
+## Right edge of the last caption under the bar this frame, so captions
+## never print on top of each other ("HOLD" then "LET GO" on tiny blocks).
+var _last_tag_end := -INF
 const GOLD := Color(0.95, 0.78, 0.35)
 ## Timing types: Press boxes are white squares, Hold is blue and rounded,
 ## Tap is pink with diamonds.
@@ -43,6 +52,9 @@ var commands: PackedStringArray = ["Attack", "Abilities", "Items"]
 var command_enabled: Array[bool] = [true, false, false]
 ## Shown next to a disabled command, e.g. "no enemy in reach".
 var command_notes: PackedStringArray = ["", "coming later", "coming later"]
+## The Ability used this turn ({"name", "color"}), shown as a chip with a
+## tick on the Abilities row; empty when none.
+var used_ability: Dictionary = {}
 var command_index := 0
 ## Which reaction reminders to show above the menu (depends on the class).
 var show_defend := true
@@ -78,6 +90,10 @@ var slot_progress := 0.0
 ## Progress through the 1 s lead-in before the first move (0..1);
 ## negative when there's no lead-in running.
 var lead_in_progress := -1.0
+## Counter-parry: how close the counter-swing is (0..1, 1 = now); -1 = none.
+var counter_progress := -1.0
+## After a parried counter: how far through the breather (0..1); -1 = none.
+var recover_progress := -1.0
 ## Per combo slot, one entry per hit: 0 = not judged yet, 1 = Perfect, 2 = Miss.
 var slot_results: Array = []
 ## The playing slot's Hold / Tap state (set by the battle while it plays).
@@ -95,6 +111,11 @@ var arts_hidden := 0
 var arts_hidden_sizes := {}
 ## Partial hints for hidden Arts ("Thrust + Thrust + ?  (2 of 3)").
 var arts_hints: PackedStringArray = []
+## A mechanic needs something this fighter hasn't figured out yet (a push
+## for Gust Sprites): shown in a bright box above the Arts panel. "" = none.
+var arts_urgent := ""
+## Each hidden Art's length, AP and blocker ("four-move, 35 AP (needs bar 50)").
+var arts_hidden_notes: PackedStringArray = []
 ## While a hidden Art reveals itself mid-combo: its name and the banner's
 ## progress (0 -> 1).
 var reveal_name := ""
@@ -180,8 +201,8 @@ func _draw() -> void:
 		_draw_move_list(font)
 	elif mode == Mode.TARGET:
 		var panel := Rect2((size.x - 640) / 2.0, size.y - 270, 640, 72)
-		draw_style_box(_panel_style, panel)
-		_text(font, panel.position + Vector2(18, 31), target_prompt, 22, GOLD)
+		_panel(panel)
+		HudStyle.draw_header(self, panel.position + Vector2(18, 31), target_prompt, 21, GOLD)
 		_text(font, panel.position + Vector2(18, 58), Keybinds.fill("{confirm} / Enter: confirm     {cancel} / Backspace: back"), 17, Color(0.75, 0.75, 0.8))
 
 
@@ -190,7 +211,7 @@ func _draw() -> void:
 func _draw_commands(font: Font) -> void:
 	var panel := Rect2(40, 220, 340, 40 + commands.size() * 44)
 	var dimmed := mode != Mode.COMMANDS
-	_text(font, panel.position + Vector2(4, -12), fighter_name, 25, GOLD)
+	HudStyle.draw_header(self, panel.position + Vector2(4, -12), fighter_name, 26, GOLD)
 	# Reaction reminders, only for what this class can do (stacked upward).
 	var reminder_y := -10.0
 	if show_parry:
@@ -198,20 +219,40 @@ func _draw_commands(font: Font) -> void:
 		reminder_y -= 22.0
 	if show_defend:
 		_text(font, panel.position + Vector2(panel.size.x - 124, reminder_y), Keybinds.fill("Defend: {defend}"), 17, Color(0.6, 0.8, 1.0))
-	draw_style_box(_panel_style, panel)
+	_panel(panel)
 
 	for i in commands.size():
 		var row := Rect2(panel.position + Vector2(10, 18 + i * 44), Vector2(panel.size.x - 20, 38))
 		var selected := i == command_index
 		if selected and not dimmed:
-			draw_rect(row, Color(GOLD, 0.22))
+			HudStyle.draw_selection(self, row, GOLD)
 			_text(font, row.position + Vector2(6, 27), ">", 23, GOLD)
 		var color := Color.WHITE if command_enabled[i] else Color(0.5, 0.5, 0.55)
 		if dimmed and not selected:
 			color = color.darkened(0.4)
 		_text(font, row.position + Vector2(30, 27), commands[i], 23, color)
-		if command_notes[i] != "":
+		if i == 1 and not used_ability.is_empty():
+			_draw_ability_chip(font, row, used_ability)
+		elif command_notes[i] != "":
 			_text(font, row.position + Vector2(160, 26), command_notes[i], 15, Color(0.6, 0.6, 0.65))
+
+
+## "Brace ✓": the Ability already used this turn, in its own colour.
+func _draw_ability_chip(font: Font, row: Rect2, ability: Dictionary) -> void:
+	var tint: Color = ability.get("color", GOLD)
+	var label := String(ability.get("name", ""))
+	var text_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	var chip := Rect2(row.position + Vector2(158, 7), Vector2(text_w + 40, 24))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(tint.darkened(0.55), 0.95)
+	style.border_color = tint
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	draw_style_box(style, chip)
+	_text(font, chip.position + Vector2(12, 18), label, 16, tint.lightened(0.45))
+	# The tick, drawn so it doesn't depend on the font having one.
+	var at := chip.position + Vector2(chip.size.x - 22, 12)
+	draw_polyline(PackedVector2Array([at + Vector2(0, 0), at + Vector2(4, 4), at + Vector2(11, -4)]), Color(0.55, 1.0, 0.6), 3.0, true)
 
 
 # --- Combo builder ---------------------------------------------------------
@@ -223,7 +264,7 @@ func _draw_move_list(font: Font) -> void:
 	# In the combo bar, the list ends just above the bar's header line.
 	var top := size.y - 264 - height if mode == Mode.COMBO else size.y - 340
 	var panel := Rect2((size.x - width) / 2.0, top, width, height)
-	draw_style_box(_panel_style, panel)
+	_panel(panel)
 	var room := minf(combo_limit, segment_available) - (combo_cost() - segment_start if mode == Mode.COMBO else 0.0)
 	for i in moves.size():
 		var move := moves[i]
@@ -232,7 +273,7 @@ func _draw_move_list(font: Font) -> void:
 		var shown_cost := float(move.get("shown_cost", move["cost"]))  # Bash: its cost if added next
 		var fits := shown_cost <= room and usable
 		if i == move_index and not (mode == Mode.COMBO and arts_focus):
-			draw_rect(row, Color(GOLD, 0.22))
+			HudStyle.draw_selection(self, row, GOLD)
 			_text(font, row.position + Vector2(6, 25), ">", 20, GOLD)
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
 		draw_rect(Rect2(row.position + Vector2(24, 10), Vector2(14, 14)), move["color"] if fits else Color(0.35, 0.35, 0.4))
@@ -273,7 +314,11 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 	var hidden_line := ""
 	var hidden_size := Vector2.ZERO
 	if arts_hidden > 0:
-		hidden_line = ("Hidden: " if not arts.is_empty() else "To discover: ") + _hidden_by_length()
+		hidden_line = ("Hidden:" if not arts.is_empty() else "To discover:")
+		if arts_hidden_notes.is_empty():
+			hidden_line += " " + _hidden_by_length()
+		for note in arts_hidden_notes:
+			hidden_line += "\n  • " + note
 		for h in arts_hints:
 			hidden_line += "\n??? " + h
 		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14)
@@ -282,8 +327,16 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 	# down into the combo bar, however many Arts the class has.
 	var panel_height := 38.0 + arts.size() * row_height + extra
 	var panel := Rect2(x, beside.end.y - panel_height, width, panel_height)
-	draw_style_box(_panel_style, panel)
-	_text(font, panel.position + Vector2(12, 27), "ARTS", 19, GOLD)
+	_panel(panel)
+	if arts_urgent != "":
+		var urgent_h := font.get_multiline_string_size(arts_urgent, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 16).y + 16.0
+		var box := Rect2(panel.position.x, panel.position.y - urgent_h - 8.0, width, urgent_h)
+		var orange := Color(1.0, 0.6, 0.2)
+		draw_rect(box, Color(0.16, 0.08, 0.02, 0.94))
+		draw_rect(box, orange, false, 2.5)
+		draw_multiline_string_outline(font, box.position + Vector2(12, 8 + font.get_ascent(16)), arts_urgent, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 16, -1, 4, Color.BLACK)
+		draw_multiline_string(font, box.position + Vector2(12, 8 + font.get_ascent(16)), arts_urgent, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 16, -1, orange.lightened(0.3))
+	HudStyle.draw_header(self, panel.position + Vector2(12, 27), "ARTS", 20, GOLD)
 	var tip := "choose one to add it whole" if arts_focus else "moves in this order merge  ·  Tab: details"
 	_text(font, panel.position + Vector2(74, 27), tip, 14, Color(0.6, 0.62, 0.7))
 	for i in arts.size():
@@ -293,8 +346,7 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 		if heading:
 			draw_rect(row, Color(GOLD, 0.18))
 		if arts_focus and i == arts_index:
-			draw_rect(row, Color(GOLD, 0.35))
-			draw_rect(row, GOLD, false, 2.0)
+			HudStyle.draw_selection(self, row, GOLD)
 		var name_color: Color = art["color"] if art["known"] else Color(0.55, 0.55, 0.6)
 		_text(font, row.position + Vector2(8, 17), art["name"], 18, name_color)
 		var art_tag: Array = art.get("tag", [])
@@ -318,13 +370,24 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 		draw_multiline_string(font, Vector2(panel.position.x + 12, top + font.get_ascent(14)), hidden_line,
 				HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14, -1, Color(0.6, 0.62, 0.7))
 	if arts_focus and arts_index >= 0 and arts_index < arts.size():
-		_draw_art_details(font, arts[arts_index], panel)
+		_draw_art_details(font, arts[arts_index], beside)
 
 
-## Tab in the combo bar: the chosen Art's details in a box above the Arts
-## panel: its recipe, cost and timing, and everything it does.
-func _draw_art_details(font: Font, art: Dictionary, below: Rect2) -> void:
-	var width := below.size.x
+## The Art details box never reaches above this (the timeline bar's area).
+const ART_DETAILS_TOP := 112.0
+## The last details box drawn (for the cut-off check in _cutoff.gd).
+var details_rect := Rect2()
+var details_body_size := 16
+var details_fits := true
+
+
+## Tab in the combo bar: the chosen Art's details in a box left of the move
+## list (where a move's details go): its recipe, cost and timing, and
+## everything it does. There's room there for long Arts like Crusader's Edge.
+func _draw_art_details(font: Font, art: Dictionary, beside: Rect2) -> void:
+	var width := minf(420.0, beside.position.x - 20.0)
+	if width < 220.0:
+		return  # no room on a narrow window
 	var lines: Array = []  # [text, size, color]
 	lines.append([art["recipe"], 15, Color(0.8, 0.82, 0.9)])
 	var facts: PackedStringArray = ["%d AP" % int(art.get("cost", 0))]
@@ -337,19 +400,33 @@ func _draw_art_details(font: Font, art: Dictionary, below: Rect2) -> void:
 	var effects: PackedStringArray = art.get("effects", PackedStringArray())
 	if not effects.is_empty():
 		desc = "\n".join(_bullets(effects))  # the full details replace the one-liner
-	var desc_h := font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16).y if desc != "" else 0.0
-	var height := 44.0 + lines.size() * 22.0 + desc_h + 12.0
-	var box := Rect2(below.position.x, below.position.y - height - 8.0, width, height)
-	draw_style_box(_panel_style, box)
-	_text(font, box.position + Vector2(14, 30), art["name"], 21, art["color"])
+	# Bottom-aligned with the move list, growing upward, never over the
+	# party's HP bars; the text shrinks a little if it's still too tall.
+	var bottom := minf(beside.end.y, size.y - 268.0)
+	var room := bottom - ART_DETAILS_TOP
+	var body := 16
+	var desc_h := 0.0
+	var height := 0.0
+	while true:
+		desc_h = font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body).y if desc != "" else 0.0
+		height = 44.0 + lines.size() * 22.0 + desc_h + 12.0
+		if height <= room or body <= 12:
+			break
+		body -= 1
+	var box := Rect2(beside.position.x - width - 12.0, maxf(bottom - height, 4.0), width, height)
+	details_rect = box
+	details_body_size = body
+	details_fits = height <= room
+	_panel(box)
+	HudStyle.draw_header(self, box.position + Vector2(14, 30), art["name"], 22, art["color"])
 	var y := box.position.y + 56.0
 	for line in lines:
 		_text(font, Vector2(box.position.x + 14, y), line[0], line[1], line[2])
 		y += 22.0
 	if desc != "":
-		var pos := Vector2(box.position.x + 14, y - 4 + font.get_ascent(16))
-		draw_multiline_string_outline(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, 4, Color.BLACK)
-		draw_multiline_string(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, 16, -1, Color(0.92, 0.92, 0.95))
+		var pos := Vector2(box.position.x + 14, y - 4 + font.get_ascent(body))
+		draw_multiline_string_outline(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body, -1, 4, Color.BLACK)
+		draw_multiline_string(font, pos, desc, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body, -1, Color(0.92, 0.92, 0.95))
 
 
 ## The highlighted move or Ability, explained: a box left of the list with
@@ -364,15 +441,26 @@ func _draw_move_details(font: Font, move: Dictionary, beside: Rect2) -> void:
 	if not tag.is_empty():
 		lines.insert(0, "NOW: " + String(tag[2]))
 	var text := "\n".join(_bullets(lines))
-	var body_size := 16
-	var body_h := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size).y
-	var height := 70.0 + body_h + 34.0
 	# Bottom-aligned with the list, growing upward, but never down over the
-	# party's HP bars in the bottom-left corner.
+	# party's HP bars in the bottom-left corner, nor up into the timeline bar:
+	# the text shrinks a little for a long one.
 	var bottom := minf(beside.end.y, size.y - 268.0)
-	var box := Rect2(beside.position.x - width - 12.0, bottom - height, width, height)
-	draw_style_box(_panel_style, box)
-	_text(font, box.position + Vector2(14, 30), move["name"], 21, move["color"])
+	var room := bottom - ART_DETAILS_TOP
+	var body_size := 16
+	var body_h := 0.0
+	var height := 0.0
+	while true:
+		body_h = font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size).y
+		height = 70.0 + body_h + 34.0
+		if height <= room or body_size <= 12:
+			break
+		body_size -= 1
+	var box := Rect2(beside.position.x - width - 12.0, maxf(bottom - height, 4.0), width, height)
+	details_rect = box
+	details_body_size = body_size
+	details_fits = height <= room
+	_panel(box)
+	HudStyle.draw_header(self, box.position + Vector2(14, 30), move["name"], 22, move["color"])
 	_text(font, box.position + Vector2(14, 54), MoveInfo.summary(move), 15, GOLD)
 	var pos := Vector2(box.position.x + 14, box.position.y + 70.0 + font.get_ascent(body_size))
 	draw_multiline_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, width - 28.0, body_size, -1, 4, Color.BLACK)
@@ -421,6 +509,15 @@ func _draw_combo_bar(font: Font) -> void:
 	if mode == Mode.COMBO and not step_marks.is_empty():
 		span = maxf(span, step_marks[-1])
 	_px = minf(PX_PER_AP, minf(MAX_BAR_PX, size.x - LEAD_IN_PX - 60.0) / maxf(span, 1.0))
+	_last_tag_end = -INF
+	if mode == Mode.COMBO:
+		# Building: widen the bar (up to the screen) so small moves stay legible.
+		var cheapest := INF
+		for move in moves:
+			if float(move.get("cost", 0.0)) > 0.0:
+				cheapest = minf(cheapest, float(move["cost"]))
+		if cheapest < INF and cheapest * _px < MIN_BUILD_BLOCK_PX:
+			_px = maxf(_px, minf(MIN_BUILD_BLOCK_PX / cheapest, (size.x - LEAD_IN_PX - 60.0) / maxf(span, 1.0)))
 	if mode == Mode.EXECUTING:
 		# Zoom: the smallest block gets room for its name and timing box.
 		var smallest := INF
@@ -474,6 +571,18 @@ func _draw_combo_bar(font: Font) -> void:
 	if mode == Mode.COMBO and not step_marks.is_empty():
 		future = (step_marks[-1] - combo_limit) * _px
 	var bar_x := (size.x - bar_width - future) / 2.0
+	if mode == Mode.COMBO and bar_x < LEFT_HUD_CLEAR:
+		# A wide build bar (the Monk's, with his steps to climb) would run
+		# over the party's HP list on the left: start it right of the list,
+		# and squeeze it a little if it would then run off the right edge.
+		var room := size.x - LEFT_HUD_CLEAR - 16.0
+		var total := bar_width + future
+		if total > room:
+			var k := room / total
+			_px *= k
+			bar_width *= k
+			future *= k
+		bar_x = LEFT_HUD_CLEAR
 	if mode == Mode.EXECUTING:
 		bar_x += LEAD_IN_PX / 2.0  # keep lead-in + strip centered together
 	var bar := Rect2(bar_x, bar_y, bar_width, 34)
@@ -490,11 +599,14 @@ func _draw_combo_bar(font: Font) -> void:
 		header = "Fresh bar: " + header
 	if target_name != "":
 		header = "Target: %s     %s" % [target_name, header]
-	var header_size := font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 19)
+	var header_w := HudStyle.header_width(header, 19)
 	if mode != Mode.EXECUTING:  # the AP bar already says this during the combo
-		_text(font, Vector2(bar.position.x + (bar_width - header_size.x) / 2.0, bar.position.y - 8), header, 19, GOLD)
+		HudStyle.draw_header(self, Vector2(bar.position.x + (bar_width - header_w) / 2.0, bar.position.y - 8), header, 19, GOLD)
 
-	draw_rect(bar, Color(0.08, 0.09, 0.13, 0.92))
+	# The bar's trough: dark navy with a faint sheen, like the timeline.
+	draw_rect(bar.grow(3.0), Color(HudStyle.OUTLINE, 0.85))
+	draw_rect(bar, Color(0.03, 0.05, 0.14, 0.94))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x, bar.size.y * 0.35)), Color(1, 1, 1, 0.05))
 	# The part of the bar you can't afford right now.
 	if affordable < combo_limit:
 		var locked := Rect2(origin + (segment_start + affordable) * _px, bar.position.y, (combo_limit - affordable) * _px, bar.size.y)
@@ -601,7 +713,7 @@ func _draw_combo_bar(font: Font) -> void:
 		if reset_slots.has(slot) and slot < plan.size() - 1 and cursor <= bar.end.x:
 			# Headbutt: a fresh bar comes after it.
 			_text(font, Vector2(cursor - 64, bar.end.y + 30), "FRESH BAR >", 12, GOLD)
-	draw_rect(bar, GOLD, false, 2.0)
+	draw_rect(bar, HudStyle.EDGE, false, 2.0)
 	if scroll > 0.5:
 		_text(font, Vector2(bar.position.x + 4, bar.position.y + 23), "◀", 16, GOLD)
 	if scroll < capacity * _px - bar.size.x - 0.5:
@@ -673,6 +785,43 @@ func _draw_combo_bar(font: Font) -> void:
 			x = start + width * slot_progress
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color(1, 1, 1, 0.35), 7.0)
 		draw_line(Vector2(x, bar.position.y - 5), Vector2(x, bar.end.y + 5), Color.WHITE, 3.0)
+		if counter_progress >= 0.0:
+			_draw_counter_prompt(font, bar, x)
+		elif recover_progress >= 0.0:
+			# The breather after a parry: a gold ring around the playhead
+			# shrinks away, and the playhead moves on when it's gone.
+			var gold := Color(1.0, 0.85, 0.35)
+			var grow := 16.0 * (1.0 - recover_progress)
+			draw_rect(Rect2(x - 4.0 - grow, bar.position.y - 6.0 - grow * 0.4, 8.0 + grow * 2.0, bar.size.y + 12.0 + grow * 0.8), Color(gold, 0.9 - 0.6 * recover_progress), false, 2.5)
+			var label := "BROKEN!  READY..."
+			var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+			var tag := Rect2(x - w - 26.0, bar.position.y + bar.size.y / 2.0 - 14.0, w + 12.0, 28.0)
+			draw_rect(tag, Color(0.12, 0.09, 0.02, 0.9))
+			draw_rect(tag, gold, false, 2.0)
+			_text(font, Vector2(tag.position.x + 6.0, tag.end.y - 8.0), label, 18, gold)
+
+
+## Counter-parry: the playhead waits; a red line closes in on it from the
+## right, and the moment it reaches the red box around the playhead is when
+## to press the hit key.
+func _draw_counter_prompt(font: Font, bar: Rect2, x: float) -> void:
+	var red := Color(1.0, 0.25, 0.2)
+	var reach := 160.0
+	var zone := Rect2(x - 11.0, bar.position.y - 10.0, 22.0, bar.size.y + 20.0)
+	var pulse := 0.5 + 0.5 * sin(counter_progress * 30.0)
+	draw_rect(zone, Color(red, 0.35 + 0.25 * counter_progress))
+	draw_rect(zone, red, false, 2.0)
+	var lx := x + reach * (1.0 - counter_progress)
+	draw_line(Vector2(lx, bar.position.y - 10.0), Vector2(lx, bar.end.y + 10.0), Color(red, 0.4), 8.0)
+	draw_line(Vector2(lx, bar.position.y - 10.0), Vector2(lx, bar.end.y + 10.0), red.lightened(0.3), 3.0)
+	var label := "! COUNTER !"
+	var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	# Left of the playhead, on a dark tag (the AP meter sits right above the
+	# bar during a combo, and the screen edge right below).
+	var tag := Rect2(x - w - 26.0, bar.position.y + bar.size.y / 2.0 - 15.0, w + 12.0, 30.0)
+	draw_rect(tag, Color(0.12, 0.02, 0.02, 0.9))
+	draw_rect(tag, red, false, 2.0)
+	_text(font, Vector2(tag.position.x + 6.0, tag.end.y - 8.0), label, 20, red.lightened(0.2 + 0.3 * pulse))
 
 
 ## A hidden Art revealing itself: its block flashes white, and a "NEW ART!"
@@ -729,10 +878,19 @@ func _result_fill(result: int) -> Color:
 ## AP meter sits right above the bar while a combo plays.
 func _small_tag(font: Font, box: Rect2, text: String, color: Color) -> void:
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-	_text(font, Vector2(box.get_center().x - width / 2.0, box.end.y + 13), text, 12, color.lightened(0.25))
+	var x := box.get_center().x - width / 2.0
+	if x < _last_tag_end + 4.0:
+		return  # would print over the previous caption
+	_last_tag_end = x + width
+	_text(font, Vector2(x, box.end.y + 13), text, 12, color.lightened(0.25))
 
 
 ## A rounded box (Hold timings).
+## A HUD panel (HudStyle), as see-through as _panel_style's colour says.
+func _panel(rect: Rect2) -> void:
+	HudStyle.draw_panel(self, rect, _panel_style.bg_color.a)
+
+
 func _pill(rect: Rect2, fill: Color, outline: Color, width: float) -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill

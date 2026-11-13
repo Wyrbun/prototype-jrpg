@@ -11,3 +11,8 @@ extends Resource
 ## (Optional) a tip shown for a few seconds when the fight starts, e.g. how a
 ## class that joins in this round plays.
 @export_multiline var tip: String = ""
+## Scales every enemy in this fight (solo boss rounds: a full party gets
+## about four turns per boss action, so bosses get more HP and speed here
+## without changing them in the mixed rounds).
+@export var enemy_hp_mult: float = 1.0
+@export var enemy_speed_mult: float = 1.0

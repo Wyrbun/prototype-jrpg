@@ -10,6 +10,7 @@ display_name = "Monk"
 class_id = "monk"
 max_hp = 160
 combo_limit = 30.0
+playhead_speed = 0.5
 can_block = true
 can_parry = true
 bar_steps = Array[float]([30.0, 50.0, 80.0, 100.0])

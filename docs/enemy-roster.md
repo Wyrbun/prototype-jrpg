@@ -19,7 +19,11 @@ be built.
 Each enemy is a scene in `scenes/characters/` with the skills that existing
 building blocks allow. Numbers are first guesses (enemy HP was raised 2.5x and
 enemy damage 1.3x after playtesting; after the first full play-test the three
-bosses got +20% HP and twice the speed, casting at half speed).
+bosses got +20% HP and twice the speed, casting at half speed). In the
+**solo boss rounds** (8-11) every boss also gets **x1.2 HP and x1.25 speed**
+(x1.4 for the Stone Golem) (`Encounter.enemy_hp_mult` / `enemy_speed_mult`):
+a full party got about four turns per boss action. (It was x1.5 HP at first:
+the Golem took 10 minutes.) The HP column is the base, used in the mixed rounds.
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
@@ -28,10 +32,10 @@ bosses got +20% HP and twice the speed, casting at half speed).
 | Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit and throws them 3 m), Fireball (unavoidable, no Parry or Defend: circle on its target; hits everyone inside, so stand alone) | |
 | Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out), then Sword Spin 2 s later (donut 3.5-6 m; always hits everyone Shout pushed, others can dodge into the middle; can't be parried) | |
 | Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle, at most 60 HP each; 3 hits from within 1.5 m interrupt it), Curse (unavoidable, no Parry or Defend: a line to each party member, rocks block; in 2+ lines: double damage) | |
-| Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Right/Left Golem Smash (half the room, it can't turn), Ceiling Burst (falling circles that leave rocks for ~10 s), the two combined, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns), Stone Guard (Defense stance, lets 30% through) | |
-| Living Armor | 900 | Doom Gaze (arena-wide instant death: hide behind the rock it drops), Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows from 2 to 11 m over a slow cast; dealing 10% of its HP during the cast contains it, so you can step out), Parry Stance (Counter stance) | |
+| Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Right/Left Golem Smash (half the room, it can't turn), Ceiling Burst (falling circles that leave rocks that stay; only its first 2 bursts leave rocks; if none has fallen yet, it always casts one when it first drops to 75% HP), Golem Smash blows up the rocks in its half (circles that hurt), Right + Left / Left + Right Golem Smash (one side, then the other 1.5 s later: every rock in the arena blows up), the two combined, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns), Stone Guard (Defense stance, lets 30% through) | |
+| Living Armor | 900 | Doom Gaze (arena-wide instant death: hide behind the rock it drops), Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows slowly from 2 m to the arena's corners (from the middle); 3 Shadow Sprites circle its edge: hit each once and it stops growing; or run to the far side when the Armor is off to one side), Parry Stance (Counter stance) | |
 | Dragon Hatchling | 960 | **Closes in** (`closes_in`): while none of its aimed skills reaches anyone it walks 2.5x faster, so keeping away doesn't leave it casting only Burning Spike. Breath (unavoidable on its target, tracks it exactly; massive cone; damage shrinks the more people it hits: stack up; slow cast, 60% speed), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (unavoidable: a circle on each party member; anyone in an overlap drops to 1 HP; each circle keeps burning for 3 Dragon turns, 8 HP/s) | |
-| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, cone in front of its mouth), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it spits out a Gust Sprite (if none is up; 60 HP, a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls | |
+| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, cone in front of its mouth), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it spits out a Gust Sprite (if none is up; 60 HP but takes only 20% damage, pushed 1.5x as far: push it off the ledge; anyone with no known push is shown a push Art's recipe; a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls | |
 
 ## Normal enemies
 
@@ -86,7 +90,7 @@ Rules in `battle-design.md`.
 | Orc Shaman | Curse | 35 | Breaks |
 | Orc Shaman | Healing Ritual | 3 close hits (its own rule, shown as a bar) | Interrupted |
 | Living Armor | Dark Bolt | 70 | Breaks |
-| Living Armor | Shadowflare | 10% of its HP (its own rule, shown as a bar) | Stops growing |
+| Living Armor | Shadowflare | Hit each of its 3 Shadow Sprites once (shown as 3 pips) | Stops growing |
 | Dragon Hatchling | Breath | 90 | Breaks |
 | Dragon Hatchling | Burning Spike | 120 | Breaks |
 | Gale Maw | Inhale | 70 | Breaks |
@@ -103,8 +107,9 @@ Rules in `battle-design.md`.
 | Crush | Smash | Long, thin line | built |
 | Rock Stomp | Attack | Short circle around itself | built |
 | Rock Spikes | Special | Targeted circle | Leaves 4 rock spikes that damage anyone walking into them; last 2 of the Golem's turns |
-| Right / Left Golem Smash | Smash | Half the room (a 180° cone to its right or left, out to the arena's edges) | Locks its facing for the whole cast, so whoever it faced can step out; can't be Parried or Defended; 48 damage |
-| Ceiling Burst | Special | 10 circles all over the arena | Grey when the cast starts; from the reveal they fall in a random order, 0.5 s apart (a ring shrinks onto each in its last second). One always lands near each party member. None land on the Golem (or another enemy): circles keep clear of them, and if the Golem walks into one, no rock is left under it, so its own skill never shoves it aside. 28 damage each; each leaves a rock (blocks movement and sight) for ~10 s. The Golem waits at the end of the bar until the last one falls |
+| Right / Left Golem Smash | Smash | Half the room (a 180° cone to its right or left, out to the arena's edges) | Locks its facing for the whole cast, so whoever it faced can step out; can't be Parried or Defended; 48 damage. Every fallen rock inside its half gets an orange circle (2.5 m) from the reveal ("ROCKS EXPLODE"); when the Smash lands, those rocks blow up: 30 damage to anyone in a circle, and the rocks are gone. Rocks that fall during a Smash + Ceiling Burst count too. Uncancellable |
+| Right + Left / Left + Right Golem Smash | Smash | Half the room, then the other half | One Golem Smash, then a second one on the other side 1.5 s later (a follow-up: revealed as the first lands). Both blow up the rocks in their half, so the whole arena's rocks go. Move across as soon as the first lands. Likelier the more rocks have lain on the floor for 12 s (+0.3 weight each), half as likely with no rocks. Uncancellable |
+| Ceiling Burst | Special | 10 circles all over the arena | Grey when the cast starts; from the reveal they fall in a random order, 0.5 s apart (a ring shrinks onto each in its last second). One always lands near each party member. None land on the Golem (or another enemy): circles keep clear of them, and if the Golem walks into one, no rock is left under it, so its own skill never shoves it aside. 28 damage each; each leaves a rock (blocks movement and sight) that stays until a Golem Smash blows it up. Only the first 2 bursts of a fight (Ceiling Burst or the Smash combos) leave rocks (`Combatant.max_rock_bursts`); later ones still drop their circles. The Golem waits at the end of the bar until the last one falls. Sure at 75% HP: the first cast after the Golem drops to 75% is a Ceiling Burst, unless it already dropped rocks (`sure_below_hp` 0.75) |
 | Right / Left Smash + Ceiling Burst | Special | Both at once | 8 circles fall only on the safe half, then the smash lands: stay out of its half and dodge the rocks. Casts at 80%, like the plain Smash; as a Special it can't be interrupted |
 | Stone Guard | Defense | Self | Blocks 70% of each hit (lets 30% through); piercing moves go through it, breaking moves end it |
 
@@ -113,7 +118,7 @@ Rules in `battle-design.md`.
 |---|---|---|---|
 | Combo | Attack | (melee) | 3 hits; the last one launches the target far away |
 | Dark Bolt | Special | Circle on every party member, explodes | Unavoidable (no Parry or Defend); overlapping circles deal double damage |
-| Shadowflare | Special | Expanding circle | Grows until enough damage is dealt to the Armor, then explodes a few seconds later |
+| Shadowflare | Special | Expanding circle | Calls 3 Shadow Sprites (1 HP, not on the timeline) that circle along its edge at 2 m/s. Grows slowly (cast speed 0.35) up to the distance from the arena's middle to its corners: cast from the middle it covers everything, cast off to one side the far side stays safe. Hitting all 3 sprites stops it growing; then step out. Uncancellable |
 | Parry Stance | Counter | Self | Punishes attacks while it lasts: wait it out or use Abilities |
 | Doom Gaze | Special | The whole arena, with white skulls | Slow cast (30% speed). When it starts, a rock crashes down 5 m away at a compass point (always with room behind it). Anyone the Armor can see when it lands is struck down outright, through barriers and Brace; hiding behind the rock means no damage. The rock goes afterwards |
 
@@ -135,7 +140,7 @@ Also: Exhale, Gale Burst and Breaker **crack rocks** in their area (2 cracks sha
 ### Gust Sprite (summoned by the Gale Maw)
 | Skill | Kind | Shape | Rules |
 |---|---|---|---|
-| Gust | Attack | 100° cone, 2.2 m | 6 damage, knocks back 2 m. 60 HP, fast (speed 14); downed when the Maw falls |
+| Gust | Attack | 100° cone, 2.2 m | 6 damage, knocks back 2 m. 60 HP, fast (speed 14); downed when the Maw falls. **Very tough** (`damage_taken_share` 0.2: takes 20% damage) but **light** (`knockback_taken` 1.5: pushes send it 1.5x as far): push it off the ledge and it is gone at once. The move list tags pushing moves PUSHES, the rest TOUGH |
 
 ### Dragon Hatchling
 | Skill | Kind | Shape | Rules |

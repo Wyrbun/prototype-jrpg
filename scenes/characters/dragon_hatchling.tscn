@@ -6,6 +6,7 @@
 [sub_resource type="Resource" id="Skill_1"]
 script = ExtResource("2_skill")
 skill_name = "Breath"
+uncancellable = true
 kind = 0
 weight = 3
 shape = 0
@@ -56,6 +57,7 @@ albedo_color = Color(0.8, 0.35, 0.15, 1)
 
 [node name="DragonHatchling" instance=ExtResource("1_base")]
 boss = true
+cancel_every = 2
 display_name = "Dragon Hatchling"
 max_hp = 960
 speed = 20.0

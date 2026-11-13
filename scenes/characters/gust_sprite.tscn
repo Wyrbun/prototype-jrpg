@@ -24,6 +24,8 @@ albedo_color = Color(0.7, 0.88, 0.95, 1)
 
 [node name="GustSprite" instance=ExtResource("1_base")]
 display_name = "Gust Sprite"
+damage_taken_share = 0.2
+knockback_taken = 1.5
 max_hp = 60
 speed = 14.0
 move_speed = 4.0

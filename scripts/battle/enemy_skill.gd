@@ -148,9 +148,22 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var ceiling_lead: float = 1.0
 @export var ceiling_warning: float = 1.0
 ## Each circle leaves a rock where it lands (blocks movement and sight),
-## gone after ceiling_rock_seconds of fight time (0 radius = no rocks).
+## gone after ceiling_rock_seconds of fight time (0 radius = no rocks;
+## 0 seconds = it stays until something breaks it).
 @export var ceiling_rock_radius: float = 0.9
 @export var ceiling_rock_seconds: float = 10.0
+## Golem Smash: fallen rocks inside its area blow up when it lands, each in
+## a circle (rock_blast_radius) that hurts anyone in it. The circles show
+## from the reveal (and on rocks that fall during the cast).
+@export var smash_blasts_rocks: bool = false
+@export var rock_blast_radius: float = 2.5
+@export var rock_blast_damage: int = 30
+## Skill choice: extra weight per fallen rock that has lain on the floor for
+## rock_settle_seconds (Golem's double Smash clears a crowded arena, but the
+## rocks get to be in the party's way for a while first). With no rocks at
+## all it's half as likely.
+@export var rock_clear_weight: float = 0.0
+@export var rock_settle_seconds: float = 12.0
 
 @export_group("Doom")
 ## Kills anyone it hits (Doom Gaze). Can't be Parried or Defended: only a
@@ -172,6 +185,18 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## GROWING: the size it grows to, and the damage (share of max HP) that stops it.
 @export var max_radius: float = 8.0
 @export_range(0.0, 1.0) var contain_share: float = 0.1
+## GROWING: instead of damage to the caster, this many sprites (orbit_scene)
+## circle along the circle's edge; it stops growing once every one of them
+## has been hit (one hit each). 0 = contained by damage (contain_share).
+@export var orbit_sprites: int = 0
+@export var orbit_scene: PackedScene = null
+## How fast they move along the edge (m/s; the same on a big circle as a
+## small one, so they stay catchable).
+@export var orbit_speed: float = 2.0
+## GROWING: its biggest size reaches from the arena's middle to its corners:
+## cast from the middle it covers everything, cast off to one side it can't
+## reach the far side (that's where to run).
+@export var max_radius_fits_arena: bool = false
 ## HEAL_ALLIES: share of each ally's max HP healed.
 @export_range(0.0, 1.0) var heal_share: float = 0.2
 ## HEAL_ALLIES: the most one ally can be healed per ritual (0 = no cap), so
@@ -191,6 +216,13 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## Stagger: instead of being cancelled, the skill turns into this one
 ## (Exhale becomes a ring with a safe spot by the Maw).
 @export var stagger_into: EnemySkill = null
+## A boss's signature move: interrupts, stuns and Hook can't cancel it
+## ("UNSTOPPABLE"). Halts (freeze) and Stagger still work on it.
+@export var uncancellable: bool = false
+## Above 0: the first time the enemy's HP drops to this share of its max
+## (0.75 = 75%), it prepares this skill next, for sure. Skipped if it already
+## used this skill (or, for a Ceiling Burst, already dropped rocks).
+@export_range(0.0, 1.0) var sure_below_hp: float = 0.0
 @export var interrupt_hits: int = 3
 @export var interrupt_range: float = 1.5
 

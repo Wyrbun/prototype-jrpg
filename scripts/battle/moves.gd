@@ -63,6 +63,8 @@ class_name Moves
 ##             -> 100), Perfect or not; only the Art actually played, not the
 ##             smaller ones inside it. Played all Perfect at the top, it also
 ##             earns Crowd Cheer
+##   needs_marks  the Art only forms on a target with this many Marks (Thousand
+##             Cuts: 2); spend_marks uses that many up as it starts
 ##   needs_token  the Art only forms (and can only be played) while the Monk
 ##             holds this token (Tortoise Special: Crowd Cheer)
 ##   cashout   Tortoise Special: [[bar length, damage multiplier], ...];
@@ -127,16 +129,16 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 				# Arts (see arts()).
 				# Reach 4.5 m (the Mage's own is 3): enough to cast from a safe
 				# spot, still well short of the Archer's 6.
-				_attack("Fire", 20, [1.1], 1.1, 0.16, RED, "Line: 100% first, 75% behind; burns 2 turns; reach 4.5 m",
+				_attack("Fire", 20, [1.2], 1.1, 0.16, RED, "Line: 100% first, 75% behind; burns 2 turns; reach 4.5 m",
 						{"reach": 4.5, "area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "timing": TimingType.TAP, "taps": 4,
 						"burn": 0.35, "burn_turns": 2}),
-				_attack("Frost", 20, [0.9], 1.0, 0.16, BLUE, "Small circle; chills (half walking speed)",
+				_attack("Frost", 20, [1.0], 1.0, 0.16, BLUE, "Small circle; chills (half walking speed)",
 						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "chill": true, "timing": TimingType.TAP, "taps": 3}),
 				_attack("Gust", 15, [0.8], 0.6, 0.16, TEAL, "Circle on self, pushes 3 m",
 						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "knockback": 3.0}),
 				# Surge: an open Tap. Every tap adds damage, up to the cap, and
 				# extra taps are simply ignored (no "too many"). Not part of any Art.
-				_attack("Arcane Surge", 25, [0.8], 1.0, 0.16, Color(0.75, 0.55, 1.0), "Tap freely: each tap +10% (up to 10); one target",
+				_attack("Arcane Surge", 25, [0.9], 1.0, 0.16, Color(0.75, 0.55, 1.0), "Tap freely: each tap +10% (up to 10); one target",
 						{"reach": 4.5, "timing": TimingType.TAP, "taps": 10, "surge": 0.10, "tap_start": 0.08}),
 			]
 		"cleric":
@@ -163,17 +165,17 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 				_attack("Backstab", 25, [1.0], 1.2, 0.18, RED, "2x + a Mark from behind; misses in front",
 						{"behind_mult": 2.0, "front_miss": true, "marks_from_behind": 1, "random_timing": true}),
 				_attack("Execute", 100, [1.0], 1.6, 0.2, GOLD, "4x from behind, +0.6x per Mark it spends; -15 AP per Mark",
-						{"behind_mult": 4.0, "mark_bonus": 0.15, "mark_discount": 15, "min_cost": 25, "consume_marks": true, "random_timing": true}),
+						{"behind_mult": 4.0, "mark_bonus": 0.15, "mark_discount": 15, "min_cost": 40, "consume_marks": true, "random_timing": true}),
 			]
 		"monk":
-			# Weak alone, built to chain. Punch and Kick have one timed hit each
-			# (the rest land by themselves); heavy punches are Taps, heavy kicks
-			# Holds. Headbutt restarts the bar when more moves follow it.
+			# Weak alone, built to chain. Punch and Kick aren't timed (every hit
+			# lands by itself); heavy punches are Taps, heavy kicks Holds.
+			# Headbutt restarts the bar when more moves follow it.
 			list = [
-				_attack("Punch", 5, [0.15, 0.15, 0.15], 0.3, 0.12, BLUE, "3 quick hits (timed: last)",
-						{"timed": "last"}),
-				_attack("Kick", 5, [0.25, 0.2], 0.3, 0.12, TEAL, "2 hits (timed: first)",
-						{"timed": "first", "times": [0.55, 1.0]}),
+				_attack("Punch", 5, [0.15, 0.15, 0.15], 0.3, 0.12, BLUE, "3 quick hits, no timing",
+						{"timed": "none"}),
+				_attack("Kick", 5, [0.25, 0.2], 0.3, 0.12, TEAL, "2 hits, no timing",
+						{"timed": "none", "times": [0.55, 1.0]}),
 				_attack("Heavy Punch", 20, [1.5], 1.0, 0.16, ORANGE, "Tap: cancels a turn about to strike",
 						{"stun": true, "timing": TimingType.TAP, "taps": 4}),
 				_attack("Heavy Kick", 20, [1.5], 1.0, 0.16, GREEN, "Hold: breaks Defense",
@@ -183,7 +185,6 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		_:
 			list = [_attack("Attack", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack")]
-	_min_window(list)
 	return list
 
 
@@ -209,16 +210,16 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"Shield sweep around you: stops every enemy hit 0.5 s, draws their aggro, barrier to allies near you",
 						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "draws_aggro": true, "freeze": 0.5,
 						"barrier": 0.10, "barrier_radius": 3.0}),
-				_art(["Thrust", "Thrust", "Slash"], "Smash", [4.2], 1.2, 0.18, ORANGE, "Heavy blow: Smash type, ignores Defense, knocks it back 4 m",
-						{"kind": Skills.Kind.SMASH, "knockback": 4.0}),
+				_art(["Thrust", "Thrust", "Slash"], "Smash", [4.2], 1.2, 0.18, ORANGE, "Heavy blow: Smash type. Breaks Defense; knocks back 4 m if it wasn't defending",
+						{"kind": Skills.Kind.SMASH, "effect": Effect.BREAK, "knockback": 4.0, "knockback_unguarded": true}),
 				_art(["Slash", "Slash", "Thrust", "Guard Strike"], "Crusader's Edge", [1.4, 1.4, 3.2], 1.8, 0.18, GOLD,
-						"Finisher: breaks Defense, cancels its turn, knocks it back, draws its aggro",
-						{"effect": Effect.BREAK, "stun": true, "knockback": 3.0, "times": [0.3, 0.55, 1.0], "finisher": true, "draws_aggro": true}),
+						"Finisher: breaks Defense, cancels its turn, knocks it back (you follow), draws its aggro",
+						{"effect": Effect.BREAK, "stun": true, "knockback": 3.0, "follow": true, "times": [0.3, 0.55, 1.0], "finisher": true, "draws_aggro": true}),
 			]
 		"archer":
 			list = [
 				_art(["Shoot", "Shoot"], "Double Shot", [1.15, 1.15], 0.9, 0.16, PURPLE, "Two strong arrows"),
-				_art(["Shoot", "Shoot", "Shoot"], "Triple Shot", [1.0, 1.0, 1.6], 1.4, 0.15, PURPLE, "3 arrows; the delayed last one ignores Defense",
+				_art(["Shoot", "Shoot", "Shoot"], "Triple Shot", [0.95, 0.95, 1.5], 1.4, 0.15, PURPLE, "3 arrows; the delayed last one ignores Defense",
 						{"times": [0.2, 0.4, 1.0], "last_hit": {"effect": Effect.PIERCE}}),
 				_art(["Shoot", "Power Draw"], "Piercing Arrow", [3.3], 1.5, 0.18, TEAL, "Hold: flies through every enemy in a line (75% after the first)",
 						{"area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "effect": Effect.PIERCE,
@@ -234,9 +235,9 @@ static func arts(class_id: String) -> Array[Dictionary]:
 			]
 		"mage":
 			list = [
-				_art(["Fire", "Fire"], "Fireball", [3.0], 1.5, 0.18, ORANGE, "Tap: big blast on a circle at the target",
+				_art(["Fire", "Fire"], "Fireball", [3.3], 1.5, 0.18, ORANGE, "Tap: big blast on a circle at the target",
 						{"reach": 4.5, "area": Area.TARGET_CIRCLE, "area_size": 2.2, "timing": TimingType.TAP, "taps": 6}),
-				_art(["Frost", "Frost"], "Blizzard", [2.4], 1.5, 0.18, BLUE, "Tap: wide circle, chills everyone hit",
+				_art(["Frost", "Frost"], "Blizzard", [2.6], 1.5, 0.18, BLUE, "Tap: wide circle, chills everyone hit",
 						{"area": Area.TARGET_CIRCLE, "area_size": 3.0, "chill": true, "timing": TimingType.TAP, "taps": 6}),
 				_art(["Fire", "Frost"], "Steam Burst", [3.4], 1.3, 0.18, Color(0.85, 0.85, 0.95), "Tap: focused blast (1.2 m), breaks Defense",
 						{"area": Area.TARGET_CIRCLE, "area_size": 1.2, "effect": Effect.BREAK, "timing": TimingType.TAP, "taps": 5}),
@@ -255,22 +256,22 @@ static func arts(class_id: String) -> Array[Dictionary]:
 			list = [
 				_art(["Stab", "Stab"], "Twin Fangs", [1.1, 1.1], 1.4, 0.18, BLUE, "2 hits, 1.5x each from behind; both count as Stabs",
 						{"behind_mult": 1.5, "stab_marks": true, "random_timing": true}),
-				_art(["Shadowstep", "Stab"], "Ambush", [2.4], 1.2, 0.18, VIOLET, "Teleport behind, strike 1.5x, +1 Mark",
-						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true,
+				_art(["Shadowstep", "Stab"], "Ambush", [2.4], 1.2, 0.18, VIOLET, "Teleport behind, strike 1.5x, +1 Mark, kicks it 3 m away",
+						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true, "knockback": 3.0,
 						"last_hit": {"add_marks": 1}}),
 				_art(["Shadowstep", "Shadowstep"], "Phantom Rush", [1.8, 1.8], 1.6, 0.18, PURPLE, "Teleport behind, 2 hits at 1.5x, +1 Mark",
 						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true, "last_hit": {"add_marks": 1}}),
 				_art(["Stab", "Backstab"], "Cutthroat", [1.3, 1.3], 1.6, 0.18, RED, "2 hits, 2x + a Mark each from behind; misses in front",
 						{"behind_mult": 2.0, "front_miss": true, "marks_from_behind": 1, "random_timing": true}),
 				_art(["Stab", "Shadowstep", "Stab"], "Thousand Cuts", [0.8, 0.8, 0.8, 0.8, 0.8, 0.8], 2.6, 0.16, GOLD,
-						"Finisher: teleport behind, 6 cuts at 1.5x, +2 Marks",
+						"Finisher: needs 2 Marks; teleport behind, 6 cuts at 1.5x, spends 2 Marks",
 						{"teleport_behind": true, "behind_mult": 1.5, "marked_any_range": true, "random_timing": true,
-						"last_hit": {"add_marks": 2}, "finisher": true}),
+						"needs_marks": 2, "spend_marks": 2, "finisher": true}),
 			]
 		"cleric":
 			list = [
-				_art(["Bash", "Holy Light"], "Smite", [2.4], 0.9, 0.16, Color(1.0, 0.95, 0.7), "Holy blow up close, breaks Defense",
-						{"effect": Effect.BREAK}),
+				_art(["Bash", "Holy Light"], "Smite", [2.4], 0.9, 0.16, Color(1.0, 0.95, 0.7), "Holy blow up close, breaks Defense, pushes 3 m",
+						{"effect": Effect.BREAK, "knockback": 3.0}),
 				_art(["Holy Light", "Holy Light"], "Judgment", [3.2], 1.3, 0.18, GOLD, "Long range circle, breaks Defense",
 						{"effect": Effect.BREAK, "reach": 9.0, "area": Area.TARGET_CIRCLE, "area_size": 2.0}),
 				_art(["Bash", "Divine Barrier"], "Blessed Strike", [2.2], 1.5, 0.18, GREEN, "Hold: heals allies near you 8% (Perfect 12%)",
@@ -295,8 +296,8 @@ static func arts(class_id: String) -> Array[Dictionary]:
 			list = [
 				_art(["Punch", "Punch"], "Palm Strike", [1.0], 1.0, 0.16, BLUE, "Tap: Perfect: grants Triple (for Triple Rush)",
 						{"timing": TimingType.TAP, "taps": 3, "grants": {"Triple": 1}}),
-				_art(["Kick", "Kick"], "Flash Kick", [1.0], 1.0, 0.16, TEAL, "Hold: Perfect: grants Mountain (for Mountain Crusher)",
-						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Mountain": 1}}),
+				_art(["Kick", "Kick"], "Flash Kick", [1.0], 1.0, 0.16, TEAL, "Hold: pushes 3 m (you follow); Perfect: grants Mountain (for Mountain Crusher)",
+						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Mountain": 1}, "knockback": 3.0, "follow": true}),
 				_art(["Kick", "Heavy Kick"], "Knee Smash", [2.5], 1.0, 0.16, GREEN, "Hold: climbs a step; Perfect: grants Rush",
 						{"timing": TimingType.HOLD, "hold_start": 0.35, "times": [0.85], "grants": {"Rush": 1}, "climb": true}),
 				_art(["Punch", "Punch", "Kick", "Heavy Kick"], "Triple Rush", [0.6, 0.6, 3.2], 1.0, 0.16, PURPLE,
@@ -318,21 +319,7 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
 			]
 	_inherit(list, attacks(class_id))
-	_min_window(list)
 	return list
-
-
-## Every timing window lasts at least this long (seconds): a window is a
-## share of its move's length, and the Monk's 0.3 s Punch and Kick would get
-## only 36 ms (2 frames).
-const MIN_WINDOW_SECONDS := 0.075
-
-
-static func _min_window(list: Array[Dictionary]) -> void:
-	for move in list:
-		var duration := float(move.get("duration", 0.0))
-		if duration > 0.0 and move.has("window"):
-			move["window"] = maxf(float(move["window"]), MIN_WINDOW_SECONDS / duration)
 
 
 ## What an Art takes on from the moves it's made of: their on-hit effects.

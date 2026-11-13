@@ -4,18 +4,314 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Stone Golem: rocks always fall
+
+- A playtest went 5 Golem actions without a single Ceiling Burst (about a
+  1-in-3 chance), so the rock phase never happened. Now the first cast
+  after the Golem drops to **75% HP** is a **Ceiling Burst** for sure,
+  unless it already dropped rocks by chance. After that it picks at random
+  as before.
+- New, for any enemy skill: `EnemySkill.sure_below_hp` (0 = off), once per
+  fight. Test `_golemsure.gd`.
+
+## Gale Maw: Gust Sprites go over the edge
+
+- **Gust Sprites are very tough** (`Combatant.damage_taken_share` 0.2: they
+  take 20% of any damage, so 60 HP plays like 300) **but light**
+  (`knockback_taken` 1.5: every push sends them 1.5x as far). Push one off
+  the ledge and it falls, gone at once.
+- The move list tags pushing moves **PUSHES** (green, with how far) against
+  them, and everything else **TOUGH** (yellow). Pushers: Mage Gust /
+  Firestorm / Tempest, Archer Gale Shot, Knight Smash (unguarded) /
+  Crusader's Edge and the rest with knockback.
+- **Every class can now push** (so any party can deal with Gust Sprites):
+  the Assassin's **Ambush** kicks its target 3 m away, the Cleric's
+  **Smite** pushes 3 m, and the Monk's **Flash Kick** pushes 3 m with the
+  Monk following, like Crusader's Edge, so his combo stays in reach. All
+  three are single-hit Arts; against a Gust Sprite that's 4.5 m.
+- **Push Arts are spelled out when a Gust Sprite is up.** If a party member
+  knows no push yet, they get the hidden Art's full recipe: in the summon
+  message ("Monk can push with Kick + Kick"), on the TOUGH move details
+  ("Try Kick + Kick: a hidden Art that pushes") and in an orange
+  **PUSH IT OFF THE LEDGE!** box above the Arts list. All of it goes away
+  once that character knows a push (`_push_needed`, `_push_recipe`,
+  `BattleMenu.arts_urgent`).
+- Test `_gustsprite.gd` (also checks every class has a push).
+
+## Living Armor: Shadowflare's Shadow Sprites
+
+- **Shadowflare** no longer stops growing from damage to the Armor. When
+  the cast starts, it calls **3 Shadow Sprites** that circle along the edge
+  of the growing circle (2 m/s, so they're catchable even when it's big).
+  Hit each one once (they have 1 HP) and the circle stops growing. The
+  Armor's bar shows 3 pips for them. They aren't on the timeline and leave
+  when the skill ends. AI allies position around the nearest sprite.
+- **It grows much slower** (cast speed 0.6 -> 0.35), but much bigger: up to
+  the distance from the arena's middle to its corners (17 m in its arena,
+  was 11). Cast from the middle, nowhere is safe; cast from off to one
+  side, the far side stays out of reach.
+- Tutorial line updated. Test `_shadowflare.gd`; `_specials.gd` updated.
+
+## Stone Golem: lasting rocks, exploding rocks
+
+- **Fallen rocks stay** (Ceiling Burst and the Smash combos:
+  `ceiling_rock_seconds` 0 = until broken).
+- **Only 2 bursts leave rocks** (`Combatant.max_rock_bursts` = 2 on the
+  Golem). Later bursts still drop their damaging circles, but no new rocks,
+  so the arena doesn't fill up.
+- **Golem Smash blows up the rocks in its half** (`EnemySkill.
+  smash_blasts_rocks`, on both Smashes and both combos): from the reveal,
+  each rock inside the Smash's area gets an orange circle (2.5 m), the skill
+  name adds "ROCKS EXPLODE", and AI allies avoid the circles. When the Smash
+  lands, those rocks explode (30 damage to anyone in a circle) and are gone.
+  Rocks that fall during a Smash + Ceiling Burst are marked as they land.
+  Test `_golemrocks.gd`.
+- **Right + Left / Left + Right Golem Smash** (two new Golem skills): it
+  smashes one side, then the other side 1.5 s later (`follow_up`,
+  `follow_up_delay` 1.5), blowing up every rock in the arena. Follow-ups now
+  take their own aim (`aim_offset_degrees`) and mark rock blasts when
+  they're revealed.
+- **The double Smash comes when rocks pile up, but not right away.** Each
+  rock that has lain on the floor for 12 s adds weight to both double
+  Smashes (`EnemySkill.rock_clear_weight` 0.3 per rock,
+  `rock_settle_seconds` 12); with no rocks they're half as likely. Measured
+  chance of picking one: about 10% with no rocks, 10-18% right after two
+  bursts (20 fresh rocks: they get to block the party first), 45-60% once
+  those 20 have settled.
+
+## Counter-parry; backing out of a Counter at ACT
+
+- **Counter-parry:** hitting an enemy in Counter stance mid-combo no longer
+  ends the combo at once. The hit is caught, the playhead stops, and a red
+  line closes in on it ("! COUNTER !"): press the hit key as it arrives
+  (within 0.12 s of the swing, 0.6 s after the hit) and the stance breaks
+  ("COUNTER BROKEN!"), the rest of the combo deals +25%, and after a 0.6 s
+  breather (a gold ring shrinks around the playhead, "BROKEN! READY...";
+  presses meanwhile are ignored) the playhead moves on. Too early or too late: you're countered (33 damage) and the
+  combo stops, as before. The move list tags it "COUNTER: PARRY IT" (yellow)
+  instead of COUNTERED (red). Stats: `counter_parry_tries`,
+  `counter_parries`.
+- **AI allies dodge falling rocks properly.** You steered only the Monk,
+  so the Mage and Cleric were the AI's. Two causes, both reproduced in a
+  simulation (3 of 6 bursts hit someone when older rocks were on the floor):
+  - Escaping a circle, they pushed straight away from its centre; a fallen
+    rock or another fighter in the way kept them inside. Now they take the
+    shortest *clear* way out (rocks, the arena edge and other fighters
+    block directions; other danger isn't walked into).
+  - They only avoided circles about to land (last 1.6 s), so they walked
+    into ones landing a moment later. Now every pending circle is avoided.
+  - Walking to a committed target (Windup) now steps out of danger first.
+  Simulation after the fix: 1 hit in 12 bursts. Tests `_fallwindup.gd`,
+  `_fallsim.gd`.
+- **No more max AP penalty for avoidable hits** (for now):
+  `avoidable_hit_max_ap_loss` 100 -> 0. Taking a hit you could have avoided
+  just costs the damage; the red "!" warning on the AP meter is off with it.
+  They're still counted in the fight reports, and the Monk still loses a
+  step. Tutorial text updated.
+- **Windup timing, more room to get in reach:** the command point (COM)
+  moves from 70 to 65 on the timeline, and the grace at ACT goes from 1 s
+  to 1.5 s. (Round 9 run: 13 Waits and 4 TOO FAR in 32 party turns.)
+- **Fixed: a slightly late press could end the chain.** A press just after
+  a timed hit landed was judged against the *next* box as too early: a miss
+  that ends the chain and costs all AP. With close boxes (Triple Rush: two
+  presses, then the Hold) that happened a lot. Now a press within 0.2 s of
+  a timed hit landing counts as that hit's late press ("LATE": no Perfect,
+  nothing lost). `late_press_grace`; test `_latepress.gd`.
+- **Monk's build bar no longer covers the party HP list:** when the centred
+  bar (with his climb steps) would reach the list, it starts right of it
+  (`LEFT_HUD_CLEAR`, 430 px) and squeezes slightly if needed to fit.
+- **Fixed a softlock (Windup):** at ACT, if the party can't afford any move
+  that reaches the target (others spent the AP; the Cleric had 19 AP, Holy
+  Light costs 20 and Bash / Divine Barrier didn't reach), the turn now
+  becomes a Wait instead of opening a combo bar you couldn't use or leave.
+  Backing out at ACT uses the same check.
+- **Windup:** if the target went into Counter stance after you committed,
+  backing out at ACT is allowed again and the turn becomes a Wait.
+- From a Round 9 run: Counter stance dealt 262 of the 512 damage taken
+  (the Cleric went down to it), and the fight ran 14 minutes.
+- Tutorial lesson 6 (Counter) explains both.
+
+## Bosses resist being cancelled
+
+- **Boss cancel resistance** (`Combatant.cancel_every`, set to 2 on the Stone
+  Golem, Living Armor, Dragon Hatchling and Gale Maw): an interrupt, stun or
+  Hook can cancel a boss's skill only once every 2 of its actions. Each
+  cancel this fight adds one more action of immunity, up to 3. A resisted
+  cancel pops "IMMUNE", and the move list tags it IMMUNE (yellow) instead of
+  STUNS / INTERRUPTS. Breaking a Defense or Counter stance always works.
+  The Training Golem has no limit.
+- **Signature moves can't be cancelled** (`EnemySkill.uncancellable`,
+  "UNSTOPPABLE"): Golem Smash (both sides), Ceiling Burst and the two Smash +
+  Ceiling Burst combos; Shadowflare; Breath; Exhale and Gale Burst. Halts
+  (freeze) and Stagger still work on them.
+- From a Round 8 run where the Golem's 5 actions were all stopped or
+  answered (4 interrupts, 3 freezes): 0 damage taken all fight.
+
+## HUD restyle to match the timeline bar
+
+- New shared look (`scripts/ui/hud_style.gd`, `HudStyle`): deep navy panels
+  brightening toward the top, a gloss band, a blue accent line along the top
+  edge and a pale blue-white frame; bold slanted titles with a navy outline;
+  glossy gradient gauges with ticks every 10%; selected rows get a gold wash
+  fading to the right.
+- Applied to the command menu, move list, Arts panel, move/Art details,
+  target prompt, combo bar (header and trough), HP bars and names, AP meter
+  frame, combo counter, tutorial box, pause menu, party picker and title
+  screen.
+- Readability pass: only big titles (24 px and up: fighter name over the
+  menu, PAUSED, the game title, WAIT / CAST / ACT) use the bold slanted
+  lettering. Smaller text (names, headers, labels, the combo counter) stays
+  in the plain font, which read wavy when bolded and slanted.
+
+## Balance after a Windup run; Windup on by default
+
+- **Windup timing is now the default and no longer a prototype.** Classic
+  stays as a toggle in the pause menu.
+- **The tutorial teaches Windup** and always runs with it. Lesson 2 explains
+  WAIT / COM / CAST / ACT; lesson 3 moves the Knight out of reach and walks
+  you through choosing Attack at COM, getting in reach before ACT, and
+  building the combo at ACT. The Mage, Assassin and free-practice texts
+  follow the same flow. The Classic tutorial is kept in
+  `archive/tutorial_classic.gd`.
+- **Solo bosses (rounds 8-11):** HP boost x1.5 -> x1.2. The Stone Golem's
+  speed boost x1.25 -> x1.4 (it acted 8 times in a 10-minute fight).
+- **Archer:** Triple Shot 1.0 + 1.0 + 1.6 -> 0.95 + 0.95 + 1.5 (3.6 -> 3.4,
+  still above Double Shot + Shoot). She dealt 41% of the damage.
+- **Mage** up about 10%: Fire 1.1 -> 1.2, Frost 0.9 -> 1.0, Arcane Surge
+  0.8 -> 0.9, Fireball 3.0 -> 3.3, Blizzard 2.4 -> 2.6.
+- **Monk:** a missed timing in his own combo no longer drops a step, only his
+  newest token ("-1 TOKEN"); his climb holds. Avoidable hits and early
+  Parries still cost a step. (He climbed 3 steps and lost all 3 to misses.)
+
+## Used-Ability chip and badge; no backing out at ACT
+
+- Still one Ability per turn, then Attack or Wait (briefly tried: an Ability
+  ending the turn; reverted). The used Ability now shows as a coloured chip
+  with a tick on the Abilities row, and as a diamond badge on the fighter's
+  timeline icon until the turn ends (with Windup: until the attack at ACT).
+- The chosen Art's details (Tab in the combo bar) now show left of the move
+  list, where a move's details go, instead of above the Arts panel: long
+  Arts like Crusader's Edge and Thousand Cuts were cut off at the top of the
+  screen. Move and Ability details also never reach into the timeline bar
+  (their text shrinks a little if needed). `_cutoff.gd` checks every move,
+  Ability and Art of all six classes.
+- Windup timing: when the committed attack reaches ACT, the combo bar can't
+  be backed out of to Attack / Ability / Wait any more. If no move is
+  affordable, backing out ends the turn.
+
+## Timeline bar restyle
+
+- The turn bar is a glossy gauge: navy-to-blue across the waiting stretch
+  with small segment ticks and tall ones every 10, an orange-to-red glowing
+  casting zone, and a gold cap at the end.
+- Slanted bold zone names sit on the bar: WAIT, CAST, ACT (and COM at the
+  party's command point when windup timing is on). Zone edges are glowing
+  dividers.
+- Icons hang on slanted pins with a small pointer on the bar.
+
+## Smash breaks Defense; Crusader's Edge follows; control stays put
+
+- **Smash** (Knight Art) breaks Defense again. It knocks the enemy 4 m back
+  only when it wasn't defending (breaking the guard takes the push).
+- Once a breaking move is on the bar against a defending enemy, the moves
+  and Arts after it no longer show BLOCKED / PARTLY BLOCKED.
+- **Crusader's Edge:** the Knight follows the enemy as it's knocked back,
+  so it stays in reach.
+- Movement control only changes with Tab: after a party turn, and now also
+  after committing at COM (Windup), it goes back to whoever you were
+  steering (briefly tried: staying on whoever just acted; reverted).
+
+## Command timing: windup (prototype)
+
+- New setting in the pause menu, **Command timing: Classic / Windup** (off by
+  default; takes effect on the next fight or a restart). With Windup, a party
+  member chooses at a command point (70% of the timeline, a gold notch):
+  Attack picks any enemy, then time runs and you have until your icon
+  reaches the end to get in reach. A 1 s grace still lets you act the moment
+  you arrive; after that the turn becomes a Wait. AI allies walk to their
+  own targets. Classic mode is unchanged.
+
+## Party in pick order
+
+- The party picker keeps the order you tick classes in (shown as numbers in
+  the boxes); the party comes out in that order and the first one starts
+  under your control. The next round's picker remembers it.
+
+## One Execute per bar; Thousand Cuts needs Marks
+
+- An enemy carries at most **4 Marks** (was 5), and Execute costs at least
+  40 AP (was 25). At 5 Marks it cost 25, so two fit in the Assassin's
+  50 AP bar.
+- Thousand Cuts only forms on a target with 2+ Marks and spends 2 as it
+  starts (it used to add 2), so it can't be repeated freely. Its cuts count
+  as Stabs, which is why the Marks go first: otherwise they'd grow back.
+  The Arts list shows "needs 2 Marks on the target" while it's hidden.
+
+## Easier to find Arts (mostly for the Monk)
+
+- 2-move Arts get partial hints too: 1 move right, with the pair inside the
+  bar ("??? Kick + ?  (1 of 2)").
+- The Arts panel lists each hidden Art's length and AP, and what still
+  blocks it: "four-move, 35 AP (needs bar 50)", "needs Crowd Cheer".
+- An Art made of Arts you already know shows as those Arts: "??? Palm
+  Strike + Knee Smash  (Arts you know)".
+
+## Shields expire
+
+- Every barrier or shield is now its own stack that runs out after 2 of its
+  caster's turns (`Combatant.shield_stacks`). Giving more adds a new stack
+  with its own countdown; older ones aren't refreshed. Damage uses up the
+  oldest first; the half-max-HP cap stays. "Wore off: ...'s shield" shows
+  when one runs out.
+
+## Solo bosses get more HP and speed; Monk at half speed
+
+- Playtest: in the solo boss rounds the boss acted 2-4 times per fight
+  while the party took 11-19 turns. Rounds 8-11 now give their boss x1.5
+  HP and x1.25 speed (`Encounter.enemy_hp_mult` / `enemy_speed_mult`);
+  the mixed rounds are unchanged. Gale Burst's lanes follow a little sooner
+  with the faster Maw.
+- The Monk's timings were squeezed (Flash Kick's Hold took 0.33 s, Palm
+  Strike's 3 taps 0.59 s): his combo playhead now runs at half speed
+  (`Combatant.playhead_speed`), so a 5 AP move lasts as long as a 10 AP
+  move does for everyone else. Bigger blocks too: at least 60 px while
+  building and 96 px while playing for the smallest move.
+
+## Punch and Kick without timing
+
+- The Monk's Punch and Kick no longer have a timed hit: every hit lands by
+  itself and presses during them are ignored. His heavy moves, Headbutt and
+  all his Arts keep their timings.
+
+## Skipped timings are free
+
+- Skipping a timed hit (not pressing) no longer costs max AP; it's just a
+  normal hit (`skipped_hit_max_ap_loss` 5 -> 0). A wrong press still ends
+  the combo and resets max AP.
+
+## Agility during a Hold; minimum window undone
+
+- Agility's extra arrow on a Hold move (Power Draw, Piercing Arrow,
+  Stunning Arrow, Gale Shot) asked for a press in the middle of the Hold.
+  It now flies by itself; on Press moves it's still a press.
+- The "75 ms minimum timing window" is undone: windows are in seconds, not
+  a share of the move, so the Monk's Punch and Kick already had 120 ms, and
+  the change had raised them to 250 ms. Back to 120 ms. Every class's
+  playhead moves at the same 15 AP per second; the Monk feels faster
+  because Punch and Kick are 5 AP, a press every third of a second.
+
+## Monk's bar while building
+
+- Punch and Kick overlapped while building a combo (about 35 px each): the
+  build bar now widens for classes with small moves, so the smallest is at
+  least 48 px. Captions under the bar (HOLD, LET GO, TAP) skip themselves
+  if they'd print over the previous one.
+
 ## One reveal per new Art
 
 - Playing a hidden Art twice in one bar used to show "NEW ART!" twice. Now
   the first one reveals it; the second just forms, with its name popping up
   like any known Art.
-
-## Minimum timing window
-
-- Every timing window now lasts at least 75 ms (`Moves.MIN_WINDOW_SECONDS`).
-  Windows are a share of the move's length, so the Monk's 0.3 s Punch and
-  Kick had only 36 ms (about 2 frames); now 75 ms, like the Cleric's Bash.
-  Longer moves are unchanged.
 
 ## Archer toned down
 

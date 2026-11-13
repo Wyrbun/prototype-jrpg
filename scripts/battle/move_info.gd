@@ -24,14 +24,15 @@ const SKILL_TEXT := {
 	"Teleport": ["Blink to a spot up to 8 m away (move the marker), or press Tab to appear next to an ally at any distance."],
 	"Healing": ["Heals an ally (or you) for 25% of their max HP."],
 	"Shielding": ["Every ally gets a shield of 15% of their max HP, at any distance.",
-			"Shields soak damage before HP and stack with barriers, up to half of max HP."],
+			"Shields soak damage before HP and stack with barriers, up to half of max HP.",
+			"Each shield lasts 2 of your turns; a new one doesn't refresh older ones."],
 	"Haste": ["An ally's turns come 25% sooner and they run 20% faster.", "Lasts 2 of their own turns."],
 	"Full Cure": ["Fully heals an ally (or you)."],
 	"Hook": ["An enemy up to 6 m away loses what it was preparing (or its stance) and is pulled 2 m towards you.",
 			"Uses up its Marks."],
 	"Death Sentence": ["Puts 3 Marks on an enemy up to 6 m away (5 at most)."],
 	"Shadow Cloak": ["A Marked enemy's Marks become a shield on you: 10% of your max HP for each.",
-			"Works at any distance."],
+			"Works at any distance. The shield lasts 2 of your turns."],
 	"Vanish": ["Enemies stop targeting you (while anyone else is standing) until you attack, or for 2 of your turns."],
 	"Provoke": ["One enemy up to 6 m away targets you until your next turn.",
 			"Each Parry you make meanwhile gives a Rush token."],
@@ -60,7 +61,7 @@ static func summary(move: Dictionary) -> String:
 		Moves.TimingType.TAP:
 			parts.append("Open Tap" if float(move.get("surge", 0.0)) > 0.0 else "Tap x%d" % int(move.get("taps", 0)))
 		_:
-			parts.append("Press")
+			parts.append("No timing" if String(move.get("timed", "")) == "none" else "Press")
 	if move.get("finisher", false):
 		parts.append("Finisher")
 	return "  ·  ".join(parts)
@@ -94,7 +95,9 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 			else:
 				out.append("Tap exactly %d times before the hit for a Perfect. One tap too many is a miss." % int(move.get("taps", 0)))
 		_:
-			if String(move.get("timed", "")) != "":
+			if String(move.get("timed", "")) == "none":
+				out.append("No timing: every hit lands by itself (presses are ignored).")
+			elif String(move.get("timed", "")) != "":
 				out.append("Only the %s hit is timed; the others land by themselves." % move["timed"])
 	if move.get("random_timing", false):
 		out.append("Random timing: the box can appear anywhere in the block.")
@@ -134,7 +137,8 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 	if float(move.get("freeze", 0.0)) > 0.0:
 		out.append("Halt: the enemy's timeline stops for %s s. Once per enemy action." % _num(float(move["freeze"])))
 	if float(move.get("knockback", 0.0)) > 0.0:
-		out.append("Pushes enemies %s m away (edges can make them fall)." % _num(float(move["knockback"])))
+		var unguarded := " if it wasn't defending" if move.get("knockback_unguarded", false) else ""
+		out.append("Pushes enemies %s m away%s (edges can make them fall)." % [_num(float(move["knockback"])), unguarded])
 	if move.get("draws_aggro", false):
 		out.append("Draws aggro: the enemy targets you for one of your turns (each more adds a turn, up to 3).")
 	if move.get("pin", false):
@@ -152,7 +156,7 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 		var line := "Barrier: %d%% of max HP to %s." % [roundi(float(move["barrier"]) * 100.0), where]
 		if move.has("perfect_barrier"):
 			line += " Perfect: %d%% within %s m." % [roundi(float(move["perfect_barrier"]) * 100.0), _num(float(move.get("perfect_barrier_radius", radius)))]
-		out.append(line)
+		out.append(line + " Lasts 2 of your turns.")
 	if float(move.get("heal_allies", 0.0)) > 0.0:
 		var heal_radius := float(move.get("heal_radius", 0.0))
 		var who := "the whole party" if heal_radius >= Moves.UNLIMITED else "allies within %s m" % _num(heal_radius)
@@ -182,6 +186,9 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 	var add_marks := int(last.get("add_marks", move.get("add_marks", 0)))
 	if add_marks > 0:
 		out.append("+%d Mark%s." % [add_marks, "" if add_marks == 1 else "s"])
+	if int(move.get("needs_marks", 0)) > 0:
+		var spend := int(move.get("spend_marks", 0))
+		out.append("Only forms on a target with %d+ Marks; spends %d of them." % [int(move["needs_marks"]), spend])
 	if int(move.get("mark_discount", 0)) > 0:
 		out.append("Costs %d AP less per Mark on the target (at least %d)." % [int(move["mark_discount"]), int(move.get("min_cost", 0))])
 	if float(move.get("mark_bonus", 0.0)) > 0.0:

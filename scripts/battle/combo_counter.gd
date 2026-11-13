@@ -108,8 +108,9 @@ func _draw() -> void:
 		_text(font, pop["text"], anchor + Vector2(90.0 + pop["x"], -10.0 - age * 50.0), 24, color)
 
 
-func _text(font: Font, text: String, center: Vector2, font_size: int, color: Color) -> void:
+func _text(_font: Font, text: String, center: Vector2, font_size: int, color: Color) -> void:
+	var font := HudStyle.bold_font()  # bold but upright: easy to read mid-combo
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var pos := Vector2(center.x - width / 2.0, center.y)
-	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 6, Color(0, 0, 0, color.a))
+	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 7, Color(HudStyle.OUTLINE, color.a))
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)

@@ -212,10 +212,10 @@ func _draw() -> void:
 			draw_rect(open_part, _segment_color(i, rect.position.x).darkened(0.8))
 			if open_part.size.x < rect.size.x:
 				var rest := Rect2(rect.position.x + open_part.size.x, rect.position.y, rect.size.x - open_part.size.x, rect.size.y)
-				draw_rect(rest, Color(0.08, 0.08, 0.1, 0.5))
+				draw_rect(rest, Color(0.03, 0.05, 0.14, 0.75))
 				draw_rect(rest, Color(1, 1, 1, 0.12), false, 1.0)
 		else:
-			draw_rect(rect, Color(0.08, 0.08, 0.1, 0.5))
+			draw_rect(rect, Color(0.03, 0.05, 0.14, 0.75))
 			draw_rect(rect, Color(1, 1, 1, 0.12), false, 1.0)
 
 	# The fill: each segment in its colour, with a flowing stripe texture.
@@ -312,7 +312,8 @@ func _draw() -> void:
 	for i in range(1, segments):
 		var x := bar.position.x + i * SEGMENT * _px()
 		draw_line(Vector2(x, bar.position.y - 2.0), Vector2(x, bar.end.y + 2.0), Color(0, 0, 0, 0.85), 2.0)
-	draw_rect(bar.grow(1.0), Color(0, 0, 0, 0.9), false, 2.0)
+	draw_rect(bar.grow(2.0), Color(HudStyle.OUTLINE, 0.9), false, 3.0)
+	draw_rect(bar.grow(0.5), HudStyle.EDGE, false, 1.5)
 	if _red > 0.0:
 		draw_rect(bar.grow(3.0), Color(1.0, 0.15, 0.1, _red), false, 3.0)
 		draw_rect(bar, Color(1.0, 0.1, 0.05, 0.35 * _red))
