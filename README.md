@@ -1,5 +1,7 @@
 # Prototype JRPG
 
+[![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/FU89dNTwz)
+
 A 3D JRPG battle system prototype built in **Godot 4.7**, mixing four classic
 battle systems:
 
@@ -93,6 +95,12 @@ click **Import**, pick this folder's `project.godot`, and press **F5**.
 report; press **O** on the end screen to open the folder (on Windows,
 `%APPDATA%\Godot\app_userdata\Prototype JRPG\playtests`). Attach a few to an
 [issue](../../issues) along with what felt fun, confusing or unfair.
+
+## Community
+
+Join the [Discord server](https://discord.gg/FU89dNTwz) to share feedback,
+get new releases as they come out, and ask the game's bot anything with
+`/ask` (for example `/ask how does the counter-parry work?`).
 
 ## Controls (defaults)
 

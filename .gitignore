@@ -1,3 +1,11 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Discord bot: keys and local Python environment
+tools/discord-bot/.env
+tools/discord-bot/.venv/
+__pycache__/
+
+# Local backups (kept on this PC, not on GitHub)
+backups/
