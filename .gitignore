@@ -2,9 +2,8 @@
 .godot/
 /android/
 
-# Discord bot: keys and local Python environment
-tools/discord-bot/.env
-tools/discord-bot/.venv/
+# Discord bot: kept on this PC, not on GitHub (its keys stay out too)
+tools/discord-bot/
 __pycache__/
 
 # Local backups (kept on this PC, not on GitHub)
