@@ -8,3 +8,4 @@ __pycache__/
 
 # Local backups (kept on this PC, not on GitHub)
 backups/
+/tools/discord-bot
