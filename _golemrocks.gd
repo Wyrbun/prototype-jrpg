@@ -66,7 +66,7 @@ func _process(d):
 	var cl = a.party[1]
 	check(a._ally_dangers(cl).any(func(dd): return dd["area"] == blasts[0]["area"]), "AI allies avoid the blast circles")
 	cl.global_position = blasts[0]["area"].global_position + Vector3(0.3, 0, 0)
-	cl.hp = cl.max_hp  # the bursts above may have hit it
+	cl.hp = cl.max_hp; cl.is_down = false; cl.shield = 0  # the bursts above may have hit (or downed) it
 	var hp0: int = cl.hp
 	a._enemy_unleash(g, true)
 	check(hp0 - cl.hp >= 30, "standing in a blast: hurt (%d)" % (hp0 - cl.hp))

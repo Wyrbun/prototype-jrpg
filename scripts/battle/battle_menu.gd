@@ -27,8 +27,10 @@ const MAX_BAR_PX := 720.0
 const MIN_PLAY_BLOCK_PX := 96.0
 const PLAY_MAX_PX_PER_AP := 20.0
 const PLAY_VIEW_PX := 900.0
-## Timing boxes are drawn at least this wide (the window to press in doesn't
-## change, only how easy it is to see).
+## Timing boxes are drawn at least this wide, and the window to press in
+## grows with them (box_fraction), so a press inside the drawn box always
+## counts. Matters most for the Monk, whose half-speed playhead makes the
+## same window half as wide on screen.
 const MIN_BOX_PX := 14.0
 ## While building, a class with small moves (the Monk's 5 AP Punch and Kick)
 ## gets a wider bar, so its smallest move is at least this wide.
@@ -502,6 +504,17 @@ func _hidden_by_length() -> String:
 	return ", ".join(parts)
 
 
+## A timing box's width as a fraction of its block: the move's own window,
+## but never narrower on screen than MIN_BOX_PX. The arena judges presses
+## with this same fraction, so what you see is what counts.
+func box_fraction(move: Dictionary) -> float:
+	var segment_px := float(move.get("cost", 0.0)) * _px
+	var fraction := float(move.get("window", 0.0))
+	if segment_px > 0.0:
+		fraction = maxf(fraction, MIN_BOX_PX / segment_px)
+	return minf(fraction, 1.0)
+
+
 func _draw_combo_bar(font: Font) -> void:
 	# One scale for the whole combo: the combo limit fits the move list's width.
 	# (Monk while building: the steps still to climb share that width.)
@@ -650,7 +663,7 @@ func _draw_combo_bar(font: Font) -> void:
 		# One timing box per hit, ending where that hit lands (the last one at
 		# the end of the block): press J while the playhead is inside it.
 		var times: Array = move["times"]
-		var box_width := minf(maxf(segment.size.x * float(move["window"]), MIN_BOX_PX), segment.size.x)
+		var box_width := segment.size.x * box_fraction(move)
 		var timing: int = int(move.get("timing", 0))
 		var playing := mode == Mode.EXECUTING and slot == executing_slot
 		var untimed: Array = move.get("untimed", [])
@@ -693,6 +706,13 @@ func _draw_combo_bar(font: Font) -> void:
 				var done := exec_taps if playing else (needed if result == 1 else 0)
 				draw_rect(stretch, fill if result != 0 else Color(TAP_COLOR, 0.16))
 				_dashed_rect(stretch, TAP_COLOR)
+				if (move.get("move", move) as Dictionary).get("surge_uncapped", false):
+					# No limit (Tortoise Special): a fill toward the Perfect, then it
+					# glows; the count keeps going.
+					var share := clampf(float(done) / needed, 0.0, 1.0)
+					draw_rect(Rect2(stretch.position, Vector2(stretch.size.x * share, stretch.size.y)), Color(TAP_COLOR, 0.35 if done < needed else 0.6))
+					_small_tag(font, stretch, ("TAP %d  (%d = Perfect, no limit)" % [done, needed]) if playing else "TAP: NO LIMIT", TAP_COLOR)
+					continue
 				var pip_gap := stretch.size.x / (needed + 1)
 				for pip in needed:
 					var centre := Vector2(stretch.position.x + pip_gap * (pip + 1), stretch.end.y - 8)

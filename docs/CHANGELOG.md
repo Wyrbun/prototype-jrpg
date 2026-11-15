@@ -4,6 +4,71 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## The fight's opening text stays up
+
+- The round name and its tip shared one message slot with everything else:
+  the first turn, or any other message ("A rock crashes down!", "Knight goes
+  for..."), wiped the tip after a few seconds. Now they have their own slot
+  (`_intro_message`) above the other messages, shown for 4 s + 0.05 s per
+  character (6 to 18 s; the Gale Maw's four-line tip gets 18), counting down
+  only while it's on screen (not during strikes or combos). Test `_intro.gd`.
+
+## Monk: the bar stays put after a step; Tortoise Special is a tap frenzy
+
+- **Tortoise Special: tap as fast as you can, no limit.** After its two
+  opening presses, the rest of the block (from 40% on, about 5.6 s at the
+  Monk's speed) is an open tap: every tap adds 4% to the finishing hit and
+  there's no ceiling (30 taps is a Perfect). Hits 0.8 / 0.8 / 1.25 (was
+  2.4), so about 30 taps matches the old damage and faster tapping beats it.
+  At bar 100 (2.5x): 10 taps 183, 30 taps 288, 60 taps 387, 90 taps 486.
+  The bar shows a fill toward the Perfect and the running count
+  (`surge_uncapped`; test `_tortoise.gd`).
+- Earning a step or a token mid-combo (Knee Smash, Palm Strike...) used to
+  take the played blocks off the bar right away, so the rest of the bar
+  shrank and slid under the playhead: the next timing box was suddenly
+  somewhere else. Played blocks now stay on the bar, dimmed like any played
+  block, and the bar keeps its size and scale for the whole combo (a
+  Headbutt's fresh bar still starts over after its READY lead-in). Test
+  `_monkbar.gd`.
+
+## Bosses act more often; no turns lost to Doom Gaze
+
+From a full 0.5.0 Boss Rush log (rounds 1-11 won first try, the bosses dealt
+0 / 0 / 131 / 38 damage, about one boss action per four party turns):
+
+- **Boss rounds are faster:** `enemy_speed_mult` 1.25 -> **1.5** (Living Armor,
+  Dragon Hatchling, Gale Maw) and 1.4 -> **1.7** (Stone Golem), so bosses act
+  about 20% more often.
+- **Living Armor: Shadowflare for sure at 70% HP** (`sure_below_hp` 0.7). In 7
+  actions it had only used Combo and Doom Gaze, so its signature skill never
+  showed up.
+- **Windups wait in cover during a Doom Gaze.** Everyone hides behind the
+  cover rock (about 8 m away), out of reach of everyone but the Archer, so
+  the grace ran out and attacks became Waits: 6 lost turns and a Mage with 0
+  damage in that fight. While an enemy prepares a lethal skill the grace now
+  doesn't run ("WAITS IN COVER"); it starts once the gaze is over. Test
+  `_gazewait.gd`.
+
+## Hold Tab to choose, Monk timing boxes, bosses hit harder
+
+- **Hold Tab to choose who to steer.** Between turns, holding Tab for 0.3 s
+  stops time and opens a **STEER WHO?** panel with each party member's HP:
+  A/D (arrows, mouse wheel, or 1-6) picks, the camera follows the pick, and
+  letting go of Tab steers that one. Downed members are greyed out and
+  skipped. A tap still switches to the next one. The bottom hint and the
+  title screen's controls list say so (`SteerPicker`, test `_steer.gd`).
+- **Monk: timing boxes now count everywhere they're drawn.** Boxes are drawn
+  at least 14 px wide, but presses were judged against the move's real
+  window, which could be much narrower on screen. The Monk's half-speed
+  playhead halves it: in a bar of only Arts (Triple Rush, Mountain
+  Crusher) the window was 8.6 px inside a 14 px box, so pressing in the
+  left 40% of the box was a miss. Presses are now judged with the drawn
+  width (`BattleMenu.box_fraction`); other classes' boxes (19-26 px) were
+  already accurate. Test `_monkbox.gd`.
+- **Bosses hit 15% harder** (`boss_damage_mult` 1.15): every hit from a boss's
+  skills, rocks, blasts and Counter stance. Counter stance damage is now
+  recorded under the enemy's skills in play-test reports. Test `_bossdmg.gd`.
+
 ## Stone Golem: rocks always fall
 
 - A playtest went 5 Golem actions without a single Ceiling Burst (about a

@@ -10,6 +10,7 @@ func _initialize():
 	BattleArena._round_index = int(OS.get_environment("R")) if OS.get_environment("R") != "" else 13
 	a = load("res://scenes/battle/battle_arena.tscn").instantiate()
 	root.add_child(a)
+	a.boss_damage_mult = 1.0  # exact skill damage here; _bossdmg.gd tests the boss bonus
 func m(id):
 	for x in a.party:
 		if x.class_id == id: return x

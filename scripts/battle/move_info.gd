@@ -90,7 +90,9 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 		Moves.TimingType.HOLD:
 			out.append("Hold: press in the first box, keep holding, let go in the last box for a Perfect. A bad let-go only loses the Perfect.")
 		Moves.TimingType.TAP:
-			if float(move.get("surge", 0.0)) > 0.0:
+			if move.get("surge_uncapped", false):
+				out.append("Open Tap, no limit: every tap adds %d%% damage, as many as you can; %d taps is a Perfect." % [roundi(float(move["surge"]) * 100.0), int(move["taps"])])
+			elif float(move.get("surge", 0.0)) > 0.0:
 				out.append("Open Tap: every tap adds %d%% damage, up to %d taps (a Perfect). Extra taps are fine." % [roundi(float(move["surge"]) * 100.0), int(move["taps"])])
 			else:
 				out.append("Tap exactly %d times before the hit for a Perfect. One tap too many is a miss." % int(move.get("taps", 0)))

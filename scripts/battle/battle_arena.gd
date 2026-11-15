@@ -151,6 +151,9 @@ var max_ap_limit_bonus := 0.0
 ## ("LATE": no Perfect) instead of a too-early press for the next box (a miss
 ## that ends the chain). Mattered for close hits like Triple Rush's.
 @export var late_press_grace: float = 0.2
+## Bosses (Combatant.boss) hit this much harder: every hit their skills,
+## rocks and blasts deal to the party (summoned sprites don't count).
+@export var boss_damage_mult: float = 1.15
 ## How far an interrupted or guard-broken enemy is knocked back on the timeline.
 @export var interrupt_push: float = 30.0
 ## Seconds a Defense/Counter stance stays up after the enemy's turn
@@ -278,6 +281,12 @@ var _skills: Array[Dictionary] = []
 var _plan: Array[Dictionary] = []
 ## Seconds of Concentrate left (doubles AP recharge).
 var _concentrate_left := 0.0
+## Tab between turns: a tap steers the next party member; holding it for
+## steer_hold_seconds stops time and opens the picker (SteerPicker).
+@export var steer_hold_seconds: float = 0.3
+var steer_picker: SteerPicker
+var _tab_down_ms := -1  # Tab went down between turns at this time; -1 = not held
+var _picker_open := false
 ## Teleport targeting: the ally the marker is snapped to (Tab), if any.
 var _snap_ally: Combatant = null
 var _snap_index := -1
@@ -453,6 +462,10 @@ var _strike_distance := 12.0
 ## is panning over to them).
 var _turn_intro_left := 0.0
 var _flash_message := ""
+## The fight's opening text (round name and tip): its own slot, so turns and
+## other messages don't wipe it before it's read. Counts down only while shown.
+var _intro_message := ""
+var _intro_left := 0.0
 ## This fight's play-test report (not kept for the tutorial).
 var playtest: PlaytestLog = null
 var _flash_time_left := 0.0
@@ -527,6 +540,9 @@ func _ready() -> void:
 	ap_bar.visible = false
 	combo_counter = ComboCounter.new()
 	$UI.add_child(combo_counter)
+	steer_picker = SteerPicker.new()
+	$UI.add_child(steer_picker)
+	steer_picker.party = party
 	pause_menu = PauseMenu.new()
 	$UI.add_child(pause_menu)
 	pause_menu.restart_requested.connect(func():
@@ -568,9 +584,11 @@ func _ready() -> void:
 		tutorial.battle = self
 		add_child(tutorial)
 	else:
-		_flash("%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)])
+		_intro_message = "%s: %s  vs  %s" % [encounter.title, _names(party), _names(enemies)]
 		if encounter.tip != "":
-			_flash(encounter.tip, 9.0)
+			_intro_message += "\n" + encounter.tip
+		# Reading time: about 20 characters a second, 6 to 18 s.
+		_intro_left = clampf(4.0 + _intro_message.length() * 0.05, 6.0, 18.0)
 		playtest = PlaytestLog.new(encounter.title, party, enemies)
 		if boss_rush_mode:
 			playtest.mode = "Boss Rush (continued from a save)" if continued else "Boss Rush"
@@ -728,7 +746,12 @@ func _process(delta: float) -> void:
 			_update_edge_save(delta)  # teetering on the edge: everything waits
 		elif _strike != null:
 			_update_strike(delta)  # everything else waits while a strike plays
+		elif _picker_open:
+			# Choosing who to steer: time stands still until Tab is let go.
+			if not Input.is_action_pressed("swap_character"):
+				_close_steer_picker()
 		elif active == null:
+			_check_steer_hold()
 			var world_delta := delta * battle_speed
 			var concentrate := 2.0 if _concentrate_left > 0.0 else 1.0
 			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * concentrate * world_delta, current_max_ap)
@@ -764,6 +787,9 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _picker_open and not event.is_action_pressed("menu"):
+		_picker_input(event)  # before the camera: the wheel picks here
+		return
 	if _camera_input(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -808,9 +834,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_try_defend()
 		return
 	if _party_turn():
+		_tab_down_ms = -1
 		_menu_input(event)
 	elif active == null and event.is_action_pressed("swap_character"):
+		# Wait for the release: a tap steers the next one, a hold opens the picker.
 		get_viewport().set_input_as_handled()
+		_tab_down_ms = Time.get_ticks_msec()
+	elif active == null and event.is_action_released("swap_character") and _tab_down_ms >= 0:
+		get_viewport().set_input_as_handled()
+		_tab_down_ms = -1
 		_cycle_control()
 
 
@@ -860,6 +892,13 @@ func _advance_timeline(seconds: float) -> void:
 			if during_party_turn:
 				continue  # waits at the end until the current turn is over
 			if not _windup_in_reach(c):
+				if _lethal_pending():
+					# Hiding from a Doom Gaze: the attack waits in cover, and the
+					# grace starts once the gaze is over.
+					if not c.has_meta("windup_sheltering"):
+						c.set_meta("windup_sheltering", true)
+						_popup(c, "WAITS IN COVER", Color(0.75, 0.8, 0.95))
+					continue
 				var grace := float(c.get_meta("windup_grace", 0.0)) + seconds
 				c.set_meta("windup_grace", grace)
 				if grace >= windup_grace_seconds:
@@ -1044,6 +1083,73 @@ func _free_roam(delta: float, world_delta: float) -> void:
 			_ally_step(ally, world_delta)
 	_resolve_overlaps()
 	_world_moved = true
+
+
+## Holding Tab long enough (between turns) opens the picker.
+func _check_steer_hold() -> void:
+	if _tab_down_ms < 0:
+		return
+	if not Input.is_action_pressed("swap_character"):
+		_tab_down_ms = -1  # let go somewhere the release event didn't reach
+		return
+	if Time.get_ticks_msec() - _tab_down_ms >= steer_hold_seconds * 1000.0 and _standing(party).size() >= 2:
+		_open_steer_picker()
+
+
+func _open_steer_picker() -> void:
+	_tab_down_ms = -1
+	_picker_open = true
+	steer_picker.selected = controlled
+	steer_picker.visible = true
+
+
+func _close_steer_picker() -> void:
+	_picker_open = false
+	steer_picker.visible = false
+
+
+## Picker open: A/D (arrows, wheel) move the pick, 1-6 jump to one, letting
+## go of Tab steers whoever is picked. The camera follows the pick.
+func _picker_input(event: InputEvent) -> void:
+	var step := 0
+	if event.is_action_released("swap_character"):
+		get_viewport().set_input_as_handled()
+		_close_steer_picker()
+		return
+	if event.is_action_pressed("move_left"):
+		step = -1
+	elif event.is_action_pressed("move_right"):
+		step = 1
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			step = -1
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			step = 1
+	elif event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_6:
+		var index := int(event.physical_keycode - KEY_1)
+		if index < party.size() and not party[index].is_down:
+			_pick_to_steer(party[index])
+		get_viewport().set_input_as_handled()
+		return
+	if step == 0:
+		if not (event is InputEventMouseMotion):
+			get_viewport().set_input_as_handled()  # nothing else happens while choosing
+		return
+	get_viewport().set_input_as_handled()
+	var index := party.find(steer_picker.selected)
+	for i in party.size():
+		index = posmod(index + step, party.size())
+		if not party[index].is_down:
+			_pick_to_steer(party[index])
+			return
+
+
+func _pick_to_steer(member: Combatant) -> void:
+	steer_picker.selected = member
+	if member != controlled:
+		_set_controlled(member)
+		_begin_pan()
 
 
 ## Tab (between turns): steer the next standing party member.
@@ -3607,6 +3713,8 @@ func _max_ap_at_risk() -> bool:
 func _hurt(member: Combatant, amount: int, recoverable: bool, source: String,
 		enemy: Combatant = null, skill_name: String = "") -> int:
 	var was_down := member.is_down
+	if enemy != null and enemy.boss and boss_damage_mult != 1.0:
+		amount = ceili(amount * boss_damage_mult)
 	var taken := member.take_damage(amount, recoverable)
 	if playtest:
 		playtest.hurt(member, taken, source, enemy, skill_name)
@@ -4105,7 +4213,7 @@ func _windup_in_reach(fighter: Combatant) -> bool:
 
 
 func _clear_windup(fighter: Combatant) -> void:
-	for key in ["windup_target", "windup_grace"]:
+	for key in ["windup_target", "windup_grace", "windup_sheltering"]:
 		if fighter.has_meta(key):
 			fighter.remove_meta(key)
 
@@ -4154,6 +4262,14 @@ func _hand_back_control() -> void:
 		if not _steer_before_turn.is_down and _steer_before_turn != controlled:
 			_set_controlled(_steer_before_turn)
 		_steer_before_turn = null
+
+
+## An enemy is preparing a lethal skill (Doom Gaze): everyone may be hiding.
+func _lethal_pending() -> bool:
+	for enemy in enemies:
+		if not enemy.is_down and enemy.loaded_skill != Skills.NONE and enemy.loaded_def != null and enemy.loaded_def.lethal:
+			return true
+	return false
 
 
 ## Out of reach after the grace: the turn becomes a Wait.
@@ -5319,6 +5435,8 @@ func _timing_prompt() -> String:
 		if _special_hit(entry, _next_timed(entry)):
 			if int(entry["timing"]) == Moves.TimingType.HOLD:
 				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
+			if entry["move"].get("surge_uncapped", false):
+				return Keybinds.fill("TAP {confirm} as fast as you can: every tap adds damage, no limit (%d is a Perfect)" % int(entry["taps"]))
 			if float(entry["move"].get("surge", 0.0)) > 0.0:
 				return Keybinds.fill("TAP {confirm} as fast as you can: every tap adds damage, %d is a Perfect  (extra taps are fine)" % int(entry["taps"]))
 			return Keybinds.fill("TAP {confirm} exactly %d times before the hit: Perfect!  (a tap too many is a miss)" % int(entry["taps"]))
@@ -5432,8 +5550,9 @@ func _settle_tokens() -> void:
 		fighter.spend_climb()
 		_count("monk_cashouts")
 	if not notes.is_empty():
-		# The buff is earned: its blocks (and everything before) leave the bar.
-		battle_menu.consumed_slots = _exec_slot + 1
+		# The buff is earned. Its blocks stay on the bar (dimmed, like every
+		# played block): removing them mid-combo shrank and shifted the rest
+		# of the bar under the playhead and threw the Monk's timing off.
 		_flash("%s: %s" % [move["name"], ", ".join(notes)])
 		print("%s: %s" % [move["name"], ", ".join(notes)])
 
@@ -5491,7 +5610,7 @@ func _judge_release() -> void:
 	if not _special_hit(entry, hit):
 		return
 	var duration: float = entry["duration"]
-	var window: float = float(entry["window"]) * duration
+	var window: float = battle_menu.box_fraction(entry) * duration
 	var hit_time := duration * float(entry["times"][hit])
 	if _exec_time >= hit_time - window:
 		_mark_timing(hit, Timing.PERFECT)
@@ -5518,14 +5637,22 @@ func _judge_timing() -> void:
 		return
 	var entry := _plan[_exec_slot]
 	var duration: float = entry["duration"]
-	var window: float = float(entry["window"]) * duration
+	var window: float = battle_menu.box_fraction(entry) * duration
 	var hit := _next_timed(entry)
 	if hit < _exec_timings.size() and _special_hit(entry, hit):
 		if int(entry["timing"]) == Moves.TimingType.TAP:
 			if _exec_time < duration * float(entry["tap_start"]):
 				return  # before the tap stretch: ignored
-			if _exec_taps >= int(entry["taps"]) and float(entry["move"].get("surge", 0.0)) > 0.0:
+			if _exec_taps >= int(entry["taps"]) and float(entry["move"].get("surge", 0.0)) > 0.0 \
+					and not entry["move"].get("surge_uncapped", false):
 				return  # Arcane Surge: past the cap, taps are just ignored
+			if entry["move"].get("surge_uncapped", false):
+				# Tortoise Special: no ceiling, every tap adds damage.
+				_exec_taps += 1
+				battle_menu.exec_taps = _exec_taps
+				if _exec_taps == int(entry["taps"]):
+					_mark_timing(hit, Timing.PERFECT)
+				return
 			if _exec_taps >= int(entry["taps"]):
 				# One tap too many: a miss, like any wrong press.
 				_timing_miss(hit, "Too many taps!")
@@ -5648,7 +5775,7 @@ func _counter_failed(why: String) -> void:
 	_counter_from = null
 	battle_menu.counter_progress = -1.0
 	if enemy != null and _exec_attacker != null and not _exec_attacker.is_down:
-		var taken := _hurt(_exec_attacker, counter_stance_damage, false, "%s: Counter stance" % enemy.display_name)
+		var taken := _hurt(_exec_attacker, counter_stance_damage, false, "%s: Counter stance" % enemy.display_name, enemy, "Counter stance")
 		_popup(_exec_attacker, str(taken), Color(1.0, 0.4, 0.3))
 		_flash("%s %s's counter lands! Combo stopped" % [why, enemy.display_name])
 		_check_party()
@@ -6017,7 +6144,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		return true
 	if target.stance == Skills.Kind.COUNTER:
 		# Counter beats every attack: the enemy punishes you, combo over.
-		var taken := _hurt(attacker, counter_stance_damage, false, "%s: Counter stance" % target.display_name)
+		var taken := _hurt(attacker, counter_stance_damage, false, "%s: Counter stance" % target.display_name, target, "Counter stance")
 		_popup(target, "COUNTER!", Skills.info(Skills.Kind.COUNTER)["color"])
 		_popup(attacker, str(taken), Color(1.0, 0.4, 0.3))
 		_flash("%s's Counter stance punishes the %s! Combo stopped" % [target.display_name, move_name])
@@ -6924,6 +7051,9 @@ func _update_ui(delta: float) -> void:
 		_flash_time_left -= delta
 		if _strike == null:
 			warning_label.text = _flash_message + ("\n" + warning_label.text if warning_label.text else "")
+	if _intro_left > 0.0 and _strike == null and _menu_mode != BattleMenu.Mode.EXECUTING:
+		_intro_left -= delta
+		warning_label.text = _intro_message + ("\n" + warning_label.text if warning_label.text else "")
 
 
 func _strike_prompt() -> String:
@@ -6972,7 +7102,7 @@ func _controls_hint() -> String:
 	var next_name := ""
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
-	var tab_part := Keybinds.fill("     {swap}: switch to ") + next_name if next_name != "" else ""
+	var tab_part := (Keybinds.fill("     {swap}: switch to ") + next_name + " (hold: choose)") if next_name != "" else ""
 	return Keybinds.fill("{move}: move %s (free)%s     {cam_l} / {cam_r} or right-drag: camera     Esc: pause") % [controlled.display_name if controlled else "", tab_part]
 
 

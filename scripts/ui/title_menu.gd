@@ -18,7 +18,7 @@ const RESET_ROW := "Reset all keys to default"
 ## Key names in {braces} are filled in with the player's current keys.
 const CONTROLS := [
 	["Between turns", "{move} / arrows", "Move the party member you're steering"],
-	["Between turns", "{swap}", "Switch to the next party member"],
+	["Between turns", "{swap}", "Switch to the next party member (hold: stop time and choose)"],
 	["Camera", "{cam_l} / {cam_r}, right-drag", "Rotate (wheel: zoom, {cam_reset}: reset)"],
 	["Your turn", "{up} / {down}, {confirm} / {cancel}", "Choose, select, go back"],
 	["Any time", "Enter / Backspace", "Same as {confirm} / {cancel}"],

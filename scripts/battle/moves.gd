@@ -312,9 +312,10 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"times": [0.15, 0.32, 0.48, 0.92],
 						"contains": ["Flash Kick", "Knee Smash"], "recipe_text": "Heavy Punch + Flash Kick + Knee Smash",
 						"consumes": ["Mountain", "Crusher"], "grants": {"Triple": 1}, "climb": true}),
-				_art(["Heavy Punch", "Heavy Kick", "Headbutt"], "Tortoise Special", [0.8, 0.8, 2.4], 1.0, 0.2, GOLD,
-						"Finisher (needs Crowd Cheer): spends the climb; 1.5x at bar 80, 2.5x at 100",
-						{"effect": Effect.BREAK, "times": [0.25, 0.5, 1.0], "bar_reset": true, "finisher": true,
+				_art(["Heavy Punch", "Heavy Kick", "Headbutt"], "Tortoise Special", [0.8, 0.8, 1.25], 1.0, 0.2, GOLD,
+						"Finisher (needs Crowd Cheer): then tap as fast as you can, no limit; spends the climb; 1.5x at bar 80, 2.5x at 100",
+						{"effect": Effect.BREAK, "times": [0.15, 0.3, 1.0], "bar_reset": true, "finisher": true,
+						"timing": TimingType.TAP, "taps": 30, "surge": 0.04, "surge_uncapped": true, "tap_start": 0.4,
 						"consumes": ["Crowd Cheer"], "needs_token": "Crowd Cheer", "cashout": [[80.0, 1.5], [100.0, 2.5]],
 						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
 			]

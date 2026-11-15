@@ -64,18 +64,18 @@ skills fill a **Stagger** bar instead: fill it with hits to break the cast.
 
 ## How to play
 
-**Current build: [0.5.0](../../releases/tag/v0.5.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [0.6.0](../../releases/tag/v0.6.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.5.0-windows.zip`](../../releases/download/v0.5.0/PrototypeJRPG-0.5.0-windows.zip),
+[`PrototypeJRPG-0.6.0-windows.zip`](../../releases/download/v0.6.0/PrototypeJRPG-0.6.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.5.0-linux.tar.gz`](../../releases/download/v0.5.0/PrototypeJRPG-0.5.0-linux.tar.gz), then:
+[`PrototypeJRPG-0.6.0-linux.tar.gz`](../../releases/download/v0.6.0/PrototypeJRPG-0.6.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.5.0-linux.tar.gz
+tar -xzf PrototypeJRPG-0.6.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -107,7 +107,7 @@ get new releases as they come out, and ask the game's bot anything with
 | Key | Action |
 |---|---|
 | WASD | Move the fighter you steer / choose in menus |
-| Tab | Switch party member / open the Arts list in the combo bar |
+| Tab | Switch party member (hold: stop time and choose) / open the Arts list in the combo bar |
 | J / K (Enter / Backspace) | Confirm / back; J is also the timed-hit key (and parries a Counter) |
 | Space | Begin the combo |
 | E / Q | Parry / Defend an enemy strike |

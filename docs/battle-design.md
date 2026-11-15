@@ -71,6 +71,11 @@ decision earlier, Grandia-style:
   (`windup_grace_seconds`, 1.5 s, was 1) where it still acts the moment it gets in
   reach; after that the turn **becomes a Wait** ("TOO FAR"). If the target
   went down, the menu opens again.
+- **Waits in cover:** while any enemy prepares a lethal skill (Doom Gaze),
+  the grace doesn't run: everyone may be hiding behind the cover rock, out
+  of reach ("WAITS IN COVER"). Once the gaze is over, the grace starts and
+  the fighter walks in. (In 0.5.0 a Living Armor fight had 6 turns lost to
+  this, and the Mage dealt no damage.)
 - Turn-start AP, effects counting down and the report's turn count happen
   once, at the command point. Reports count `windups` and `windup_misses`.
 
@@ -82,7 +87,11 @@ decision earlier, Grandia-style:
 - **Between turns** (timeline running): you steer one party member in real
   time with WASD. Enemies and AI allies also move in real time.
   **Moving is free** and earns no AP. **Tab** switches which party member
-  you steer (free), so you can position each of them.
+  you steer (free), so you can position each of them. **Holding Tab**
+  (`steer_hold_seconds`, 0.3 s) stops time and opens a picker (`SteerPicker`):
+  A/D, the arrows, the mouse wheel or 1-6 choose (the camera follows the
+  pick; downed members are greyed out and skipped), and letting go of Tab
+  steers the one picked. A tap still just switches to the next one.
 - **On a party turn**, time freezes and that fighter is **locked in place**.
   The command menu opens automatically: **Attack** (needs an enemy in reach),
   **Wait**, Abilities, Items (placeholders).
@@ -716,6 +725,14 @@ recipe that fits; an Art costs what its moves cost but hits harder, and the
 longer ones add effects. Each plays as one block with its own hits and
 timing boxes.
 
+**Timing boxes are what you see:** a box is the move's `window` (seconds
+before the hit), but drawn at least `BattleMenu.MIN_BOX_PX` (14 px) wide,
+and presses are judged with that same drawn width
+(`BattleMenu.box_fraction`). This matters most for the Monk: his
+half-speed playhead draws the same window half as wide, so a bar of only
+Arts (Triple Rush, Mountain Crusher) had 8.6 px windows inside 14 px boxes
+until this was fixed.
+
 | Recipe | Art | AP | Hits (parts) | Effect |
 |---|---|---|---|---|
 | Slash + Slash | Double Slash | 20 | 1.25 x2 = 2.5 (2.0) | basic |
@@ -985,7 +1002,7 @@ moves, shortened to initials when long ("P P P P K HK").
 | Heavy Punch + Flash Kick + Knee Smash (HP K K K HK) | Mountain Crusher | 55 | 3 presses + Tap x6; 2.5 m circle | Mountain, Crusher | Triple | one step |
 
 Hits: Palm Strike 1.0, Flash Kick 1.0, Knee Smash 2.5, Triple Rush 0.6 + 0.6 + 3.2 = 4.4, Mountain Crusher 0.9 + 0.5 + 0.5 + 4.4 = 6.3 (raised in the class review so his climb Arts out-damage the Knight's; Palm Strike and Flash Kick now beat their parts).
-| HP HK Headbutt | Tortoise Special (finisher) | 70 | 3 presses; breaks Defense; restarts the bar | Crowd Cheer, the whole climb | | back to 30 |
+| HP HK Headbutt | Tortoise Special (finisher) | 70 | 2 presses, then an **open tap with no limit** (from 40% of the block to the hit; +4% damage per tap, 30 taps is a Perfect; `surge_uncapped`); breaks Defense; restarts the bar | Crowd Cheer, the whole climb | | back to 30 |
 
 At bar 30 only Knee Smash fits, so every climb opens the same way; from bar
 50 he picks the climb Art that fits the turn. The three feed each other:

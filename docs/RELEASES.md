@@ -24,6 +24,17 @@ of every play-test report.
 
 ---
 
+## 0.6.0: Hold Tab, Monk fixes, tougher bosses
+
+- **Hold Tab to choose who to steer:** between turns, holding Tab stops time and opens a **STEER WHO?** panel with everyone's HP. Pick with A/D, the arrows, the mouse wheel or 1-4 (the camera follows), and let go of Tab to take control. A quick tap still switches to the next party member
+- **Monk: timing boxes count everywhere they're drawn.** His half-speed playhead made the real timing window narrower than the box on screen, so presses in the left part of a box (Triple Rush, Mountain Crusher) were misses. Now anything inside the box counts
+- **Monk: the bar stays put.** Earning a step or a token mid-combo no longer shrinks the bar and slides the next timing box under the playhead
+- **Tortoise Special is a tap frenzy:** after its two opening presses, tap as fast as you can, with no limit. Every tap adds damage, and 30 taps is a Perfect
+- **Bosses are tougher:** they hit 15% harder, and the solo boss rounds run 20% faster (bosses act more often)
+- **Living Armor always uses Shadowflare** once it drops to 70% HP
+- **The round's opening tip stays up** long enough to read (up to 18 s), instead of vanishing at the first turn or message
+- **No more lost turns during Doom Gaze:** a fighter hiding behind the rock now waits in cover, then walks in and attacks once the gaze is over, instead of the turn becoming a Wait
+
 ## 0.5.0: Windup turns and boss mechanics
 
 - **Windup turns, now the default:** you choose a fighter's move at the gold **command point**, then time runs while they wind up toward **ACT**. Attack picks any enemy, so steer into reach before the turn lands (out of reach, it becomes a Wait). The old way is still there: *Command timing: Classic* in the pause menu. The tutorial is rewritten for it
