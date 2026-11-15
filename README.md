@@ -62,20 +62,24 @@ for the rest of the fight; a missed Perfect or Parry drops it back to 100.
 few cancels, and their biggest moves can't be stopped at all. Unavoidable
 skills fill a **Stagger** bar instead: fill it with hits to break the cast.
 
+**Rather steer just one?** Turn on *Party AI* in the pause menu: everyone you
+aren't steering plays their own turns instantly (with the Arts you've found),
+leaving AP for yours. Tab still takes any of them over.
+
 ## How to play
 
-**Current build: [0.6.0](../../releases/tag/v0.6.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [0.7.0](../../releases/tag/v0.7.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.6.0-windows.zip`](../../releases/download/v0.6.0/PrototypeJRPG-0.6.0-windows.zip),
+[`PrototypeJRPG-0.7.0-windows.zip`](../../releases/download/v0.7.0/PrototypeJRPG-0.7.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.6.0-linux.tar.gz`](../../releases/download/v0.6.0/PrototypeJRPG-0.6.0-linux.tar.gz), then:
+[`PrototypeJRPG-0.7.0-linux.tar.gz`](../../releases/download/v0.7.0/PrototypeJRPG-0.7.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.6.0-linux.tar.gz
+tar -xzf PrototypeJRPG-0.7.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -112,7 +116,7 @@ get new releases as they come out, and ask the game's bot anything with
 | Space | Begin the combo |
 | E / Q | Parry / Defend an enemy strike |
 | Z / C, right-drag, wheel | Camera (V resets it) |
-| Esc | Pause (settings, Command timing) |
+| Esc | Pause (settings: Command timing, Party AI) |
 | R / O (end screen) | Fight again / open the play-test reports |
 
 **Change Keys** on the title screen rebinds them.

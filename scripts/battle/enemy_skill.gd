@@ -129,9 +129,20 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## The enemy doesn't turn at all while casting this (from the moment the
 ## cast starts): whoever it faced can step out of the area.
 @export var locks_facing: bool = false
+## Turning speed (degrees per second) in the cast's last second, instead of
+## the enemy's slow cast_turn_speed_degrees (40). 0 = the enemy's own. A long
+## line with 80 keeps up with anyone more than ~3.5 m away (Crush).
+@export var final_turn_speed: float = 0.0
+## Locks onto a random party member who isn't close (farther than
+## BattleArena.far_target_min_distance), unless a Knight's Taunt holds its
+## aggro. Nobody far: the usual target (Crush).
+@export var targets_far: bool = false
 ## The area is drawn (and reaches) only up to the arena's edges: give it a
 ## big radius and it covers "half the room" or "the whole room".
 @export var fills_arena: bool = false
+## While hidden, the grey area covers the whole room (a full circle): which
+## side it hits shows only at the reveal (Golem Smash).
+@export var hides_side: bool = false
 
 @export_group("Ceiling burst")
 ## Circles that fall from the ceiling, one after another, at random spots

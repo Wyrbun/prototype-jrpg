@@ -70,6 +70,9 @@ var cancels_taken := 0
 @export var icon_letter := ""
 ## Party AI: when not steered, walk around behind the focus enemy (Assassin).
 @export var flanks := false
+## Party AI: stays put inside a short melee attack aimed at it (one that
+## can be Parried or Defended): your Parry / Defend press covers it (Knight, Monk).
+@export var holds_ground := false
 ## Enemies: no positionals. Every hit counts as "from behind", from anywhere
 ## (its ring is a plain full circle). Small enemies (Goblin, Kobold).
 @export var no_positionals := false

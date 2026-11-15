@@ -324,7 +324,7 @@ func _build_steps() -> void:
 
 	# 4. Reading the enemy
 	_note(4, "Reading the enemy",
-		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. It strikes when its icon reaches ACT, hitting anyone still inside the area.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area. A line at the top of the screen names anyone who would be hit.",
+		"Enemies prepare skills in the casting zone. As soon as one enters it, you see where the skill will land: its area appears on the floor in grey, marked \"???\". Later in the zone the skill is revealed: its name, and its area in color. It strikes when its icon reaches ACT, hitting anyone still inside the area.\n\nWhile preparing, the enemy turns to follow whoever it locked onto, and only slows down in the last second. That's your moment to slip out of the area. Not up close, though: short attacks keep turning (and even step after you) right to the end against anyone within reach, so leave early or answer them with Parry and Defend (next lesson). A line at the top of the screen names anyone who would be hit.",
 		func():
 			knight.hold = true
 			_golem_repeat("Attack"))
@@ -335,7 +335,7 @@ func _build_steps() -> void:
 
 	# 5. Parry and Defend
 	_note(5, "Parry",
-		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets. Press {parry} as the ring turns gold to Parry: no damage, the enemy is knocked back on the timeline, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
+		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets (if they can Parry it; others just get a mark: blue if they can Defend, red if not). Press {parry} as the ring turns gold to Parry: no damage, the enemy is knocked back on the timeline, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
 	_goal(5, "Parry",
 		"Stand inside the revealed area and wait for the ring.",
 		"Parry a strike ({parry} when the ring turns gold)",

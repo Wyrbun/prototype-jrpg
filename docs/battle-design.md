@@ -26,13 +26,32 @@ threat ranges, and chained attacks.
   loading", told the Grandia way.
   - **Where, then what:** as soon as the enemy enters the zone its area
     appears on the floor **in grey** ("..." above it, "???" on the bar): you
-    see where it will land, not what it is. The skill is **revealed** at
+    see where it will land, not what it is (except skills with `hides_side`,
+    the single Golem Smashes: grey over the whole room until the reveal). The skill is **revealed** at
     `reveal_at` (88): its name, and the area in color (live: it glows and
     warns whoever is inside).
   - While preparing, the enemy **stands still** and **tracks the party
     member it locked onto** when the cast began (or whoever taunted it) at
     its full turning speed. In the last `cast_slow_seconds` (1 s) it slows
     to `cast_turn_speed_degrees` (40°/s): that's the window to slip out.
+  - **Lines keep tracking:** a line (Attack / Smash; not one that snaps to
+    its target or is placed on the party) turns at least
+    `line_final_turn_speed` (80°/s) in its last second instead of 40°/s, so
+    it keeps up with anyone more than ~3.5 m away; a skill's own
+    `final_turn_speed` wins. Rocks, range and Parry / Defend are the answers.
+  - **Melee tracking:** not up close, though. A short cone or line (an
+    Attack or Smash up to `melee_track_radius` 5.5 m long; cones under
+    180°) whose locked target stands within its length +
+    `melee_track_margin` (1.5 m) keeps turning at `melee_track_turn_speed`
+    (300°/s) to the very end, and while the target is past
+    `melee_chase_share` (75%) of its length the enemy **steps after it**
+    (not when pinned or frozen). In melee, Parry or Defend; dodging means
+    leaving early. Covers Golem Heavy Attack, Living Armor Combo, Ogre
+    Attack, Goblin Attack and Smash, Gust Sprite Gust and the Training
+    Golem's Attack and Smash; not half-room Smashes, placed circles, long
+    lines, skills that snap and hold their aim (Shield Bash) or Breath
+    (which already aims exactly). A short circle round the enemy itself
+    (Rock Stomp) counts too: it steps after a target at its edge.
   - The **timeline speed** (`time_scale` 1.8, 40% slower than before) makes
     a cast last about 1.8–2.7 s depending on the enemy's speed.
   - **Defense/Counter** stances are active for the **whole casting zone**
@@ -69,7 +88,11 @@ decision earlier, Grandia-style:
 - **At the end:** in reach of the chosen enemy (any of its attacks), the
   combo bar opens on it and plays as usual. Out of reach: a **grace**
   (`windup_grace_seconds`, 1.5 s, was 1) where it still acts the moment it gets in
-  reach; after that the turn **becomes a Wait** ("TOO FAR"). If the target
+  reach; after that, if **another enemy is in reach**, the attack goes to
+  the nearest one instead ("SWITCHES TARGET": "Knight can't reach Ogre
+  Warrior: attacks Orc Shaman instead"; never one in Counter stance, and an
+  AI ally skips tough Gust Sprites without a push; `_windup_fallback`).
+  Nobody in reach: the turn **becomes a Wait** ("TOO FAR"). If the target
   went down, the menu opens again.
 - **Waits in cover:** while any enemy prepares a lethal skill (Doom Gaze),
   the grace doesn't run: everyone may be hiding behind the cover rock, out
@@ -125,8 +148,17 @@ decision earlier, Grandia-style:
      party member it's aimed at (or whoever inside is nearest the enemy) so
      the damage is split. That area isn't treated as danger.
   2. **Stay out of danger:** leave any enemy area that could hit, never step
-     into one. Danger = a revealed Attack/Smash, anything still being
-     prepared ("..."), fire trails and rock spikes. A circle or line that
+     into one. Danger = an Attack/Smash revealed at least
+     `ally_react_seconds` (0.4 s) ago, or `ally_react_unanswerable_seconds`
+     (0.2 s) for strikes that can't be Parried or Defended (Golem Smash:
+     dodging is the only answer) (a human-like reaction: the grey "..."
+     area alone no longer sends them away, since that made them almost
+     never get hit), mechanic skills and overlap-punishing circles from the
+     start (spreading out takes time), fire trails, rock spikes, falling
+     rocks and rock blasts. **Holding ground:** fighters with `holds_ground`
+     (Knight, Monk) don't run from a short melee attack (see melee tracking)
+     that can be Parried or Defended: your Parry / Defend press covers
+     everyone the strike hits. A circle or line that
      follows this ally while hidden is ignored until revealed (it can't be
      outrun). Circles that punish overlaps (Dark Bolt, Burning Spike) keep
      allies a full circle apart: they spread out. Inside a ring (donut)
@@ -138,6 +170,45 @@ decision earlier, Grandia-style:
      its circle is never treated as danger, even while hidden),
      then the caster of a growing circle not yet contained, otherwise the
      nearest enemy.
+
+## Party AI (built, a toggle)
+
+Pause menu "Party AI: On / Off" (`Settings.party_ai`, off by default, applies
+at once; always off in the tutorial). With it on, every party member except
+the one you steer plays its own turns **instantly**: no menus, no combo bar,
+the timeline never stops (`_ai_turn`, called where `_start_turn` would be).
+Tab / hold Tab takes one over. The party list tags them **AUTO**.
+
+- **Turn:** turn upkeep and the turn's AP, as usual; maybe one Ability
+  (`_ai_ability`: heals, Brace / Arcane Barrier when an attack is aimed at it, the Mage's Concentrate whenever affordable and not running, the Cleric's Haste on your fighter when nobody needs healing,
+  Agility only if it still has half its bar to attack with after paying); then a target (`_ai_pick_target`: the allies'
+  focus or the nearest; never in Counter stance; a tough Gust Sprite only
+  with a push). Windup: chosen at COM, it walks into reach, plays at ACT
+  (out of reach after the grace: the nearest enemy in reach, else TOO FAR;
+  the grace waits while it's escaping a danger area: "DODGING"). Classic: attacks
+  whoever is in reach, else Waits. With a target but no clear shot (a rock
+  in between), it walks round the rock's side first.
+- **Combo** (`_ai_choose_moves`): greedy by value per AP over single moves
+  and every Art of its class, found or not (`_ai_building` lets
+  `_rebuild_plan` merge them all). Unfound Arts work normally but stay
+  hidden: never discovered, renamed "hidden Art" while they play (messages,
+  popups). Value = sum of hits, x1.5 for a GOOD answer tag, 0 for BAD; a
+  Defense stance makes everything but breaking / piercing moves worth 0
+  until a break is chosen; against a tough sprite pushes are x3, the rest
+  x0.1.
+- **AP budget:** up to `ai_spend_share` (0.75) of its own bar, keeping
+  `ai_reserve_share` (0.6) of the steered fighter's bar minus the recharge
+  before their turn; if that's less than its cheapest move, half as much,
+  keeping half the reserve.
+- **Playing it** (`_ai_play_plan`): every hit lands in order with the same
+  effects as a played combo (Arts, Marks, Monk tokens and steps), but no
+  timing: no Perfect bonus, `ai_damage_mult` (0.8) of a normal hit, max AP never reset, +`ai_max_ap_per_hit` (1.5)
+  per timed hit. A flash line sums it up ("Cleric: Judgment on Stone Golem
+  (36 damage)").
+- Strikes aimed at AI allies still ask you to Parry / Defend.
+- They dodge like a player would: only after a skill is revealed (+0.4 s),
+  and the Knight and Monk hold their ground in short melee attacks (see
+  Ally AI above).
 
 ## Play-test reports (built)
 
@@ -280,6 +351,10 @@ pieces should use these rather than their own StyleBoxes.
 - The game opens on the **title screen** (`scenes/ui/title_menu.tscn`):
   Boss Rush, Tutorial, Round Select, Controls, Change Keys, Quit. Keyboard
   (W/S, J/Enter, K/Esc) or mouse.
+- **Play style** (asked once): the first Boss Rush / Continue / Round Select
+  opens a page with Command timing (Windup / Classic) and Party AI (On /
+  Off), each explained, plus where to change them later (pause menu). Start
+  saves both (`Settings.style_chosen`) and carries on.
 - **Change Keys** (`scripts/keybinds.gd`): every action except Esc can get a
   new main key; its extra keys (arrows, Enter, Backspace, keypad Enter)
   stay. Taking a key another action uses swaps the two; a key that's only
@@ -502,7 +577,10 @@ Stances still work for any enemy that lists them.
   world is paused while it plays.
 - Until there are real attack animations, a **ring shrinks onto each target**.
   It turns gold for the last `parry_window` (0.25 s). Windup: Attack 1.0 s,
-  Smash 1.4 s (heavier, slower to land).
+  Smash 1.4 s (heavier, slower to land). Only targets who can **Parry
+  this strike** (their class, or a guarding Knight nearby, and a parryable
+  skill) get the timing ring; the others get a plain mark: **blue** if
+  Defend works for them, **red** if neither does.
 - **Parry (E)**: pressed while the ring is gold, no damage, the enemy is
   **knocked back** (pushed back 25 on the timeline), and the party's **max AP
   rises by 10** for the rest of the fight. Pressed too early: full damage,
@@ -557,6 +635,15 @@ Stances still work for any enemy that lists them.
 - **Skipping a timed hit** (no J on a hit's box) is just a normal hit: no
   max AP lost (`skipped_hit_max_ap_loss` 0 for now; it was 5, which felt
   too punishing).
+
+**Boss threat:** a boss (`boss` on) locks onto whoever hurt it most lately,
+not just the nearest: every party member scores its share of the boss's
+threat (damage dealt to it, 0-1 against the top) minus its distance /
+`threat_distance_scale` (15 m), and the best score is the target (and whom
+it walks toward). Threat halves (`threat_decay` 0.5) each time the boss
+starts a cast. Play-test reports count `threat_targets` (and per class)
+when a cast locks onto someone other than the nearest. Before anyone has hurt it, and for regular enemies, it's the
+nearest. Taunt and Vanish still come first.
 
 Numbers (BattleArena node): `max_ap` 100 (starting cap), `starting_ap` 50,
 `ap_regen_per_second` 6, `parry_max_ap_gain` 10, `perfect_max_ap_gain` 5,

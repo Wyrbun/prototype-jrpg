@@ -72,14 +72,14 @@ func _process(d):
 	check(hp0 - cl.hp >= 30, "standing in a blast: hurt (%d)" % (hp0 - cl.hp))
 	check(a._debris.size() == after2 - inside, "the rocks it hit are gone, the rest stay (%d)" % a._debris.size())
 	check(g.get_meta("rock_blasts", []).is_empty(), "blast circles cleared")
-	# Right + Left Golem Smash: one side, then 1.5 s later the other: every rock goes
+	# Right + Left Golem Smash: one side, then 2 s later the other: every rock goes
 	for piece in a._debris.duplicate(): pass
 	g.rock_bursts = 0
 	burst(); burst()
 	var before: int = a._debris.size()
 	cl.global_position = Vector3(0, 0, 50); a._keep_in_arena(cl)
 	cast("Right + Left Golem Smash")
-	check(g.loaded_def.follow_up != null and is_equal_approx(g.loaded_def.follow_up_delay, 1.5), "Right + Left: a Left Golem Smash follows 1.5 s later")
+	check(g.loaded_def.follow_up != null and is_equal_approx(g.loaded_def.follow_up_delay, 2.0), "Right + Left: a Left Golem Smash follows 2 s later")
 	a._enemy_unleash(g, true)
 	for i in 400:
 		if a._strike == null: break

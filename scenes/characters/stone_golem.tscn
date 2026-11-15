@@ -24,6 +24,8 @@ radius = 11.0
 width = 1.4
 damage = 52
 windup = 1.6
+final_turn_speed = 80.0
+targets_far = true
 
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")
@@ -70,6 +72,7 @@ cast_speed = 0.8
 aim_offset_degrees = 90.0
 locks_facing = true
 fills_arena = true
+hides_side = true
 
 [sub_resource type="Resource" id="Skill_6"]
 script = ExtResource("2_skill")
@@ -89,6 +92,7 @@ cast_speed = 0.8
 aim_offset_degrees = -90.0
 locks_facing = true
 fills_arena = true
+hides_side = true
 
 [sub_resource type="Resource" id="Skill_7"]
 script = ExtResource("2_skill")
@@ -125,6 +129,7 @@ cannot_be_blocked = true
 aim_offset_degrees = 90.0
 locks_facing = true
 fills_arena = true
+hides_side = true
 ceiling_circles = 8
 ceiling_radius = 2.0
 ceiling_damage = 28
@@ -148,6 +153,7 @@ cannot_be_blocked = true
 aim_offset_degrees = -90.0
 locks_facing = true
 fills_arena = true
+hides_side = true
 ceiling_circles = 8
 ceiling_radius = 2.0
 ceiling_damage = 28
@@ -207,7 +213,7 @@ aim_offset_degrees = 90.0
 locks_facing = true
 fills_arena = true
 follow_up = SubResource("Skill_12")
-follow_up_delay = 1.5
+follow_up_delay = 2.0
 
 [sub_resource type="Resource" id="Skill_14"]
 script = ExtResource("2_skill")
@@ -249,7 +255,7 @@ aim_offset_degrees = -90.0
 locks_facing = true
 fills_arena = true
 follow_up = SubResource("Skill_14")
-follow_up_delay = 1.5
+follow_up_delay = 2.0
 
 [node name="StoneGolem" instance=ExtResource("1_base")]
 boss = true

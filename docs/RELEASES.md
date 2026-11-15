@@ -24,6 +24,18 @@ of every play-test report.
 
 ---
 
+## 0.7.0: Party AI, enemies that land their hits
+
+- **Party AI (new, optional):** turn it on in the pause menu and everyone you aren't steering plays their own turns instantly: they attack with the Arts you've found (and the ones you haven't, without revealing them), heal, shield and buff, and leave enough AP for your turns. Their hits deal 80% damage. Tab still takes any of them over; the party list marks them **AUTO**
+- **Play style, asked once:** the first time you start Continue, Boss Rush or Round Select, a page asks for Windup or Classic turns and Party AI on or off, with a short explanation. Both can be changed later in the pause menu
+- **Windup: a pick out of reach isn't wasted.** If the enemy you chose is still out of reach after the grace, the fighter attacks the nearest enemy in reach instead ("SWITCHES TARGET")
+- **Short attacks are hard to dodge up close:** regular Attacks and Smashes keep turning toward a target in melee range right up to the hit, and the enemy steps after you if you back off. Up close, Parry or Defend. Rock Stomp follows you too
+- **Lines keep tracking:** long lines (Crush, Power Shot, Wind Slash, Fire Wave...) keep turning in their last second, so you can't simply outrun them sideways. Use a rock, get out of range, or Parry / Defend
+- **Bosses go after whoever hurts them most** (weighed against distance), not just whoever is nearest
+- **Stone Golem:** a single Golem Smash only shows which half it hits at the reveal; the double Smash shows its first side early and gives 2 s to cross for the second. Crush locks onto someone far away unless a Knight's Taunt holds the Golem
+- **Parry rings only where they work:** only fighters who can Parry a strike get the shrinking gold ring. The others get a mark: blue if they can Defend, red if nothing works
+- **AI allies dodge like a player:** they react after a skill is revealed instead of leaving its grey area at once, and the Knight and Monk stand their ground against short melee attacks, letting your Parry or Defend cover them
+
 ## 0.6.0: Hold Tab, Monk fixes, tougher bosses
 
 - **Hold Tab to choose who to steer:** between turns, holding Tab stops time and opens a **STEER WHO?** panel with everyone's HP. Pick with A/D, the arrows, the mouse wheel or 1-4 (the camera follows), and let go of Tab to take control. A quick tap still switches to the next party member

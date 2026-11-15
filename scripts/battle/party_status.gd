@@ -23,6 +23,8 @@ const BAR_HEIGHT := 16.0
 
 var party: Array[Combatant] = []
 var controlled: Combatant = null
+## Party AI on: members you aren't steering get an AUTO tag.
+var auto := false
 ## Effect tags (BRACE 2, SHIELD 26...) go after the HP numbers, or to the
 ## left of the name for the enemy panel on the right edge.
 var tags_on_left := false
@@ -67,6 +69,9 @@ func _draw() -> void:
 
 		var hp_text := "DOWN" if c.is_down else "%d / %d" % [c.hp, c.max_hp]
 		_text(font, Vector2(bar.end.x + 10, y + 19), hp_text, 17, name_color)
+		if auto and c != controlled and not c.is_down and c.team == Combatant.Team.PARTY:
+			var hp_w := font.get_string_size(hp_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
+			_text(font, Vector2(bar.end.x + 18 + hp_w, y + 18), "AUTO", 13, Color(0.55, 0.85, 1.0))
 		var tags := "" if c.is_down else c.status_text()
 		if tags != "" and tags_on_left:
 			var width := font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x

@@ -58,7 +58,7 @@ func _ready() -> void:
 ## what it is (the skill is still "???").
 ## radius_override replaces the skill's radius (growing circles, lines
 ## stretched to reach a target).
-func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float = -1.0) -> void:
+func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float = -1.0, angle_override: float = -1.0) -> void:
 	shape = skill.shape
 	if skill.special == EnemySkill.Special.ON_EACH_TARGET or skill.special == EnemySkill.Special.GROWING \
 			or skill.special == EnemySkill.Special.HEAL_ALLIES or skill.special == EnemySkill.Special.ON_MARKED:
@@ -67,6 +67,8 @@ func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float 
 		shape = EnemySkill.Shape.LINE
 	radius = skill.radius if radius_override < 0.0 else radius_override
 	angle_degrees = 360.0 if shape == EnemySkill.Shape.CIRCLE else skill.angle
+	if angle_override > 0.0:
+		angle_degrees = angle_override
 	width = skill.width
 	inner_radius = skill.inner_radius
 	lanes = skill.lanes

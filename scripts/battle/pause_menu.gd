@@ -32,7 +32,12 @@ func _ready() -> void:
 
 
 func items() -> Array:
-	return ["Resume", "Restart fight", "Quit to title", _details_item(), _timing_item()]
+	return ["Resume", "Restart fight", "Quit to title", _details_item(), _timing_item(), _party_ai_item()]
+
+
+## Party AI: allies you aren't steering play their own turns.
+func _party_ai_item() -> String:
+	return "Party AI: %s" % ("On" if Settings.party_ai() else "Off")
 
 
 ## Command timing: Windup (the default) or Classic.
@@ -55,6 +60,8 @@ func _note(item: String) -> String:
 			return "Progress is saved: Continue starts this fight over" if progress_saved else "Leave the fight (it's lost)"
 	if item.begins_with("Move details"):
 		return "The box explaining the highlighted move or Ability"
+	if item.begins_with("Party AI"):
+		return "Allies you aren't steering act on their own; Tab takes one over"
 	if item.begins_with("Command timing"):
 		return "Windup (default): choose at COM, act at ACT. Restart to apply"
 	return ""
@@ -117,6 +124,8 @@ func _select() -> void:
 		var item:
 			if String(item).begins_with("Command timing"):
 				Settings.set_command_windup(not Settings.command_windup())
+			elif String(item).begins_with("Party AI"):
+				Settings.set_party_ai(not Settings.party_ai())
 			else:
 				Settings.set_move_details(not Settings.move_details())
 

@@ -4,6 +4,198 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## AI reaction to Smashes: 0.2 s
+
+- At 0.4 s the AI allies couldn't escape the half-room Smashes (Archer and
+  Mage down); reacting at the reveal itself, they escaped all five. Strikes
+  that can't be Parried or Defended now use `ally_react_unanswerable_seconds`
+  (0.2 s), between the two. Tunable on the BattleArena node.
+
+## Crush goes for the back line; lines keep tracking; Rock Stomp steps in
+
+Goal: simple, short skills should at least have a chance to hit.
+
+- **Crush** (`targets_far`): locks onto a random party member more than
+  6 m away unless a Knight's Taunt holds the Golem, and keeps turning at
+  80°/s in its last second (`EnemySkill.final_turn_speed`). Reports count
+  `far_targets`.
+- **All lines** (Attack / Smash, not snapping or placed) turn at least
+  `line_final_turn_speed` (80°/s) in their last second instead of 40°/s:
+  Crush, Power Shot, Wind Slash, the Orc Shaman's Attack, Fire Wave, Long
+  Strike. Past ~3.5 m nobody outruns it sideways; rocks, range, Parry and
+  Defend are the answers.
+- **Rock Stomp** and other short circles round the enemy count for melee
+  tracking: the Golem steps after a target at the circle's edge.
+- In a Monk run (built before these) the party took 37 damage in total: all
+  five Smashes missed (AI allies now move at the reveal), Crush missed
+  twice and was parried once, Heavy Attack parried twice. Threat worked:
+  4 casts went for the Archer.
+- Test `tests/_crush.gd`.
+
+## Parry rings only for those who can Parry; AI dodges Smashes at the reveal
+
+- A Golem log: the Archer and Mage went down to the half-room Smashes
+  (418 of 498 damage), the Knight took 0. With the 0.4 s reaction delay
+  the AI allies lost a third of the ~1.3 s window on strikes they can't
+  Parry or Defend. Those now count from the reveal itself; the delay stays
+  for strikes your Parry / Defend can answer. (No `threat_targets` in that
+  run: the Knight dealt the most and stood nearest, so it was both.)
+- Strike rings: the shrinking Parry ring now shows only on targets who can
+  Parry that strike. Others get a plain mark, blue if they can Defend it,
+  red if not (the Archer always; everyone under a Golem Smash). Test
+  `tests/_parryring.gd`.
+
+## Double Golem Smash: side shown early, 2 s to cross; threat count
+
+- A Golem log after the changes below: 521 damage taken (from 56-112),
+  everyone hit, nobody down, but Left + Right Golem Smash dealt 392 of it
+  (two casts, 7 hits of 56: the Archer, Mage and Cleric took both halves).
+  The doubles now show their first side in grey from the start again (no
+  `hides_side`; the single Smashes keep it), and the second half comes 2 s
+  after the first instead of 1.5 s.
+- Play-test reports count `threat_targets` / `threat_targets_<class>`: a
+  boss cast locked onto someone other than the nearest because of threat.
+
+## AI allies dodge late, melee holds ground, hidden Golem Smash side, boss threat
+
+More ways enemy damage lands, after runs where whole fights dealt nothing:
+
+- **AI allies react after the reveal.** They used to leave an area the
+  moment its grey "..." shape appeared, so they were out before anyone knew
+  what it was. Now an Attack/Smash counts only `ally_react_seconds` (0.4 s)
+  after its reveal. Mechanics (spread, stack, overlap circles), falling
+  rocks, blasts and hazards still count at once.
+- **Knight and Monk hold their ground** (`Combatant.holds_ground`) in a
+  short melee attack that can be Parried or Defended: your one Parry /
+  Defend press covers everyone hit, so it's your timing, not their
+  footwork.
+- **Golem Smash hides its side** (`EnemySkill.hides_side`): grey, it covers
+  the whole room; the reveal shows which half (about 1.3 s before the
+  strike starts at Round 8 speed). All eight half-room Smash skills.
+- **Boss threat:** bosses lock onto whoever hurt them most lately, weighed
+  against distance (share of threat minus distance / 15 m; threat halves
+  each cast), instead of always the nearest. Spreads the danger beyond
+  whoever stands in front.
+- Test `tests/_aireact.gd`. `_aidodge.gd` now sets its Smash as revealed
+  long enough ago, picks its spot deterministically and holds the Golem's
+  facing (a held Golem still turned and moved its Smash away).
+
+## Melee tracking: short attacks are hard to dodge up close
+
+- Some fights ended with most of the party taking no damage at all: a
+  regular Attack only slowed to 40°/s in its last second, so a single
+  sidestep took you out of it, even standing right next to the enemy.
+- Short cones and lines (Attacks and Smashes up to 5.5 m, cones under 180°)
+  now keep turning at 300°/s through the end of the cast when their target
+  is within the area's length + 1.5 m, and the enemy steps after a target
+  backing off past 75% of that length. Farther away nothing changes: the
+  last second still turns slowly. Half-room Smashes, placed circles, long
+  lines and the Dragon's Breath are untouched.
+- The tutorial's "Reading the enemy" note says so (leave early, or Parry
+  and Defend up close). Test `tests/_meleetrack.gd`.
+
+## Party AI: ranged allies walk round rocks; Shielding not recast
+
+- From a Golem run with Party AI: the AI Archer lost 3 of her 8 turns to
+  TOO FAR. A fallen Ceiling Burst rock stood between her and the Golem: in
+  range, but no clear shot, and walking straight at the target only pushed
+  her into the rock. With a Windup target and no line of sight, an AI ally
+  now heads round the rock's side first (like hiding from a Doom Gaze).
+  Test `tests/_airock.gd` (in range behind a rock: attacks in 0.5 s).
+- The AI Cleric cast Shielding 4 times (160 AP) because two allies stayed
+  under 75% HP. It now needs two hurt allies *without* a shield.
+
+## Party AI: the Cleric hastes you when nobody needs healing
+
+- With everyone above 55% HP (and fewer than two below 75%), an AI Cleric
+  casts **Haste** on the fighter you steer (turns 25% sooner for 2 of their
+  turns, 40 AP), once until it wears off, with the usual AP reserve. In a
+  Golem run she'd dealt 54 damage in 4 turns and cast nothing. Test
+  `tests/_aicleric.gd`.
+
+## Party AI: the Mage casts Concentrate
+
+- An AI Mage now casts **Concentrate** (AP recharge x2 for 10 s) whenever the
+  party can afford it and none is running; Arcane Barrier still comes first
+  when an attack is aimed at her. In the all-AI Golem test that meant 26 AI
+  attacks instead of 20. (Concentrate is due a rethink in the Mage rework.)
+  Test `tests/_aimage.gd`.
+
+## Play style, asked once
+
+- The first time you start Boss Rush, Continue or Round Select, a **Play
+  style** page asks for **Command timing** (Windup / Classic) and **Party
+  AI** (On / Off), each with a short explanation that changes with the
+  choice, and a reminder that both live in the pause menu (Esc during a
+  fight). Start saves both and carries on; it never asks again
+  (`Settings.style_chosen`). A/D or Enter flip a choice, W/S move, Esc goes
+  back. Test `tests/_style.gd`.
+
+## Party AI: dodging doesn't cost the turn; AI hits 20% weaker
+
+- From a Golem run (Monk steered): the AI Archer and Mage each lost a turn
+  to TOO FAR while escaping Ceiling Burst circles. An AI ally's Windup grace
+  now waits while it's inside a danger area ("DODGING"), and starts once it's
+  out; your own fighter keeps the normal rule.
+- AI hits deal 80% of a normal hit (`ai_damage_mult` 0.8, on top of having no
+  Perfect bonus): with Party AI and the Monk the Golem only got 4 actions and
+  dealt no damage. Test `tests/_aidodge.gd`.
+
+## Party AI: Agility only with AP to spare; who did what, in the report
+
+- From a Golem run with Party AI (2:06, 64% of the damage by the steered
+  Knight): the AI Archer dealt 94 in 6 turns after casting Agility twice
+  (120 of the party's AP). It now casts it only if, after paying, it still
+  has half its bar for this turn's attack and leaves yours alone.
+- Play-test reports now count per member: `windup misses <class>` (who
+  couldn't reach anyone), `ai attacks <class>`, `ai waits <class>` and
+  `ai ability <name>`.
+
+## Windup: a missed pick falls back to the nearest enemy in reach
+
+- At ACT, when the 1.5 s grace runs out and the chosen enemy is still out of
+  reach, the attack now goes to the nearest enemy that *is* in reach
+  ("SWITCHES TARGET", with a line saying who), for you and AI allies alike,
+  instead of becoming a Wait. You still get the whole grace to reach your
+  pick first. Never an enemy in Counter stance (and AI allies skip tough Gust
+  Sprites they can't push). Nobody in reach: a Wait, as before. Test
+  `tests/_fallback.gd`.
+
+## Party AI
+
+- **New toggle: Party AI** (pause menu, off by default, saved). With it on,
+  every party member you aren't steering plays its own turns, instantly: no
+  menus, no combo bar, the timeline never stops; you only see the hits, the
+  damage and a line like "Cleric: Judgment on Stone Golem (36 damage)".
+  Tab (or hold Tab) takes any of them over, as usual; the party list tags the
+  others **AUTO**.
+- **What it does on a turn:** maybe one Ability (the Cleric heals the lowest
+  ally below 55%, Full Cure below 30%, Shielding when 2+ are hurt; Knight
+  Light Heal / Brace, Mage Arcane Barrier when an attack is aimed at them,
+  Monk Deep Breath, Assassin Vanish, Archer Agility when AP is plentiful),
+  then an attack: the target allies already focus (a healer mid-ritual,
+  Shadowflare's sprites) or the nearest, never one in Counter stance, never a
+  tough Gust Sprite without a push. Its combo is picked greedily by damage
+  per AP from single moves and **every Art of its class, found or not** (an
+  ally you never steer still uses its whole kit), weighed by the answer
+  tags. Arts you haven't found stay hidden: never added to your Arts list,
+  and shown as "a hidden Art" in its messages. A Defense stance needs a
+  breaking or piercing move first, a Gust Sprite a push. With Windup it
+  chooses at COM and walks into reach like any ally; in Classic it attacks
+  whoever is in reach.
+- **AP:** it spends up to 75% of its own combo bar (`ai_spend_share`) but
+  keeps 60% of your fighter's bar (`ai_reserve_share`), minus what recharges
+  before your turn; if that leaves too little, a smaller attack that still
+  keeps you half of it.
+- **Max AP:** its hits land without timing (no Perfect bonus), never reset
+  max AP, and every timed hit adds 1.5 (`ai_max_ap_per_hit`; a Perfect adds
+  5).
+- Off in the tutorial. Enemy strikes on AI allies still prompt you to Parry
+  or Defend, as before. Tests `tests/_partyai.gd` (whole fights with only the
+  AI attacking: it beat the Stone Golem alone in Windup and Classic; your
+  fighter had 37-71 AP at every turn; with `HIDDEN=1`, nothing found: 20
+  hidden Arts used, none revealed or named) and `tests/_shotai.gd`.
+
 ## The fight's opening text stays up
 
 - The round name and its tip shared one message slot with everything else:

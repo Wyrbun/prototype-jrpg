@@ -7,6 +7,8 @@ const PATH := "user://settings.cfg"
 static var _loaded := false
 static var _move_details := true
 static var _command_windup := true
+static var _party_ai := false
+static var _style_chosen := false
 
 
 ## The details box beside the move and Ability lists (what a move does,
@@ -36,6 +38,32 @@ static func set_command_windup(on: bool) -> void:
 	_save()
 
 
+## Party AI (off by default): party members you aren't steering choose and
+## play their own turns, instantly. Tab (or hold Tab) takes one over.
+static func party_ai() -> bool:
+	_load()
+	return _party_ai
+
+
+static func set_party_ai(on: bool) -> void:
+	_load()
+	_party_ai = on
+	_save()
+
+
+## The first Boss Rush / Round Select asks for a play style (Command timing
+## and Party AI) once; after that, only the pause menu changes them.
+static func style_chosen() -> bool:
+	_load()
+	return _style_chosen
+
+
+static func set_style_chosen(on: bool) -> void:
+	_load()
+	_style_chosen = on
+	_save()
+
+
 static func _load() -> void:
 	if _loaded:
 		return
@@ -44,6 +72,8 @@ static func _load() -> void:
 	if file.load(PATH) == OK:
 		_move_details = bool(file.get_value("ui", "move_details", true))
 		_command_windup = bool(file.get_value("battle", "command_windup", true))
+		_party_ai = bool(file.get_value("battle", "party_ai", false))
+		_style_chosen = bool(file.get_value("battle", "style_chosen", false))
 
 
 static func _save() -> void:
@@ -51,4 +81,6 @@ static func _save() -> void:
 	file.load(PATH)  # keep anything else stored there
 	file.set_value("ui", "move_details", _move_details)
 	file.set_value("battle", "command_windup", _command_windup)
+	file.set_value("battle", "party_ai", _party_ai)
+	file.set_value("battle", "style_chosen", _style_chosen)
 	file.save(PATH)

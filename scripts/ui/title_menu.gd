@@ -6,7 +6,7 @@ extends Control
 ## Keyboard: W / S (or arrows) to choose, J (or Enter) to select, K (or Esc)
 ## to go back (or whatever keys the player has set). The mouse works too.
 
-enum Page { MAIN, ROUNDS, CONTROLS, KEYS }
+enum Page { MAIN, ROUNDS, CONTROLS, KEYS, STYLE }
 
 const GOLD := Color(0.95, 0.78, 0.35)
 const ROW_HEIGHT := 44.0
@@ -32,6 +32,12 @@ const CONTROLS := [
 ]
 
 var page: int = Page.MAIN
+## Play style page (first Boss Rush / Round Select only): the choices so far,
+## the highlighted row (0 timing, 1 Party AI, 2 Start), and what to open after.
+var _style_windup := true
+var _style_ai := false
+var _style_row := 2
+var _style_then := ""
 var index := 0
 var _rounds: Array[String] = []
 ## First row shown when a list is longer than the screen (Round Select).
@@ -110,6 +116,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _capturing >= 0:
 		_capture_key(event)
 		return
+	if page == Page.STYLE:
+		_style_input(event)
+		return
 	var up := event.is_action_pressed("move_forward") or event.is_action_pressed("ui_up")
 	var down := event.is_action_pressed("move_back") or event.is_action_pressed("ui_down")
 	var select := event.is_action_pressed("confirm") or event.is_action_pressed("ui_accept")
@@ -167,12 +176,18 @@ func _select() -> void:
 		Page.MAIN:
 			match _main_items()[index]:
 				"Continue":
+					if _ask_style("Continue"):
+						return
 					BattleArena.start(get_tree(), clampi(SaveGame.saved_round(), 0, _rounds.size() - 1), false, true, true)
 				"Boss Rush":
+					if _ask_style("Boss Rush"):
+						return
 					BattleArena.start(get_tree(), 0, false, true)
 				"Tutorial":
 					BattleArena.start(get_tree(), 0, true)
 				"Round Select":
+					if _ask_style("Round Select"):
+						return
 					page = Page.ROUNDS
 					index = 0
 					_scroll = 0
@@ -205,6 +220,135 @@ func _select() -> void:
 			else:
 				_capturing = index
 				_key_message = ""
+
+
+# --- Play style (asked once) ------------------------------------------------
+
+## The first time a Boss Rush or Round Select starts: ask for the play style.
+## True if the page opened (the choice continues to "then" afterwards).
+func _ask_style(then: String) -> bool:
+	if Settings.style_chosen():
+		return false
+	_style_windup = Settings.command_windup()
+	_style_ai = Settings.party_ai()
+	_style_row = 2
+	_style_then = then
+	page = Page.STYLE
+	return true
+
+
+func _style_input(event: InputEvent) -> void:
+	var handled := true
+	if event is InputEventMouseMotion:
+		for i in 3:
+			if _style_rect(i).has_point(event.position):
+				_style_row = i
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		for i in 3:
+			if _style_rect(i).has_point(event.position):
+				_style_row = i
+				_style_pick()
+	elif event.is_action_pressed("move_forward") or event.is_action_pressed("ui_up"):
+		_style_row = (_style_row + 2) % 3
+	elif event.is_action_pressed("move_back") or event.is_action_pressed("ui_down"):
+		_style_row = (_style_row + 1) % 3
+	elif (event.is_action_pressed("move_left") or event.is_action_pressed("move_right")
+			or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")) and _style_row < 2:
+		_style_toggle()
+	elif event.is_action_pressed("confirm") or event.is_action_pressed("ui_accept"):
+		get_viewport().set_input_as_handled()
+		_style_pick()
+		return
+	elif event.is_action_pressed("cancel") or event.is_action_pressed("menu") or event.is_action_pressed("ui_cancel"):
+		page = Page.MAIN
+		index = maxi(_main_items().find(_style_then), 0)
+	else:
+		handled = false
+	if handled and is_inside_tree():
+		get_viewport().set_input_as_handled()
+
+
+func _style_toggle() -> void:
+	if _style_row == 0:
+		_style_windup = not _style_windup
+	elif _style_row == 1:
+		_style_ai = not _style_ai
+
+
+## Enter / click: a choice row flips, Start saves both and carries on.
+func _style_pick() -> void:
+	if _style_row < 2:
+		_style_toggle()
+		return
+	Settings.set_command_windup(_style_windup)
+	Settings.set_party_ai(_style_ai)
+	Settings.set_style_chosen(true)
+	page = Page.MAIN
+	index = maxi(_main_items().find(_style_then), 0)
+	_select()  # what was chosen in the first place, now with a style
+
+
+func _style_panel() -> Rect2:
+	var width := minf(980.0, size.x - 40.0)
+	return Rect2((size.x - width) / 2.0, 200.0, width, minf(500.0, size.y - 230.0))
+
+
+func _style_rect(row: int) -> Rect2:
+	var panel := _style_panel()
+	var tops := [64.0, 196.0, 336.0]
+	var height := 120.0 if row < 2 else 46.0
+	return Rect2(panel.position.x + 20.0, panel.position.y + tops[row], panel.size.x - 40.0, height)
+
+
+func _draw_style(font: Font) -> void:
+	var panel := _style_panel()
+	HudStyle.draw_panel(self, panel, 0.95)
+	_centered(font, "Choose how you'd like to play", panel.position.y + 40.0, 24, GOLD)
+	var rows := [
+		["Command timing", "WINDUP" if _style_windup else "CLASSIC",
+			"Choose a fighter's move at the gold COM mark, then time keeps running while they get in reach of their target before ACT. More movement, more planning ahead." if _style_windup
+			else "Time stops when a fighter reaches the end of the timeline: choose a move and attack right there. Simpler, slower-paced."],
+		["Party AI", "ON" if _style_ai else "OFF",
+			"Only the fighter you steer is yours: the others play their own turns instantly (moves, Arts, healing), leaving you AP. Tab takes any of them over." if _style_ai
+			else "You choose every party member's turn yourself. The full experience: every Perfect is yours."],
+	]
+	for i in 2:
+		var rect := _style_rect(i)
+		if _style_row == i:
+			HudStyle.draw_selection(self, rect, GOLD)
+		var row: Array = rows[i]
+		_text(font, rect.position + Vector2(18, 32), row[0], 22, Color.WHITE)
+		var value := "<  %s  >" % row[1]
+		var value_w := font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+		_text(font, Vector2(rect.end.x - value_w - 18.0, rect.position.y + 32), value, 22, GOLD)
+		var lines := _wrap(font, row[2], rect.size.x - 36.0, 16)
+		for j in lines.size():
+			_text(font, rect.position + Vector2(18, 62 + j * 22), lines[j], 16, Color(0.8, 0.82, 0.9))
+	var start := _style_rect(2)
+	if _style_row == 2:
+		HudStyle.draw_selection(self, start, GOLD)
+	var label := "Start " + ("Round Select" if _style_then == "Round Select" else "Boss Rush")
+	var label_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+	_text(font, Vector2(start.position.x + (start.size.x - label_w) / 2.0, start.position.y + 31), label, 22, Color.WHITE if _style_row == 2 else Color(0.85, 0.85, 0.9))
+	_centered(font, "You can change both any time: press Esc during a fight to open the pause menu.", panel.end.y - 52.0, 16, Color(0.55, 0.85, 1.0))
+	_centered(font, "(A new Command timing starts with the next fight.)", panel.end.y - 28.0, 14, Color(0.6, 0.62, 0.7))
+	_centered(font, Keybinds.fill("{up} / {down}: choose     {left} / {right} or {confirm}: change     Esc: back"), panel.end.y + 30.0, 16, Color(0.6, 0.6, 0.65))
+
+
+func _wrap(font: Font, text: String, width: float, font_size: int) -> PackedStringArray:
+	var lines := PackedStringArray()
+	var line := ""
+	for word in text.split(" "):
+		var attempt := word if line == "" else line + " " + word
+		if font.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width and line != "":
+			lines.append(line)
+			line = word
+		else:
+			line = attempt
+	if line != "":
+		lines.append(line)
+	return lines
 
 
 ## Change Keys: the next key pressed becomes the row's new key. Esc cancels.
@@ -292,6 +436,10 @@ func _draw() -> void:
 	var version := "v" + str(ProjectSettings.get_setting("application/config/version", "dev"))
 	var version_width := font.get_string_size(version, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	_text(font, Vector2(size.x - version_width - 14.0, size.y - 12.0), version, 15, Color(0.55, 0.57, 0.65))
+
+	if page == Page.STYLE:
+		_draw_style(font)
+		return
 
 	if page == Page.CONTROLS:
 		# Rows shrink on short windows so the whole table and the hint fit.

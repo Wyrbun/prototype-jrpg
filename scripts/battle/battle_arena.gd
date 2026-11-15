@@ -163,6 +163,35 @@ var max_ap_limit_bonus := 0.0
 ## at full turning speed, and only slows to its casting turn speed this many
 ## seconds before it strikes: that's the window to get out of the way.
 @export var cast_slow_seconds: float = 1.0
+## Melee tracking: short cones and lines (regular Attacks and Smashes, up to
+## melee_track_radius long; cones under 180 degrees) keep tracking a target in
+## melee range (within the cone's length + melee_track_margin) at
+## melee_track_turn_speed right up to the strike, and the enemy steps after
+## it if it backs off to the edge: up close, Parry or Defend, don't dodge.
+@export var melee_track_radius: float = 5.5
+@export var melee_track_margin: float = 1.5
+@export var melee_track_turn_speed: float = 300.0
+@export var melee_chase_share: float = 0.75
+## Lines (Attack / Smash, not snapping or placed) turn at least this fast in
+## their last second, instead of the enemy's slow cast turn speed: a long line
+## keeps up with anyone more than ~3.5 m away. A skill's own
+## final_turn_speed wins.
+@export var line_final_turn_speed: float = 80.0
+## targets_far skills (Crush) pick someone farther than this.
+@export var far_target_min_distance: float = 6.0
+## AI allies only start dodging an enemy's area this many seconds after its
+## skill is revealed (a human-like reaction), not as soon as the grey area
+## shows up. Falling rocks, hazards and blasts are still avoided at once.
+@export var ally_react_seconds: float = 0.4
+## The same for strikes that can't be Parried or Defended (Golem Smash):
+## dodging is the only answer, so they react sooner.
+@export var ally_react_unanswerable_seconds: float = 0.2
+## Boss threat: a boss locks onto whoever hurt it most lately, not just the
+## nearest. Each member scores its share of the threat (0-1) minus
+## distance / threat_distance_scale; the best score is the target.
+## Threat halves (threat_decay) every time the boss starts a cast.
+@export var threat_distance_scale: float = 15.0
+@export var threat_decay: float = 0.5
 
 
 ## Where on the timeline a fighter restarts after choosing Wait (a third
@@ -363,6 +392,19 @@ var _exec_reveal_left := 0.0
 @export var windup_grace_seconds: float = 1.5
 ## Tests / balance runs can force it on without touching the saved setting.
 static var windup_override := -1  # -1 = use the setting, 0 = off, 1 = on
+static var party_ai_override := -1  # same, for Party AI (tests)
+## Party AI: how much of its own combo bar an AI ally aims to spend (good
+## damage), how much of the steered fighter's bar it keeps for them, and the
+## max AP its timed hits add (a Perfect adds perfect_max_ap_gain).
+@export var ai_spend_share: float = 0.75
+@export var ai_reserve_share: float = 0.6
+@export var ai_max_ap_per_hit: float = 1.5
+## AI allies' hits deal this share of a normal (untimed) hit, so Party AI
+## doesn't turn into an easy mode.
+@export var ai_damage_mult: float = 0.8
+## True while an AI ally builds its combo: every Art merges, found or not
+## (it never reveals the ones you haven't found).
+var _ai_building := false
 ## Answer tags: a move on the combo bar will break the target's Defense,
 ## so whatever comes after it isn't blocked.
 var _guard_breaks_in_bar := false
@@ -899,11 +941,29 @@ func _advance_timeline(seconds: float) -> void:
 						c.set_meta("windup_sheltering", true)
 						_popup(c, "WAITS IN COVER", Color(0.75, 0.8, 0.95))
 					continue
+				if _ai_runs(c) and _in_danger(c.global_position, _ally_dangers(c)):
+					# An AI ally busy escaping a danger area (falling rocks...):
+					# the grace waits until it's out, then it walks in.
+					if not c.has_meta("windup_dodging"):
+						c.set_meta("windup_dodging", true)
+						_popup(c, "DODGING", Color(0.75, 0.8, 0.95))
+					continue
+				c.remove_meta("windup_dodging")
 				var grace := float(c.get_meta("windup_grace", 0.0)) + seconds
 				c.set_meta("windup_grace", grace)
-				if grace >= windup_grace_seconds:
+				if grace < windup_grace_seconds:
+					continue
+				var fallback := _windup_fallback(c)
+				if fallback == null:
 					_windup_missed(c)
-				continue
+					continue
+				# The grace is over and the pick is still out of reach: hit the
+				# nearest enemy in reach instead of wasting the turn.
+				var chosen: Combatant = c.get_meta("windup_target")
+				c.set_meta("windup_target", fallback)
+				_count("windup_fallbacks")
+				_popup(c, "SWITCHES TARGET", Color(0.85, 0.8, 0.6))
+				_flash("%s can't reach %s: attacks %s instead" % [c.display_name, chosen.display_name if is_instance_valid(chosen) else "its target", fallback.display_name], 3.0)
 			if next == null or c.timeline_pos > next.timeline_pos:
 				next = c
 			continue
@@ -923,7 +983,10 @@ func _advance_timeline(seconds: float) -> void:
 			c.timeline_pos = TIMELINE_LENGTH
 
 	if next != null:
-		_start_turn(next)
+		if _ai_runs(next):
+			_ai_turn(next)  # Party AI: an ally you aren't steering plays it, instantly
+		else:
+			_start_turn(next)
 
 
 func _start_turn(fighter: Combatant) -> void:
@@ -937,20 +1000,7 @@ func _start_turn(fighter: Combatant) -> void:
 	timeline_bar.active = fighter
 	print("%s's turn" % fighter.display_name)
 	if not acting:
-		if playtest:
-			playtest.turn(fighter)
-		# Effects cast by this fighter count down one of their turns.
-		var ended: PackedStringArray = []
-		for c in combatants:
-			for status_name in c.tick_statuses(fighter):
-				ended.append("%s's %s" % [c.display_name, String(status_name).replace("_", " ")])
-		if not ended.is_empty():
-			_flash("Wore off: " + ", ".join(ended))
-		for hazard in _hazards.duplicate():
-			if hazard["owner"] == fighter:
-				hazard["turns"] = int(hazard["turns"]) - 1
-				if hazard["turns"] <= 0:
-					_remove_hazard(hazard)
+		_turn_upkeep(fighter)
 
 	if fighter.team == Combatant.Team.PARTY:
 		if _steer_before_turn == null:
@@ -962,6 +1012,37 @@ func _start_turn(fighter: Combatant) -> void:
 	_turn_intro_left = _begin_pan()
 	if _turn_intro_left <= 0.0:
 		_begin_active_turn()
+
+
+## The start of a turn proper: the play-test log, statuses and hazards this
+## fighter cast count down one of its turns.
+func _turn_upkeep(fighter: Combatant) -> void:
+	if playtest:
+		playtest.turn(fighter)
+	# Effects cast by this fighter count down one of their turns.
+	var ended: PackedStringArray = []
+	for c in combatants:
+		for status_name in c.tick_statuses(fighter):
+			ended.append("%s's %s" % [c.display_name, String(status_name).replace("_", " ")])
+	if not ended.is_empty():
+		_flash("Wore off: " + ", ".join(ended))
+	for hazard in _hazards.duplicate():
+		if hazard["owner"] == fighter:
+			hazard["turns"] = int(hazard["turns"]) - 1
+			if hazard["turns"] <= 0:
+				_remove_hazard(hazard)
+
+
+## A party member's turn starts: it recovers HP, and the party gets AP.
+func _party_turn_gains(fighter: Combatant) -> void:
+	var recovered := fighter.recover_hp()
+	if recovered > 0:
+		_flash("%s recovers %d HP" % [fighter.display_name, recovered])
+	# Every turn starts with enough AP for a few attacks.
+	var before := ap
+	ap = minf(ap + turn_start_ap, current_max_ap)
+	if ap_meter:
+		ap_meter.gain(ap - before)
 
 
 ## The camera has arrived: the turn really starts now.
@@ -987,14 +1068,7 @@ func _begin_active_turn() -> void:
 			_open_commands()  # its target is gone: choose again
 		return
 	if fighter.team == Combatant.Team.PARTY:
-		var recovered := fighter.recover_hp()
-		if recovered > 0:
-			_flash("%s recovers %d HP" % [fighter.display_name, recovered])
-		# Every turn starts with enough AP for a few attacks.
-		var before := ap
-		ap = minf(ap + turn_start_ap, current_max_ap)
-		if ap_meter:
-			ap_meter.gain(ap - before)
+		_party_turn_gains(fighter)
 		_skill_used = false
 		_turn_head_start = 0.0
 		_open_commands()
@@ -1061,6 +1135,366 @@ func _push_back(fighter: Combatant, amount: float) -> void:
 		fighter.timeline_pos -= amount
 
 
+# --- Party AI ----------------------------------------------------------------
+# With Party AI on (pause menu), every party member except the one you steer
+# plays its own turns, instantly: no menus, no combo bar, the timeline never
+# stops. It may use one Ability, then attacks with a combo of moves and the
+# Arts of its class (found or not: an ally you never steer still uses its
+# whole kit, but hidden Arts stay hidden: never added to your list, never
+# named), spending enough AP for good damage while keeping enough for the
+# fighter you steer. Its hits land without timing (no Perfect bonus), never
+# reset max AP, and raise it a little (ai_max_ap_per_hit per timed hit).
+# Tab (or hold Tab) takes any of them over, as usual.
+
+func _party_ai_on() -> bool:
+	if tutorial_mode:
+		return false
+	return (party_ai_override == 1) if party_ai_override >= 0 else Settings.party_ai()
+
+
+func _ai_runs(fighter: Combatant) -> bool:
+	return fighter.team == Combatant.Team.PARTY and fighter != controlled and _party_ai_on()
+
+
+## An AI ally's turn (or, with Windup, its act at the end of the bar).
+func _ai_turn(fighter: Combatant) -> void:
+	_count("ai_turns")
+	if _windup_on() and fighter.has_meta("windup_target"):
+		# Windup: the act. Attack the chosen enemy if it's in reach.
+		var chosen: Combatant = fighter.get_meta("windup_target")
+		_clear_windup(fighter)
+		var attacked := false
+		if is_instance_valid(chosen) and not chosen.is_down and _windup_reaches(fighter, chosen):
+			attacked = _ai_attack(fighter, chosen)
+		_ai_end(fighter, attacked)
+		return
+	_turn_upkeep(fighter)
+	_party_turn_gains(fighter)
+	if _game_over:
+		return
+	_ai_ability(fighter)
+	var target := _ai_pick_target(fighter)
+	if target == null:
+		_ai_end(fighter, false)
+		return
+	if _windup_on():
+		# Choose now (the command point), act at the end of the bar.
+		fighter.set_meta("windup_target", target)
+		fighter.set_meta("windup_grace", 0.0)
+		fighter.timeline_pos = party_command_at
+		_count("windups")
+		return
+	_ai_end(fighter, _windup_reaches(fighter, target) and _ai_attack(fighter, target))
+
+
+func _ai_end(fighter: Combatant, attacked: bool) -> void:
+	if fighter.has_meta("ability_badge"):
+		fighter.remove_meta("ability_badge")
+	_send_to_start(fighter)
+	if not attacked:
+		fighter.timeline_pos += wait_head_start  # a Wait: the next turn comes sooner
+		_count("waits")
+		_count("ai_waits")
+		_count("ai_waits_" + fighter.class_id)
+
+
+## Who to go after: what allies already focus (a healer mid-ritual, a
+## Shadowflare's sprites), skipping enemies in Counter stance and, without
+## a push, the tough Gust Sprites. In Classic, it must be in reach now.
+func _ai_pick_target(fighter: Combatant) -> Combatant:
+	var pushes := _ai_has_push(fighter)
+	var choices: Array[Combatant] = []
+	for enemy in _standing(enemies):
+		if enemy.stance == Skills.Kind.COUNTER:
+			continue
+		if enemy.damage_taken_share < 0.5 and not pushes:
+			continue
+		if not _windup_on() and not _windup_reaches(fighter, enemy):
+			continue
+		choices.append(enemy)
+	if choices.is_empty():
+		return null
+	var focus := _ally_focus(fighter)
+	if focus != null and choices.has(focus):
+		return focus
+	return _nearest(fighter, choices)
+
+
+func _ai_has_push(fighter: Combatant) -> bool:
+	for move in Moves.attacks(fighter.class_id):
+		if float(move.get("knockback", 0.0)) > 0.0:
+			return true
+	for art in Moves.arts(fighter.class_id):
+		if float(art.get("knockback", 0.0)) > 0.0:
+			return true  # found or not: the AI may use it
+	return false
+
+
+## AP the AI keeps for the fighter you steer: part of their combo bar, less
+## what the party recharges before their turn comes.
+func _ai_reserve(fighter: Combatant) -> float:
+	if controlled == null or controlled.is_down or controlled == fighter:
+		return 0.0
+	var need := minf(controlled.combo_limit, current_max_ap) * ai_reserve_share
+	var seconds := _seconds_until_turn(controlled)
+	if seconds == INF:
+		seconds = 0.0
+	return maxf(need - ap_regen_per_second * _ap_gain_multiplier() * seconds, 0.0)
+
+
+## One Ability, when it clearly helps. Returns true if one was used.
+func _ai_ability(fighter: Combatant) -> bool:
+	var reserve := _ai_reserve(fighter)
+	var hurt := func(m: Combatant) -> float: return float(m.hp) / maxf(m.max_hp, 1.0)
+	var threatened := false  # a revealed attack is coming at this fighter
+	for enemy in _standing(enemies):
+		if enemy.skill_revealed and _loaded_offensive(enemy) and enemy.cast_target == fighter:
+			threatened = true
+	var pick := ""
+	var target: Combatant = null
+	match fighter.class_id:
+		"cleric":
+			var lowest: Combatant = null
+			for m in _standing(party):
+				if lowest == null or hurt.call(m) < hurt.call(lowest):
+					lowest = m
+			if lowest != null and hurt.call(lowest) < 0.3:
+				pick = "Full Cure"
+				target = lowest
+			elif lowest != null and hurt.call(lowest) < 0.55:
+				pick = "Healing"
+				target = lowest
+			else:
+				# Shielding: two or more hurt allies who aren't shielded yet (it
+				# was recast every turn while HP stayed under 75%).
+				var low := _standing(party).filter(func(m): return hurt.call(m) < 0.75 and m.shield <= 0).size()
+				if low >= 2:
+					pick = "Shielding"
+				elif controlled != null and not controlled.is_down and controlled != fighter \
+						and not controlled.statuses.has("haste"):
+					# Nobody needs healing: speed up the fighter you steer.
+					pick = "Haste"
+					target = controlled
+		"knight":
+			if hurt.call(fighter) < 0.4:
+				pick = "Light Heal"
+			elif threatened and not fighter.statuses.has("brace"):
+				pick = "Brace"
+		"mage":
+			if threatened and not fighter.statuses.has("arcane_barrier"):
+				pick = "Arcane Barrier"
+			elif _concentrate_left <= 0.0:
+				pick = "Concentrate"  # whenever it can afford it (and it isn't running)
+		"monk":
+			if hurt.call(fighter) < 0.4:
+				pick = "Deep Breath"
+		"assassin":
+			if hurt.call(fighter) < 0.3 and not fighter.statuses.has("vanish"):
+				pick = "Vanish"
+		"archer":
+			# Only with AP to spare: after paying for it, it must still have
+			# half its bar for this turn's attack (and keep yours).
+			if not fighter.statuses.has("agility") and ap - 60.0 - reserve >= fighter.combo_limit * 0.5:
+				pick = "Agility"
+	if pick == "":
+		return false
+	for skill in Moves.skills(fighter.class_id):
+		if skill["name"] != pick:
+			continue
+		if float(skill["cost"]) > ap - reserve * 0.5:
+			return false  # can't afford it without leaving you dry
+		var saved_controlled := controlled
+		var saved_used := _skill_used
+		controlled = fighter
+		_use_skill(skill, target, fighter.global_position)
+		controlled = saved_controlled
+		_skill_used = saved_used
+		_menu_mode = BattleMenu.Mode.HIDDEN
+		_count("ai_abilities")
+		_count("ai_ability_" + String(skill["name"]).to_lower().replace(" ", "_"))
+		return true
+	return false
+
+
+## Builds a combo for this target within the AI's budget and plays it at
+## once. Returns false if it couldn't attack (nothing affordable that works).
+func _ai_attack(fighter: Combatant, target: Combatant) -> bool:
+	var saved_controlled := controlled
+	controlled = fighter
+	_open_combo_bar(target)
+	var reserve := _ai_reserve(fighter)
+	var want := minf(fighter.combo_limit, current_max_ap) * ai_spend_share
+	var cheapest := INF
+	for i in _moves.size():
+		if battle_menu.move_usable[i]:
+			cheapest = minf(cheapest, float(_moves[i]["cost"]))
+	var budget := minf(want, ap - reserve)
+	if budget < cheapest:
+		# Not enough to spare: a smaller attack that still leaves you most of yours.
+		budget = minf(want * 0.5, ap - reserve * 0.5)
+	budget = minf(budget, fighter.combo_limit)
+	_ai_building = true
+	for index in _ai_choose_moves(fighter, target, budget):
+		_add_to_combo(index)
+	_ai_building = false
+	var played := false
+	if not _plan.is_empty():
+		_ai_play_plan(fighter, target)
+		played = true
+	controlled = saved_controlled
+	_menu_mode = BattleMenu.Mode.HIDDEN
+	battle_menu.combo.clear()
+	_plan.clear()
+	battle_menu.plan = _plan
+	_combo_target = null
+	return played
+
+
+## Greedy pick: the best damage per AP among single moves and the Arts it
+## knows, weighed by how they answer the target (a Defense stance needs a
+## breaking or piercing move first, a tough Gust Sprite needs a push).
+func _ai_choose_moves(fighter: Combatant, target: Combatant, budget: float) -> Array:
+	var options: Array = []  # [move indices, cost, move dict]
+	for i in _moves.size():
+		if battle_menu.move_usable[i]:
+			options.append([[i], float(_moves[i]["cost"]), _moves[i]])
+	for art in Moves.arts(fighter.class_id):
+		if art.has("needs_token") and not fighter.tokens.has(art["needs_token"]):
+			continue
+		if int(art.get("needs_marks", 0)) > target.marks:
+			continue
+		var indices: Array = []
+		var cost := 0.0
+		for move_name in art["recipe"]:
+			var index := -1
+			for i in _moves.size():
+				if _moves[i]["name"] == move_name and battle_menu.move_usable[i]:
+					index = i
+			if index < 0:
+				indices.clear()
+				break
+			indices.append(index)
+			cost += float(_moves[index]["cost"])
+		if not indices.is_empty():
+			options.append([indices, cost, art])
+	var chosen: Array = []
+	var left := budget
+	var guard_down := target.stance != Skills.Kind.DEFENSE
+	for _round in 8:
+		var best: Array = []
+		var best_score := 0.0
+		for option in options:
+			if float(option[1]) > left or float(option[1]) <= 0.0:
+				continue
+			var value := _ai_value(option[2], target, guard_down)
+			if value <= 0.0:
+				continue
+			var score := value / float(option[1])
+			if score > best_score:
+				best_score = score
+				best = option
+		if best.is_empty():
+			break
+		chosen.append_array(best[0])
+		left -= float(best[1])
+		var move: Dictionary = best[2]
+		if int(move.get("effect", Moves.Effect.NONE)) == Moves.Effect.BREAK:
+			guard_down = true
+	return chosen
+
+
+## How much a move is worth against this target right now.
+func _ai_value(move: Dictionary, target: Combatant, guard_down: bool) -> float:
+	var value := 0.0
+	for h in move.get("hits", []):
+		value += float(h)
+	var effect := int(move.get("effect", Moves.Effect.NONE))
+	var last: Dictionary = move.get("last_hit", {})
+	var pierces := effect == Moves.Effect.PIERCE or int(last.get("effect", Moves.Effect.NONE)) == Moves.Effect.PIERCE
+	if not guard_down and effect != Moves.Effect.BREAK and not pierces:
+		return 0.0  # blocked by the Defense stance
+	if target.damage_taken_share < 0.5:
+		return value * (3.0 if float(move.get("knockback", 0.0)) > 0.0 else 0.1)
+	var answer := _move_answer(move, target)
+	if not answer.is_empty():
+		match int(answer[1]):
+			Answer.GOOD:
+				value *= 1.5
+			Answer.BAD:
+				return 0.0
+	return value
+
+
+## Plays the planned combo at once: every hit lands in order (no timing,
+## so no Perfect bonus), with the same effects as a played combo.
+func _ai_play_plan(fighter: Combatant, target: Combatant) -> void:
+	var hp_before := 0
+	for enemy in enemies:
+		hp_before += enemy.hp
+	_exec_attacker = fighter
+	_pay(fighter, battle_menu.combo_cost())
+	fighter.statuses.erase("arcane_cost")
+	if fighter.statuses.has("vanish"):
+		fighter.statuses.erase("vanish")
+		_popup(fighter, "REVEALED", Color(0.7, 0.7, 0.8))
+	_count("combos")
+	_count("combos_" + fighter.class_id)
+	_count("ai_attacks")
+	_count("ai_attacks_" + fighter.class_id)
+	fighter.face_toward(target.global_position - fighter.global_position, 1.0, 100000.0)
+	var names: PackedStringArray = []
+	var timed_hits := 0
+	for slot in _plan.size():
+		var entry := _plan[slot]
+		var move: Dictionary = entry["move"]
+		if move.has("recipe") and not ArtsBook.known(fighter.class_id, move["name"]):
+			# Not found yet: it works, but stays nameless (no spoilers in
+			# messages or popups), and it isn't added to the Arts list.
+			move = move.duplicate()
+			move["name"] = "hidden Art"
+			_count("ai_hidden_arts")
+		names.append(String(move["name"]))
+		_exec_slot = slot
+		_exec_hits_done = 0
+		_exec_timings.clear()
+		_exec_timings.resize((entry["hits"] as Array).size())
+		_exec_timings.fill(Timing.NONE)
+		_exec_tokens = _token_plan(fighter, move)
+		if move.has("recipe"):
+			_count("arts")
+			_count("art_" + String(entry["move"]["name"]).to_lower().replace(" ", "_").replace("'", ""))
+			if int(move.get("spend_marks", 0)) > 0 and _combo_target != null and _combo_target.marks > 0:
+				_combo_target.set_marks(_combo_target.marks - int(move["spend_marks"]))
+		var hits: Array = entry["hits"]
+		var stop := false
+		for i in hits.size():
+			var multiplier := float(hits[i]) * (1.0 + float(_exec_tokens.get("bonus", 0.0))) * ai_damage_mult
+			var hit_move := move
+			if move.has("last_hit") and i == hits.size() - 1:
+				hit_move = move.duplicate()
+				hit_move.merge(move["last_hit"], true)
+			if not _untimed(entry, i):
+				timed_hits += 1
+			fighter.play_lunge()
+			var keep_going := _land_hit(fighter, hit_move, multiplier, i == 0, i == hits.size() - 1)
+			_exec_hits_done = i + 1
+			if i == hits.size() - 1 and not fighter.is_down:
+				_settle_tokens()
+			if not keep_going or _game_over:
+				stop = true
+				break
+		if stop:
+			break
+	var dealt := hp_before
+	for enemy in enemies:
+		dealt -= enemy.hp
+	var gain := ai_max_ap_per_hit * timed_hits
+	if gain > 0.0 and not _game_over:
+		_grow_max_ap(gain, fighter)
+	_flash("%s: %s on %s (%d damage)" % [fighter.display_name, " + ".join(names), target.display_name, dealt], 3.0)
+	_exec_attacker = null
+
+
 # --- Free roam (between turns) ---------------------------------------------
 
 func _party_turn() -> bool:
@@ -1077,6 +1511,8 @@ func _free_roam(delta: float, world_delta: float) -> void:
 		controlled.step(_camera_relative(input), delta)
 		_walk_inside(controlled)
 	for enemy in enemies:
+		if enemy.skill_revealed and enemy.loaded_skill != Skills.NONE:
+			enemy.set_meta("revealed_for", float(enemy.get_meta("revealed_for", 0.0)) + world_delta)
 		_enemy_step(enemy, world_delta)
 	for ally in party:
 		if ally != controlled and not ally.is_down:
@@ -1169,6 +1605,62 @@ func _set_controlled(fighter: Combatant) -> void:
 	controlled.set_highlighted(true)
 
 
+## How fast a skill turns in its last second (0: the enemy's slow default).
+func _final_turn_speed(def: EnemySkill) -> float:
+	if def == null:
+		return 0.0
+	if def.final_turn_speed > 0.0:
+		return def.final_turn_speed
+	if def.shape == EnemySkill.Shape.LINE and (def.kind == Skills.Kind.ATTACK or def.kind == Skills.Kind.SMASH) \
+			and not def.is_mechanic() and not def.placed_on_party() and not def.snaps_to_target:
+		return line_final_turn_speed
+	return 0.0
+
+
+## Crush: a random party member who isn't close, unless Taunt holds it.
+func _far_target(enemy: Combatant) -> Combatant:
+	if enemy.statuses.has("taunt"):
+		return null
+	var seen := _standing(party).filter(func(m): return not m.statuses.has("vanish"))
+	var far := seen.filter(func(m): return enemy.global_position.distance_to(m.global_position) > far_target_min_distance)
+	return far.pick_random() if not far.is_empty() else null
+
+
+## A short cone or line (regular Attack / Smash) whose locked target is in melee
+## range: it tracks it to the end (see melee_track_turn_speed).
+func _melee_tracking(enemy: Combatant, target: Combatant) -> bool:
+	var def := enemy.loaded_def
+	if def == null or target == null or target.is_down:
+		return false
+	if def.kind != Skills.Kind.ATTACK and def.kind != Skills.Kind.SMASH:
+		return false
+	if def.radius > melee_track_radius:
+		return false
+	var cone := def.shape == EnemySkill.Shape.CONE and def.angle < 180.0
+	var circle := def.shape == EnemySkill.Shape.CIRCLE  # around itself (Rock Stomp): it steps after you
+	if not cone and not circle and def.shape != EnemySkill.Shape.LINE:
+		return false
+	if def.is_mechanic() or def.placed_on_party() or def.aims_exactly() or enemy.get_meta("aim_locked", false):
+		return false  # snapped skills (Shield Bash) hold their aim
+	var to := target.global_position - enemy.global_position
+	to.y = 0.0
+	return to.length() - target.body_radius <= def.radius + melee_track_margin
+
+
+## Backing off to the edge of its reach doesn't save you: the enemy steps
+## after you while it winds up (not if pinned or rooted).
+func _melee_chase(enemy: Combatant, target: Combatant, delta: float) -> void:
+	if enemy.statuses.has("pinned") or enemy.freeze_left > 0.0:
+		return
+	var to := target.global_position - enemy.global_position
+	to.y = 0.0
+	if to.length() - target.body_radius <= enemy.loaded_def.radius * melee_chase_share:
+		return
+	var walk := enemy.move_speed * (0.5 if enemy.statuses.has("chilled") else 1.0)
+	enemy.global_position += arena.steer(enemy.global_position, to, enemy.body_radius).normalized() * walk * delta
+	_keep_in_arena(enemy)
+
+
 ## Enemy behavior: turn toward the nearest party member and walk forward.
 ## Enemies only walk when roughly facing their target, so a slow-turning
 ## enemy can be outmaneuvered. While preparing a skill they stand still and
@@ -1198,6 +1690,12 @@ func _enemy_step(enemy: Combatant, delta: float) -> void:
 		var turn_speed := enemy.cast_turn_speed_degrees
 		if enemy.loaded_skill != Skills.NONE and _seconds_until_turn(enemy) > cast_slow_seconds:
 			turn_speed = enemy.turn_speed_degrees
+		elif enemy.loaded_skill != Skills.NONE:
+			turn_speed = maxf(turn_speed, _final_turn_speed(enemy.loaded_def))  # lines keep tracking
+		if enemy.loaded_skill != Skills.NONE and _melee_tracking(enemy, locked):
+			# Up close, a short cone keeps up: no sidestepping out of it.
+			turn_speed = maxf(turn_speed, melee_track_turn_speed)
+			_melee_chase(enemy, locked, delta)
 		if enemy.loaded_def != null and enemy.loaded_def.aims_exactly() and enemy.loaded_skill != Skills.NONE:
 			enemy.face_toward(to_locked, 1.0, 1000000.0)  # locked on exactly (Breath)
 		elif not enemy.get_meta("aim_locked", false):  # snapped skills hold their aim
@@ -1258,7 +1756,46 @@ func _enemy_target(enemy: Combatant) -> Combatant:
 			return taunter
 	# Vanish: enemies lose track of a hidden Assassin while anyone else stands.
 	var seen := _standing(party).filter(func(m): return not m.statuses.has("vanish"))
-	return _nearest(enemy, seen if not seen.is_empty() else _standing(party))
+	var pool: Array[Combatant] = seen if not seen.is_empty() else _standing(party)
+	if enemy.boss:
+		var by_threat := _threat_target(enemy, pool)
+		if by_threat != null:
+			return by_threat
+	return _nearest(enemy, pool)
+
+
+## Boss threat: whoever hurt it most lately, weighed against distance (see
+## threat_distance_scale). Null while nobody has hurt it yet.
+func _threat_target(enemy: Combatant, pool: Array[Combatant]) -> Combatant:
+	var threat: Dictionary = enemy.get_meta("threat", {})
+	var top := 0.0
+	for member in pool:
+		top = maxf(top, float(threat.get(member, 0.0)))
+	if top <= 0.0:
+		return null
+	var best: Combatant = null
+	var best_score := -INF
+	for member in pool:
+		var score := float(threat.get(member, 0.0)) / top \
+				- enemy.global_position.distance_to(member.global_position) / threat_distance_scale
+		if score > best_score:
+			best_score = score
+			best = member
+	return best
+
+
+func _add_threat(enemy: Combatant, attacker: Combatant, amount: int) -> void:
+	if not enemy.boss or attacker == null or attacker.team != Combatant.Team.PARTY or amount <= 0:
+		return
+	var threat: Dictionary = enemy.get_meta("threat", {})
+	threat[attacker] = float(threat.get(attacker, 0.0)) + amount
+	enemy.set_meta("threat", threat)
+
+
+func _decay_threat(enemy: Combatant) -> void:
+	var threat: Dictionary = enemy.get_meta("threat", {})
+	for member in threat.keys():
+		threat[member] = float(threat[member]) * threat_decay
 
 
 ## Ally AI, in priority order:
@@ -1282,8 +1819,16 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 			# its path), then on towards the target.
 			if _escape_step(ally, dangers, delta):
 				return
-			var to_goal := goal.global_position - ally.global_position
+			var dest := goal.global_position
+			if not arena.has_line_of_sight(ally.global_position, dest):
+				# A rock between them (Ceiling Burst): go round its side first,
+				# or a ranged ally stays in range with no clear shot.
+				dest = _around_rock(ally, dest)
+			var to_goal := dest - ally.global_position
 			to_goal.y = 0.0
+			if to_goal.length() < 0.3:
+				to_goal = goal.global_position - ally.global_position
+				to_goal.y = 0.0
 			_safe_step(ally, to_goal, delta, dangers)
 			return
 	var hide_at: Variant = _hide_point(ally)
@@ -1456,6 +2001,10 @@ func _ally_dangers(ally: Combatant) -> Array[Dictionary]:
 			continue  # a healing ritual can't hurt anyone: go and break it instead
 		if enemy.skill_revealed and def.shared_damage and _stack_target(enemy) != null:
 			continue  # stacking in it is the answer, not running
+		if not _ally_reacted(enemy):
+			continue  # still grey, or just revealed: it hasn't reacted yet
+		if ally.holds_ground and _melee_tracking(enemy, ally) and (def.parryable() or def.blockable()):
+			continue  # Knight / Monk up close: your Parry or Defend covers it
 		for area in _enemy_areas(enemy):
 			var margin := base
 			if area.has_meta("follow") and (not enemy.skill_revealed or def.keeps_following()):
@@ -1475,6 +2024,22 @@ func _ally_dangers(ally: Combatant) -> Array[Dictionary]:
 		# how allies got caught (the about-to-land ones alone weren't enough).
 		list.append({"area": fall["area"], "margin": base})
 	return list
+
+
+## AI allies react to an enemy skill only ally_react_seconds after it's
+## revealed: no more leaving the grey area before anyone knows what it is.
+## Mechanic skills (spread out, stack up) and circles that punish overlaps
+## still count from the start: the answer takes time to set up.
+func _ally_reacted(enemy: Combatant) -> bool:
+	var def := enemy.loaded_def
+	if def.is_mechanic() or def.overlap != EnemySkill.Overlap.NORMAL:
+		return true
+	if not enemy.skill_revealed:
+		return false
+	var delay := ally_react_seconds
+	if not def.parryable() and not def.blockable():
+		delay = ally_react_unanswerable_seconds  # no Parry or Defend to fall back on (Golem Smash)
+	return float(enemy.get_meta("revealed_for", 0.0)) >= delay
 
 
 ## Where allies gather for a revealed shared-damage skill, or null.
@@ -1792,7 +2357,18 @@ func _begin_cast(enemy: Combatant) -> void:
 	enemy.set_meta("repeat_streak", streak + 1 if enemy.loaded_def == enemy.last_skill else 1)
 	enemy.last_skill = enemy.loaded_def
 	enemy.cast_target = _enemy_target(enemy)  # locked on for the whole cast
+	var far: Combatant = _far_target(enemy) if enemy.loaded_def.targets_far else null
+	if far != null:
+		enemy.cast_target = far  # Crush: someone who isn't close
+		_count("far_targets")
+	elif enemy.boss and enemy.cast_target != null and not enemy.statuses.has("taunt") \
+			and enemy.cast_target != _nearest(enemy, _standing(party)):
+		# Threat picked someone other than the nearest (play-test report).
+		_count("threat_targets")
+		_count("threat_targets_" + enemy.cast_target.class_id)
+	_decay_threat(enemy)
 	enemy.skill_revealed = false
+	enemy.set_meta("revealed_for", 0.0)
 	enemy.stance_time_left = 0.0
 	var kind := enemy.loaded_def.kind
 	enemy.stance = kind if kind == Skills.Kind.DEFENSE or kind == Skills.Kind.COUNTER else Skills.NONE
@@ -2057,7 +2633,9 @@ func _build_cast_areas(enemy: Combatant) -> void:
 	elif enemy.attack_range:
 		enemy.attack_range.rotation.y = -deg_to_rad(def.aim_offset_degrees)  # 90: its right side
 		_set_arena_clip(enemy.attack_range, def.fills_arena)
-		enemy.attack_range.show_skill(def, true, _cast_radius(enemy))
+		# Golem Smash: the grey area covers the whole room until the reveal
+		# shows which half it hits.
+		enemy.attack_range.show_skill(def, true, _cast_radius(enemy), 360.0 if def.hides_side else -1.0)
 
 
 ## Fills-the-arena areas stop at the arena's edges.
@@ -3383,6 +3961,15 @@ func _begin_strike(enemy: Combatant, mods: Dictionary, reset_timeline: bool, win
 			target.add_child(mark)
 			s.markers.append(mark)
 			continue
+		if not (s.def.parryable() and _covered(target, "parry")):
+			# Can't Parry this (class or skill): no timing ring to chase, just
+			# a mark: blue if Defend works, red if nothing does.
+			var can_defend := s.def.blockable() and _covered(target, "block")
+			var mark_color := Color(0.35, 0.65, 1.0, 0.85) if can_defend else Color(1.0, 0.2, 0.15, 0.85)
+			var plain := _make_ring(target.body_radius + 0.3, 0.12, mark_color)
+			target.add_child(plain)
+			s.markers.append(plain)
+			continue
 		# A fixed white marker shows where the ring will land; the ring
 		# shrinks onto it and turns gold when it's time to parry.
 		var ring_radius := target.body_radius + 0.3
@@ -3767,6 +4354,7 @@ func _absorb_note(damage: int, taken: int) -> String:
 func _riposte(archer: Combatant, enemy: Combatant, lines: PackedStringArray) -> void:
 	var damage := ceili(archer.attack_power * 2.0)
 	var dealt := enemy.take_damage(damage, false)
+	_add_threat(enemy, archer, dealt)
 	if playtest:
 		playtest.deal(archer, dealt)
 	_popup(archer, archer.counter_name.to_upper() + "!", Color(1.0, 0.85, 0.2))
@@ -4213,7 +4801,7 @@ func _windup_in_reach(fighter: Combatant) -> bool:
 
 
 func _clear_windup(fighter: Combatant) -> void:
-	for key in ["windup_target", "windup_grace", "windup_sheltering"]:
+	for key in ["windup_target", "windup_grace", "windup_sheltering", "windup_dodging"]:
 		if fighter.has_meta(key):
 			fighter.remove_meta(key)
 
@@ -4272,6 +4860,20 @@ func _lethal_pending() -> bool:
 	return false
 
 
+## Windup, the grace is over: the nearest enemy this fighter can reach
+## instead (never one in Counter stance; for an AI ally, never a tough Gust
+## Sprite without a push). Null: nobody in reach, the turn becomes a Wait.
+func _windup_fallback(fighter: Combatant) -> Combatant:
+	var choices: Array[Combatant] = []
+	for enemy in _standing(enemies):
+		if enemy.stance == Skills.Kind.COUNTER or not _windup_reaches(fighter, enemy):
+			continue
+		if _ai_runs(fighter) and enemy.damage_taken_share < 0.5 and not _ai_has_push(fighter):
+			continue
+		choices.append(enemy)
+	return _nearest(fighter, choices) if not choices.is_empty() else null
+
+
 ## Out of reach after the grace: the turn becomes a Wait.
 func _windup_missed(fighter: Combatant) -> void:
 	_clear_windup(fighter)
@@ -4280,6 +4882,7 @@ func _windup_missed(fighter: Combatant) -> void:
 	_send_to_start(fighter)
 	fighter.timeline_pos += wait_head_start
 	_count("windup_misses")
+	_count("windup_misses_" + fighter.class_id)  # who couldn't reach, in the report
 	_popup(fighter, "TOO FAR", Color(0.85, 0.8, 0.6))
 	_flash("%s couldn't get in reach: the turn becomes a Wait" % fighter.display_name)
 
@@ -4393,7 +4996,7 @@ func _rebuild_plan() -> void:
 	var old := _plan.duplicate()
 	_plan.clear()
 	_plan_spans.clear()
-	for group in _parse_combo(false):
+	for group in _parse_combo(_ai_building):
 		var move: Dictionary = group["move"]
 		var slot := _plan.size()
 		if slot < old.size() and old[slot]["name"] == move["name"] and int(old[slot]["cost"]) == int(move["cost"]):
@@ -6206,6 +6809,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		multiplier *= 1.0 + staggered_bonus
 	var damage := ceili(attacker.attack_power * multiplier)
 	var dealt := target.take_damage(damage, false)
+	_add_threat(target, attacker, dealt)
 	if _fill_stagger(attacker, target, dealt, move):
 		note = "Staggered!"
 	if playtest:
@@ -6968,6 +7572,7 @@ func _camera_focus() -> Vector3:
 
 func _update_ui(delta: float) -> void:
 	party_status.controlled = controlled
+	party_status.auto = _party_ai_on()
 	for member in party:
 		var in_reach := false
 		for enemy in _standing(enemies):
