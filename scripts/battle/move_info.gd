@@ -13,14 +13,16 @@ const SKILL_TEXT := {
 	"Taunt": ["Every enemy within 6 m targets you for 3 of your turns.",
 			"Meanwhile you guard: allies within 3 m are covered by your Block and Parry, even if their class can't do them."],
 	"Jump": ["Move the marker (up to 8 m) and leap there.", "Walls and rocks stop the marker."],
-	"Riposte": ["Counter stance for 4 s: the next strike on you that can be parried is countered for 2x your attack.",
-			"The enemy is pushed 3 m away and you hop 3 m back."],
+	"Siphon Shot": ["The enemy is Siphoned for 3 of your turns.",
+			"Each of your hits on it heals you 3% of your max HP; a Perfect hit heals 6%.", "Only your own hits heal you."],
 	"True Sight": ["Every ally's attack reach grows 25%.",
 			"Enemy attacks are revealed as soon as they start preparing.", "Lasts 3 of your turns."],
 	"Agility": ["Every attack you play gets one extra hit at half the strength of its first hit.",
 			"Lasts 5 of your turns."],
 	"Arcane Barrier": ["The next hit on you does nothing."],
-	"Concentrate": ["The party's AP recharges twice as fast for 10 s."],
+	"Enchant": ["Pick an element with a direction (like her spell codes); every ally but her carries it for 2 of her turns.",
+			"Fire (up): their hits burn 1 turn.  Ice (down): they chill.", "Lightning (left): 1.5x Stagger fill.  Energy (right): a 1 m push.",
+			"A new Enchant replaces the old one."],
 	"Teleport": ["Blink to a spot up to 8 m away (move the marker), or press Tab to appear next to an ally at any distance."],
 	"Healing": ["Heals an ally (or you) for 25% of their max HP."],
 	"Shielding": ["Every ally gets a shield of 15% of their max HP, at any distance.",
@@ -28,6 +30,8 @@ const SKILL_TEXT := {
 			"Each shield lasts 2 of your turns; a new one doesn't refresh older ones."],
 	"Haste": ["An ally's turns come 25% sooner and they run 20% faster.", "Lasts 2 of their own turns."],
 	"Full Cure": ["Fully heals an ally (or you)."],
+	"Lifeline": ["Dash to an ally up to 8 m away and land beside them, out of whatever you stood in.",
+			"You and that ally each heal 15% of your own max HP."],
 	"Hook": ["An enemy up to 6 m away loses what it was preparing (or its stance) and is pulled 2 m towards you.",
 			"Uses up its Marks."],
 	"Death Sentence": ["Puts 3 Marks on an enemy up to 6 m away (5 at most)."],
@@ -58,6 +62,8 @@ static func summary(move: Dictionary) -> String:
 	match int(move.get("timing", Moves.TimingType.PRESS)):
 		Moves.TimingType.HOLD:
 			parts.append("Hold")
+		Moves.TimingType.CODE:
+			parts.append("Code " + _code_keys(move.get("code", [])))
 		Moves.TimingType.TAP:
 			parts.append("Open Tap" if float(move.get("surge", 0.0)) > 0.0 else "Tap x%d" % int(move.get("taps", 0)))
 		_:
@@ -89,6 +95,12 @@ static func _attack_lines(move: Dictionary) -> PackedStringArray:
 	match int(move.get("timing", Moves.TimingType.PRESS)):
 		Moves.TimingType.HOLD:
 			out.append("Hold: press in the first box, keep holding, let go in the last box for a Perfect. A bad let-go only loses the Perfect.")
+		Moves.TimingType.CODE:
+			var keys := _code_keys(move.get("code", []))
+			if float(move.get("surge", 0.0)) > 0.0:
+				out.append("Code %s, then tap freely: every tap adds %d%% damage, up to %d taps. The code done before the hit is a Perfect." % [keys, roundi(float(move["surge"]) * 100.0), int(move["taps"])])
+			else:
+				out.append("Code %s: type it with WASD before the hit for a Perfect. A wrong arrow starts it over; unfinished, it's a normal hit." % keys)
 		Moves.TimingType.TAP:
 			if move.get("surge_uncapped", false):
 				out.append("Open Tap, no limit: every tap adds %d%% damage, as many as you can; %d taps is a Perfect." % [roundi(float(move["surge"]) * 100.0), int(move["taps"])])
@@ -226,3 +238,12 @@ static func _num(value: float) -> String:
 	if text.ends_with("."):
 		text = text.left(text.length() - 1)
 	return text
+
+
+## A spell code as keys: "W S A".
+static func _code_keys(code: Array) -> String:
+	var keys := {"up": "W", "down": "S", "left": "A", "right": "D"}
+	var parts: PackedStringArray = []
+	for dir in code:
+		parts.append(keys.get(dir, "?"))
+	return " ".join(parts)

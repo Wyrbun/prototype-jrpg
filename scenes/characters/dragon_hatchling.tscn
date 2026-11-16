@@ -24,30 +24,74 @@ stagger_bar = 90
 script = ExtResource("2_skill")
 skill_name = "Fire Wave"
 kind = 1
+weight = 3
+shape = 2
+radius = 14.0
+width = 2.4
+damage = 36
+windup = 1.5
+trail_turns = 5
+trail_damage_per_second = 20.0
+trail_touch_damage = 15
+trail_cap = 3
+trail_group = "wave"
+
+[sub_resource type="Resource" id="Skill_3"]
+script = ExtResource("2_skill")
+skill_name = "Burning Spike"
+kind = 4
+weight = 1
+shape = 1
+radius = 2.2
+damage = 20
+windup = 1.6
+trail_turns = 3
+trail_turns_below_half = 5
+trail_damage_per_second = 8.0
+special = 1
+overlap = 2
+always_hits = true
+stagger_bar = 100
+
+[sub_resource type="Resource" id="Skill_4"]
+script = ExtResource("2_skill")
+skill_name = "Scorch and Breathe"
+kind = 1
 weight = 2
 shape = 2
 radius = 14.0
 width = 2.4
 damage = 36
 windup = 1.5
-trail_turns = 3
-trail_damage_per_second = 10.0
+trail_turns = 5
+trail_damage_per_second = 20.0
+trail_touch_damage = 15
+trail_cap = 3
+trail_group = "wave"
+follow_up = SubResource("Skill_1")
+follow_up_delay = 1.5
 
-[sub_resource type="Resource" id="Skill_3"]
+[sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
-skill_name = "Burning Spike"
+skill_name = "Wings of Fire"
+uncancellable = true
 kind = 4
-weight = 2
-shape = 1
-radius = 2.2
-damage = 26
-windup = 1.6
-trail_turns = 3
-trail_damage_per_second = 8.0
-special = 1
-overlap = 2
-always_hits = true
-stagger_bar = 120
+weight = 0
+shape = 4
+radius = 12.0
+inner_radius = -12.0
+width = 24.0
+arena_aligned = true
+fills_arena = true
+lanes = 4
+damage = 30
+windup = 2.0
+cast_speed = 0.5
+cannot_be_parried = true
+trail_turns = 999
+trail_damage_per_second = 20.0
+trail_touch_damage = 15
+phase_at_hp = PackedFloat32Array(0.5)
 
 [sub_resource type="BoxMesh" id="Mesh_body"]
 size = Vector3(2.0, 1.5, 2.4)
@@ -67,7 +111,7 @@ move_speed = 2.2
 closes_in = true
 turn_speed_degrees = 70.0
 body_radius = 1.2
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)

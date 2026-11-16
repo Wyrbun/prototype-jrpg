@@ -28,6 +28,10 @@ var auto := false
 ## Effect tags (BRACE 2, SHIELD 26...) go after the HP numbers, or to the
 ## left of the name for the enemy panel on the right edge.
 var tags_on_left := false
+## Horizontal extent of what was last drawn (local x), so the AP meter can
+## keep clear of it: tags on the left can reach past x = 0.
+var drawn_left := 0.0
+var drawn_right := 0.0
 
 
 func _process(_delta: float) -> void:
@@ -44,6 +48,8 @@ func _draw() -> void:
 	if not tags_on_left and party.size() * TAG_ROW_HEIGHT <= size.y:
 		row_height = TAG_ROW_HEIGHT
 	var top := size.y - party.size() * row_height
+	var left := 0.0
+	var right := 0.0
 	for i in party.size():
 		var c := party[i]
 		var y := top + i * row_height
@@ -69,13 +75,16 @@ func _draw() -> void:
 
 		var hp_text := "DOWN" if c.is_down else "%d / %d" % [c.hp, c.max_hp]
 		_text(font, Vector2(bar.end.x + 10, y + 19), hp_text, 17, name_color)
+		var hp_w := font.get_string_size(hp_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
+		right = maxf(right, bar.end.x + 10 + hp_w)
 		if auto and c != controlled and not c.is_down and c.team == Combatant.Team.PARTY:
-			var hp_w := font.get_string_size(hp_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
 			_text(font, Vector2(bar.end.x + 18 + hp_w, y + 18), "AUTO", 13, Color(0.55, 0.85, 1.0))
+			right = maxf(right, bar.end.x + 18 + hp_w + font.get_string_size("AUTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x)
 		var tags := "" if c.is_down else c.status_text()
 		if tags != "" and tags_on_left:
 			var width := font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 			_text(font, Vector2(-width - 10, y + 19), tags, 15, Color(1.0, 0.6, 0.45))
+			left = minf(left, -width - 10)
 		elif tags != "":
 			# Under the bar, inside the panel: smaller type for a long line,
 			# then cut with an ellipsis rather than spill over the AP meter.
@@ -86,6 +95,8 @@ func _draw() -> void:
 			while tags.length() > 4 and font.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x > room:
 				tags = tags.substr(0, tags.length() - 2) + "…"
 			_text(font, Vector2(bar.position.x, y + 39), tags, tag_size, Color(0.6, 0.85, 1.0))
+	drawn_left = left
+	drawn_right = right
 
 
 ## The Stagger bar under an enemy's HP: gold, flashing when nearly full;

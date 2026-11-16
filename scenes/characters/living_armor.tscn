@@ -35,12 +35,13 @@ stagger_bar = 70
 script = ExtResource("2_skill")
 skill_name = "Shadowflare"
 uncancellable = true
-sure_below_hp = 0.7
+cannot_be_parried = true
+phase_at_hp = PackedFloat32Array(0.5, 0.2)
 kind = 4
-weight = 1
+weight = 0
 shape = 1
 radius = 2.0
-damage = 52
+damage = 100
 windup = 1.8
 special = 3
 max_radius = 11.0
@@ -48,7 +49,7 @@ contain_share = 0.1
 orbit_sprites = 3
 orbit_scene = ExtResource("3_sprite")
 max_radius_fits_arena = true
-cast_speed = 0.35
+cast_speed = 0.12
 
 [sub_resource type="Resource" id="Skill_4"]
 script = ExtResource("2_skill")
@@ -62,6 +63,7 @@ damage = 999
 windup = 1.0
 cast_speed = 0.3
 fills_arena = true
+arena_aligned = true
 lethal = true
 cover_rock = true
 

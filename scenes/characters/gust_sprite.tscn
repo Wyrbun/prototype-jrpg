@@ -15,6 +15,20 @@ damage = 6
 windup = 0.8
 launch = 2.0
 
+[sub_resource type="Resource" id="Skill_2"]
+script = ExtResource("2_skill")
+skill_name = "Detonate"
+kind = 0
+weight = 0
+shape = 1
+radius = 4.0
+damage = 45
+windup = 1.5
+cast_speed = 0.6
+cannot_be_parried = true
+launch = 3.0
+self_destruct = true
+
 [sub_resource type="SphereMesh" id="Mesh_body"]
 radius = 0.4
 height = 0.8
@@ -26,13 +40,16 @@ albedo_color = Color(0.7, 0.88, 0.95, 1)
 display_name = "Gust Sprite"
 damage_taken_share = 0.2
 knockback_taken = 1.5
+lightweight = true
+fuse_seconds = 25.0
+unkillable = true
 max_hp = 60
 speed = 14.0
-move_speed = 4.0
+move_speed = 0.0
 no_positionals = true
 turn_speed_degrees = 360.0
 body_radius = 0.4
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)

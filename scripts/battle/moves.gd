@@ -79,12 +79,21 @@ class_name Moves
 ##             TAP    tap the key `taps` times between tap_start and the hit;
 ##                    each tap adds part of the bonus, all of them = Perfect.
 ##                    Taps can't be wrong: no miss, no AP lost.
+##             CODE   Mage: type `code` (WASD directions) after code_start and
+##                    before the last hit = Perfect. A wrong direction starts
+##                    the code over; not done = a normal hit, nothing lost.
+##                    With `surge`, taps after the code add damage.
 ##
 ## Skill fields: cost, target (see Target), range (meters, for ENEMY / POINT),
 ## turns (how many of the caster's turns it lasts), and the effect's numbers.
 
 enum Effect { NONE, PIERCE, BREAK }
-enum TimingType { PRESS, HOLD, TAP }
+enum TimingType { PRESS, HOLD, TAP, CODE }
+
+## Mage spell codes (CODE timing): each element is one WASD direction,
+## typed while the spell casts (Helldivers-style). The code is the spell's
+## elements in bar order; done before the hit = Perfect.
+const ELEMENT_DIRS := {"Fire": "up", "Ice": "down", "Lightning": "left", "Energy Blast": "right"}
 enum Area { SINGLE, TARGET_CIRCLE, LINE, SELF_CIRCLE, ALL }
 enum Target { SELF, ALLY, OTHER_ALLY, ENEMY, POINT, NONE }
 
@@ -125,21 +134,26 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		"mage":
 			list = [
-				# Basic moves (three elements): in the right order they become
-				# Arts (see arts()).
-				# Reach 4.5 m (the Mage's own is 3): enough to cast from a safe
-				# spot, still well short of the Archer's 6.
-				_attack("Fire", 20, [1.2], 1.1, 0.16, RED, "Line: 100% first, 75% behind; burns 2 turns; reach 4.5 m",
-						{"reach": 4.5, "area": Area.LINE, "area_size": 1.2, "falloff": 0.75, "timing": TimingType.TAP, "taps": 4,
-						"burn": 0.35, "burn_turns": 2}),
-				_attack("Frost", 20, [1.0], 1.0, 0.16, BLUE, "Small circle; chills (half walking speed)",
-						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "chill": true, "timing": TimingType.TAP, "taps": 3}),
-				_attack("Gust", 15, [0.8], 0.6, 0.16, TEAL, "Circle on self, pushes 3 m",
-						{"area": Area.SELF_CIRCLE, "area_size": 3.0, "reach": 3.0, "knockback": 3.0}),
-				# Surge: an open Tap. Every tap adds damage, up to the cap, and
-				# extra taps are simply ignored (no "too many"). Not part of any Art.
-				_attack("Arcane Surge", 25, [0.9], 1.0, 0.16, Color(0.75, 0.55, 1.0), "Tap freely: each tap +10% (up to 10); one target",
-						{"reach": 4.5, "timing": TimingType.TAP, "taps": 10, "surge": 0.10, "tap_start": 0.08}),
+				# The four elements (see docs/battle-design.md, Mage). Any two to
+				# four of them on the bar, in any order, make an Art (see arts()).
+				# Reach 5 m (the Mage's own too): she casts from a safe spot,
+				# just short of the Archer's 6.
+				# Fire: raw damage and Burn. Ice makes it cheaper (ice_discount).
+				_attack("Fire", 20, [1.2], 1.1, 0.16, RED, "Line: 100% first, 75% behind; burns 2 turns; reach 5 m",
+						{"reach": 5.0, "area": Area.LINE, "area_size": 1.2, "falloff": 0.75,
+						"burn": 0.35, "burn_turns": 2, "element": "fire"}),
+				# Ice: control. Chills, and every Fire after it costs less.
+				_attack("Ice", 20, [1.0], 1.0, 0.16, BLUE, "Small circle; chills; Fire after it costs 20% less (next turn too)",
+						{"area": Area.TARGET_CIRCLE, "area_size": 1.8, "chill": true,
+						"element": "ice"}),
+				# Lightning: one target; interrupts what it's preparing.
+				_attack("Lightning", 20, [1.0], 0.7, 0.15, GOLD, "One target: interrupts its attack; reach 5 m",
+						{"reach": 5.0, "stun": true, "element": "lightning"}),
+				# Energy Blast: the wildcard. Free tapping (extra taps are
+				# ignored, never wrong) and a push.
+				_attack("Energy Blast", 25, [0.9], 1.0, 0.16, Color(0.75, 0.55, 1.0), "Code, then tap freely: each tap +10% (up to 10); pushes 3 m; reach 5 m",
+						{"reach": 5.0, "taps": 10, "surge": 0.10, "tap_start": 0.08,
+						"knockback": 3.0, "element": "energy"}),
 			]
 		"cleric":
 			list = [
@@ -185,6 +199,10 @@ static func attacks(class_id: String) -> Array[Dictionary]:
 			]
 		_:
 			list = [_attack("Attack", 10, [1.0], 0.55, 0.16, BLUE, "Basic attack")]
+	if class_id == "mage":
+		for move in list:
+			move["timing"] = TimingType.CODE
+			move["code"] = spell_code([move["name"]])
 	return list
 
 
@@ -235,20 +253,74 @@ static func arts(class_id: String) -> Array[Dictionary]:
 			]
 		"mage":
 			list = [
-				_art(["Fire", "Fire"], "Fireball", [3.3], 1.5, 0.18, ORANGE, "Tap: big blast on a circle at the target",
-						{"reach": 4.5, "area": Area.TARGET_CIRCLE, "area_size": 2.2, "timing": TimingType.TAP, "taps": 6}),
-				_art(["Frost", "Frost"], "Blizzard", [2.6], 1.5, 0.18, BLUE, "Tap: wide circle, chills everyone hit",
-						{"area": Area.TARGET_CIRCLE, "area_size": 3.0, "chill": true, "timing": TimingType.TAP, "taps": 6}),
-				_art(["Fire", "Frost"], "Steam Burst", [3.4], 1.3, 0.18, Color(0.85, 0.85, 0.95), "Tap: focused blast (1.2 m), breaks Defense",
-						{"area": Area.TARGET_CIRCLE, "area_size": 1.2, "effect": Effect.BREAK, "timing": TimingType.TAP, "taps": 5}),
-				_art(["Gust", "Fire"], "Firestorm", [2.6], 0.9, 0.16, RED, "Fire whirl around you, pushes 4 m",
-						{"area": Area.SELF_CIRCLE, "area_size": 3.5, "reach": 3.5, "knockback": 4.0}),
-				_art(["Gust", "Gust"], "Tempest", [2.0], 0.9, 0.16, TEAL, "Wide circle around you, pushes 5 m",
-						{"area": Area.SELF_CIRCLE, "area_size": 4.5, "reach": 4.5, "knockback": 5.0}),
-				_art(["Fire", "Frost", "Fire", "Gust"], "Meteor Strike", [6.0], 1.9, 0.2, ORANGE,
+				# Order-free (any_order): Fire + Ice = Ice + Fire. Two or three of one
+				# element strengthen its property; Energy twists the element it
+				# joins (and those mixes don't push). See docs/battle-design.md.
+				# -- Fire --
+				_art(["Fire", "Fire"], "Fireball", [3.3], 1.5, 0.18, ORANGE, "Big blast on a circle at the target; Burn x2",
+						{"reach": 5.0, "area": Area.TARGET_CIRCLE, "area_size": 2.2,
+						"burn_stacks": 2}),
+				_art(["Fire", "Fire", "Fire"], "Inferno", [0.6], 1.8, 0.2, RED,
+						"Marks a 3 m circle that explodes 3 s later (enemies can walk out): her biggest area hit; Burn x3",
+						{"reach": 5.0, "burn_stacks": 3,
+						"delayed_blast": {"seconds": 3.0, "radius": 3.0, "hit": 6.0}}),
+				# -- Ice --
+				_art(["Ice", "Ice"], "Blizzard", [2.6], 1.5, 0.18, BLUE, "Wide circle, chills everyone hit",
+						{"area": Area.TARGET_CIRCLE, "area_size": 3.0, "chill": true}),
+				_art(["Ice", "Ice", "Ice"], "Ice Spear", [3.6], 1.8, 0.2, Color(0.55, 0.85, 1.0),
+						"Freezes it 3 s and pushes its turn back; bosses only lose turn time (less each time)",
+						{"reach": 5.0, "deep_freeze": 3.0, "turn_push": 15.0}),
+				# -- Lightning --
+				_art(["Lightning", "Lightning"], "Chain Lightning", [2.4], 1.0, 0.16, GOLD, "Jumps to 2 more enemies within 5 m; interrupts each",
+						{"reach": 5.0, "chain": 2, "chain_range": 5.0, "chain_share": 0.75}),
+				_art(["Lightning", "Lightning", "Lightning"], "Thunder", [0.9, 0.9, 2.0], 1.8, 0.16, GOLD,
+						"3 strikes; the last stuns (bosses: a big Stagger fill instead)",
+						{"reach": 5.0, "times": [0.3, 0.6, 1.0], "no_inherit": ["stun"],
+						"last_hit": {"stun": true, "stun_not_bosses": true, "stagger_mult": 3.0}}),
+				# -- Energy --
+				_art(["Energy Blast", "Energy Blast"], "Arcane Barrage", [1.5], 1.4, 0.18, Color(0.75, 0.55, 1.0),
+						"Code, then tap freely: each tap +12% (up to 12); pushes 4 m",
+						{"reach": 5.0, "taps": 12, "surge": 0.12, "tap_start": 0.08, "knockback": 4.0}),
+				_art(["Energy Blast", "Energy Blast", "Energy Blast"], "Arcane Overload", [2.8], 1.9, 0.2, VIOLET,
+						"Code, then tap freely (+12%, up to 15): her biggest single hit, pushes 8 m, 20 AP back",
+						{"reach": 5.0, "taps": 15, "surge": 0.12, "tap_start": 0.08, "knockback": 8.0,
+						"ap_refund": 20.0}),
+				# -- Energy + an element (no push) --
+				_art(["Fire", "Energy Blast"], "Flare", [1.8], 1.2, 0.18, ORANGE,
+						"Detonates every burning enemy: all its Burn left lands at once",
+						{"reach": 5.0, "detonate_burns": true, "no_inherit": ["knockback", "burn", "burn_turns"]}),
+				_art(["Ice", "Energy Blast"], "Shatter", [2.0], 1.2, 0.18, Color(0.55, 0.85, 1.0),
+						"Frozen: 2.5x and the Freeze ends; Chilled: 1.6x; otherwise 0.6x",
+						{"reach": 5.0, "shatter": [2.5, 1.6, 0.6], "no_inherit": ["knockback"]}),
+				_art(["Lightning", "Energy Blast"], "Overcharge", [2.0], 1.0, 0.16, GOLD,
+						"Interrupts even a boss that just shrugged one off (not its unstoppable moves); 3x Stagger fill",
+						{"reach": 5.0, "ignore_cancel_lock": true, "stagger_mult": 3.0, "no_inherit": ["knockback"]}),
+				# -- Two elements --
+				_art(["Fire", "Ice"], "Steam Burst", [2.8], 1.3, 0.18, Color(0.85, 0.85, 0.95), "Focused blast (1.2 m), breaks Defense; burns and chills",
+						{"area": Area.TARGET_CIRCLE, "area_size": 1.2, "effect": Effect.BREAK}),
+				_art(["Fire", "Lightning"], "Plasma", [2.6], 1.1, 0.16, Color(1.0, 0.5, 0.75), "Burns it and interrupts its attack",
+						{"reach": 5.0}),
+				_art(["Ice", "Lightning"], "Static Frost", [2.2], 1.0, 0.16, Color(0.6, 0.9, 1.0),
+						"Chills and interrupts; already Chilled: it freezes (bosses only lose turn time)",
+						{"reach": 5.0, "freeze_if_chilled": {"deep_freeze": 2.0, "turn_push": 10.0}}),
+				# -- Three elements --
+				_art(["Fire", "Ice", "Lightning"], "Tri-Disaster", [3.6], 1.6, 0.18, Color(1.0, 0.75, 0.5),
+						"Burn, Chill and an interrupt on everyone within 2.5 m of the target",
+						{"reach": 5.0, "area": Area.TARGET_CIRCLE, "area_size": 2.5}),
+				_art(["Fire", "Ice", "Energy Blast"], "Thermal Shock", [5.0], 1.5, 0.18, Color(0.9, 0.8, 1.0),
+						"Breaks Defense: the heavy Defense-breaker (Steam Burst is the cheap one)",
+						{"reach": 5.0, "effect": Effect.BREAK, "no_inherit": ["knockback"]}),
+				_art(["Fire", "Lightning", "Energy Blast"], "Nova", [3.4], 1.4, 0.18, Color(1.0, 0.6, 0.9),
+						"Blasts everything within 4 m of the Mage, burns and interrupts it all: her escape",
+						{"area": Area.SELF_CIRCLE, "area_size": 4.0, "reach": 4.0, "no_inherit": ["knockback"]}),
+				_art(["Ice", "Lightning", "Energy Blast"], "Stasis", [1.0], 1.4, 0.18, Color(0.7, 0.75, 1.0),
+						"Every enemy's timeline stops 3 s; bosses only lose turn time (less each time)",
+						{"area": Area.ALL, "reach": UNLIMITED, "stasis": 3.0, "turn_push": 8.0, "no_inherit": ["knockback", "stun"]}),
+				# -- All four --
+				_art(["Fire", "Ice", "Lightning", "Energy Blast"], "Meteor", [6.0], 1.9, 0.2, ORANGE,
 						"Finisher: hits every enemy, breaks Defense, Smash type",
 						{"area": Area.ALL, "reach": UNLIMITED, "effect": Effect.BREAK, "kind": Skills.Kind.SMASH,
-						"timing": TimingType.TAP, "taps": 8, "finisher": true}),
+						"finisher": true, "no_inherit": ["knockback", "stun"]}),
 			]
 		"assassin":
 			# Execute is never part of a recipe: its Mark discount stays its own.
@@ -320,7 +392,23 @@ static func arts(class_id: String) -> Array[Dictionary]:
 						"recipe_text": "Heavy Punch + Heavy Kick + Headbutt"}),
 			]
 	_inherit(list, attacks(class_id))
+	if class_id == "mage":
+		for art in list:
+			art["any_order"] = true  # the elements combine in any order
+			# The code shown in the list follows the recipe; on the bar it
+			# follows the bar's order (see battle_arena._parse_combo).
+			art["timing"] = TimingType.CODE
+			art["code"] = spell_code(art["recipe"])
 	return list
+
+
+## A Mage spell's code: one direction per element, in this order.
+static func spell_code(elements: Array) -> Array:
+	var code := []
+	for element in elements:
+		if ELEMENT_DIRS.has(element):
+			code.append(ELEMENT_DIRS[element])
+	return code
 
 
 ## What an Art takes on from the moves it's made of: their on-hit effects.
@@ -336,16 +424,17 @@ static func _inherit(list: Array[Dictionary], basics: Array[Dictionary]) -> void
 	for move in basics:
 		by_name[move["name"]] = move
 	for art in list:
+		var skip: Array = art.get("no_inherit", [])
 		for part_name in art["recipe"]:
 			var part: Dictionary = by_name.get(part_name, {})
 			if part.is_empty():
 				continue
 			art["effect"] = maxi(int(art.get("effect", Effect.NONE)), int(part.get("effect", Effect.NONE)))
 			for key in INHERITED_MAX:
-				if part.has(key):
+				if part.has(key) and not skip.has(key):
 					art[key] = maxf(float(art.get(key, 0.0)), float(part[key]))
 			for key in INHERITED_FLAGS:
-				if part.get(key, false):
+				if part.get(key, false) and not skip.has(key):
 					art[key] = true
 			if float(part.get("barrier", 0.0)) > float(art.get("barrier", 0.0)):
 				art["barrier"] = part["barrier"]
@@ -378,14 +467,19 @@ static func skills(class_id: String) -> Array[Dictionary]:
 		"archer":
 			list = [
 				_skill("Jump", 30, Target.POINT, TEAL, "Leap to a spot you choose", {"range": 8.0}),
-				_skill("Riposte", 25, Target.SELF, GOLD, "Counter stance for 4 s; hop 3 m back after", {"seconds": 4.0}),
+				# Siphon Shot (replaced Riposte): she keeps herself up by hitting.
+				_skill("Siphon Shot", 30, Target.ENEMY, GREEN, "Your hits on it heal you 3% (Perfect 6%), 3 turns",
+						{"range": 6.0, "turns": 3, "siphon": 0.03}),
 				_skill("True Sight", 40, Target.NONE, BLUE, "Allies' reach +25%; see enemy attacks early, 3 turns", {"turns": 3}),
 				_skill("Agility", 60, Target.SELF, PURPLE, "+1 half-strength hit on every attack, 5 turns", {"turns": 5}),
 			]
 		"mage":
 			list = [
 				_skill("Arcane Barrier", 30, Target.SELF, BLUE, "Ignore the next hit"),
-				_skill("Concentrate", 40, Target.NONE, GOLD, "AP recharge +100% for 10 s", {"seconds": 10.0}),
+				# Enchant (replaces Concentrate): one element on every ally but her,
+				# picked with a direction like her spell codes (choose_element).
+				_skill("Enchant", 30, Target.NONE, GOLD, "Pick an element (W/S/A/D): every ally but her, 2 of her turns",
+						{"choose_element": true, "turns": 2}),
 				_skill("Teleport", 30, Target.POINT, PURPLE, "Blink to a spot within 8 m, or next to any ally (Tab)",
 						{"range": 8.0, "ally_snap": true}),
 			]
@@ -395,6 +489,10 @@ static func skills(class_id: String) -> Array[Dictionary]:
 				_skill("Shielding", 40, Target.NONE, BLUE, "Shield of 15% max HP on all allies", {"shield": 0.15}),
 				_skill("Haste", 40, Target.ALLY, TEAL, "Turns come 25% sooner, run +20%; 2 of their turns", {"turns": 2}),
 				_skill("Full Cure", 60, Target.ALLY, GOLD, "Fully heal an ally", {"heal": 1.0}),
+				# Lifeline: an escape that heals. She dashes out of whatever she
+				# stands in, to an ally within 8 m, and both heal.
+				_skill("Lifeline", 30, Target.OTHER_ALLY, GREEN, "Dash to an ally within 8 m; both heal 15% of max HP",
+						{"range": 8.0, "heal": 0.15}),
 			]
 		"assassin":
 			list = [

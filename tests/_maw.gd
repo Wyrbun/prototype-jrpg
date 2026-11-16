@@ -43,7 +43,7 @@ func save(result_ok: bool):
 	# resolve the pending edge save: Parry in the gold window or not at all
 	if a._edge_save.is_empty(): return false
 	if result_ok:
-		a._edge_save["time_left"] = a.parry_window * 0.5; a._edge_save_press()
+		a._edge_save["time_left"] = a.edge_save_window * 0.5; a._edge_save_press()
 	a._update_edge_save(2.0)
 	return true
 func _process(d):
@@ -84,6 +84,29 @@ func _process(d):
 	reset(); k.global_position = Vector3(0, 0, 2); ar.global_position = Vector3(-4.4, 0, -1.5)
 	cast(g, "Gale Lanes"); strike(g)
 	check(k.hp < k.max_hp and ar.hp == ar.max_hp, "Gale Lanes: middle lane hits (K %d), the gap doesn't (A %d)" % [k.hp, ar.hp])
+	# Under half HP: Double Gale Lanes hits the gaps first, then the lanes
+	reset(); k.global_position = Vector3(0, 0, 2); ar.global_position = Vector3(-4.4, 0, -1.5)
+	cast(g, "Double Gale Lanes"); strike(g)
+	check(k.hp == k.max_hp and ar.hp < ar.max_hp, "Double Gale Lanes: first the gaps (A hit %d), the middle lane safe (K %d)" % [ar.hp, k.hp])
+	check(g.loaded_def != null and g.loaded_def.skill_name == "Gale Lanes" and g.has_meta("follow_up_at"), "  then Gale Lanes on the 3 lanes that were safe")
+	check(absf(a._follow_up_seconds(g) - 2.5) < 0.05, "  2.5 s later (%.2f s, even on a fast boss)" % a._follow_up_seconds(g))
+	var hp_k = k.hp
+	strike(g)
+	check(k.hp < hp_k, "  the second wave hits the middle lane (K %d)" % k.hp)
+	var lanes1 = skill(g, "Gale Lanes"); var lanes2 = skill(g, "Double Gale Lanes")
+	check(lanes1.allowed_at_hp(0.6) and not lanes1.allowed_at_hp(0.4), "Gale Lanes: only at half HP or more")
+	check(lanes2.allowed_at_hp(0.4) and not lanes2.allowed_at_hp(0.6), "Double Gale Lanes: only under half HP")
+	check(skill(g, "Gale Burst").allowed_at_hp(0.4) and not skill(g, "Gale Burst").allowed_at_hp(0.6) \
+			and skill(g, "Gale Draw").allowed_at_hp(0.4) and not skill(g, "Gale Draw").allowed_at_hp(0.6), "Gale Burst / Gale Draw (push or pull + lanes): only under half HP")
+	g.forced_skill = null
+	g.hp = int(g.max_hp * 0.4)
+	var picked := {}
+	for i in 200: picked[a._choose_enemy_skill(g).skill_name] = true
+	check(not picked.has("Gale Lanes") and picked.has("Double Gale Lanes"), "  under half HP it never picks plain Gale Lanes")
+	g.hp = g.max_hp
+	for i in 200: picked[a._choose_enemy_skill(g).skill_name] = true
+	reset(); cast(g, "Gale Draw"); strike(g)
+	check(g.loaded_def != null and g.loaded_def.skill_name == "Double Gale Lanes", "Gale Draw: Inhale, then Double Gale Lanes")
 	# Breaker: hugging the wall is safe
 	reset(); k.global_position = Vector3(-7, 0, -5); ar.global_position = Vector3(-7, 0, 2)
 	cast(g, "Breaker"); strike(g)
@@ -114,12 +137,12 @@ func _process(d):
 	reset(); ar.global_position = Vector3(3, 0, 0); a._step_behind(ar, g)
 	check(ar.global_position.z > -7.0 + 0.1 and absf(ar.global_position.x) > 3.9, "Shadowstep: appears at its side (%s)" % ar.global_position)
 	# --- Stronger Maw ---
-	# Gale Burst: Exhale, then Gale Lanes 1 s later
+	# Gale Burst: Exhale, then Double Gale Lanes 1 s later
 	reset(); k.global_position = Vector3(0, 0, -2)
 	cast(g, "Gale Burst"); strike(g)
-	check(g.loaded_def != null and g.loaded_def.skill_name == "Gale Lanes" and g.has_meta("follow_up_at"), "Gale Burst: Gale Lanes comes next")
+	check(g.loaded_def != null and g.loaded_def.skill_name == "Double Gale Lanes" and g.has_meta("follow_up_at"), "Gale Burst: Double Gale Lanes comes next")
 	var fu = float(g.get_meta("follow_up_at"))
-	check(fu >= a.cast_zone_start and (100.0 - fu) / (g.speed * a.time_scale * a.battle_speed) <= 1.0 + 0.01, "1 s later at most (closer for a faster boss; at %.1f)" % fu)
+	check(fu >= a.cast_zone_start and absf(a._follow_up_seconds(g) - 1.0) < 0.05, "1 s later (%.2f s)" % a._follow_up_seconds(g))
 	# Breakable rocks
 	reset(); ar.global_position = Vector3(4.4, 0, 2.5)
 	var rock = null

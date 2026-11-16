@@ -113,10 +113,10 @@ func _process(d):
 	var hp0 = k.hp
 	for i in 120: a._tick_hazards(1.0 / 60.0)
 	check(k.hp < hp0, "standing in the trail burns (%d -> %d)" % [hp0, k.hp])
-	a._start_turn(dr); a._end_turn(); a._start_turn(dr); a._end_turn()
-	check(a._hazards.size() == 1, "trail still burning after 2 Dragon turns")
+	for i in 4: a._start_turn(dr); a._end_turn()
+	check(a._hazards.size() == 1, "trail still burning after 4 Dragon turns")
 	a._start_turn(dr); a._end_turn()
-	check(a._hazards.is_empty(), "trail gone at the 3rd Dragon turn")
+	check(a._hazards.is_empty(), "trail gone at the 5th Dragon turn")
 	# Burning Spike: stacked -> 1 HP, spread -> damage
 	reset(); k.global_position = Vector3(0, 0, 3); ar.global_position = Vector3(1.0, 0, 3)
 	cast(dr, "Burning Spike", false)
@@ -126,7 +126,7 @@ func _process(d):
 	check(spheres.size() == 4 and spheres[0].get_parent() is Combatant, "spread telegraph: red sphere over each head")
 	strike(dr)
 	check(k.hp == 1 and ar.hp == 1, "stacked Knight & Archer drop to 1 HP (K %d, A %d)" % [k.hp, ar.hp])
-	check(mg.hp == 100 - 26, "Mage alone takes normal 26 (%d)" % mg.hp)
+	check(mg.hp == 100 - 20, "Mage alone takes normal 20 (%d)" % mg.hp)
 	# Living Armor combo: 3 hits + launch
 	reset(); la.global_position = Vector3(0, 0, 0); la.look_at(Vector3(0, 0, 3)); k.global_position = Vector3(0, 0, 1.9)
 	cast(la, "Combo"); var p0 = k.global_position; strike(la)

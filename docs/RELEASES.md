@@ -24,6 +24,26 @@ of every play-test report.
 
 ---
 
+## 0.8.0: Mage rework, Command List, smarter allies
+
+- **Mage rework:** four elements you type as codes while the spell casts: Fire (W), Ice (S), Lightning (A), Energy (D). Any two or three on the bar, in any order, make one of 19 Arts. Ice makes Fire cheaper. Her spells reach 5 m
+- **Focus:** the Mage's bar starts at 50 AP. Standing still builds Focus (+10 AP of bar each, up to 5) and makes the party's AP refill 50% faster. Walking loses it, attacking spends it
+- **Enchant** (Mage): pick an element with a direction and every other ally carries it for 2 of her turns: Fire burns, Ice chills, Lightning fills Stagger bars faster, Energy pushes
+- **Attack effects for everyone:** every class's attacks and Arts have effects timed to the bar, with extra flair on a Perfect. Enemy hits, Parries, Defends, Staggers, heals and shields show too
+- **Timing ring on the target:** each timed hit draws a ring that closes in on the enemy, with a gold band for the timing box, so you can watch the fight instead of the bar
+- **Combos fast-forward** once there's nothing left to press
+- **Command List** (pause menu): every character's Attacks, found Arts and Abilities, with a live preview of each. **Practice** any attack at real battle size and speed, and toggle a **Counter drill** (Tab) to practise counter-parries
+- **Archer: Siphon Shot** replaces Riposte: Siphon an enemy, and her hits on it heal her
+- **Cleric: Lifeline** (new): dash to an ally within 8 m, out of whatever you stood in, and both of you heal 15% of max HP
+- **Gale Maw review:** Deep Breath, a black mouth while it inhales (knock a Gust Sprite into it to make it choke), pulls in teal, a preview of a combo's second half, and the floor each rock shelters drawn clear. Maw Bite covers its whole front out to 8 m and is the only move you can Parry. Under half HP: Double Gale Lanes, Gale Burst and Gale Draw
+- **Gust Sprites** are Lightweight: every hit knocks them back, walls bounce them, and a drop finishes them. They can't be killed otherwise, stand still, and explode after 25 s
+- **Dragon Hatchling review:** hotter fire that lasts 5 turns (3 lines at most), a new Scorch and Breathe combo, and Wings of Fire at half HP: four lines of fire across the arena that stay. Burning Spike hits for less, comes up less often and is easier to break, but its fire lasts longer below half HP
+- **Living Armor:** Shadowflare is a phase at 50% and 20% HP. Once its sprites are hit or it reaches full size, it waits long enough for anyone inside to walk out. Doom Gaze sits still on the arena and always drops a rock to hide behind, even in a corner
+- **Stone Golem:** its Smashes can be Defended (still no Parry), and Crush turns faster at the end
+- **Tighter Parry timing:** the gold window is 0.15 s
+- **Party AI:** allies dodge revealed attacks much sooner, don't walk into grey areas, keep away from ledges while a push is coming, split up to hit Shadowflare's sprites, and the Mage and Cleric keep off a boss's front. The Cleric heals sooner and puts heals first
+- **Fixes:** an Enchant (or any effect) no longer lasts forever when its caster goes down. The tutorial's Counter lesson no longer gets stuck if you attack into the stance. AI allies heading in to attack hide from Doom Gaze first. The AP bar no longer runs over the enemy's name when it's very long
+
 ## 0.7.0: Party AI, enemies that land their hits
 
 - **Party AI (new, optional):** turn it on in the pause menu and everyone you aren't steering plays their own turns instantly: they attack with the Arts you've found (and the ones you haven't, without revealing them), heal, shield and buff, and leave enough AP for your turns. Their hits deal 80% damage. Tab still takes any of them over; the party list marks them **AUTO**

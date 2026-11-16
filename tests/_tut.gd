@@ -10,6 +10,7 @@ var q: Array = []
 var qt := 0.0
 var log_lines: Array = []
 var backed_out := false
+var counter_attacked := false  # COUNTER_ATTACK=1: Attack once in the Counter lesson first
 func _initialize():
 	ArtsBook.reset()
 	BattleArena.tutorial_mode = true
@@ -89,6 +90,8 @@ func _process(d):
 				if assassin_goal and (who.class_id != "assassin" or g.begins_with("Auto-parry")): pick_command(2)
 				elif assassin_goal and g.begins_with("Put 4"): pick_command(1 if a.battle_menu.command_enabled[1] else 2)
 				elif assassin_goal: pick_command(0) if a.battle_menu.command_enabled[0] else pick_command(2)
+				elif g.begins_with("Choose Wait") and OS.get_environment("COUNTER_ATTACK") == "1" and not counter_attacked and a.battle_menu.command_enabled[0]:
+					counter_attacked = true; print("  (Attack into the Counter stance)"); pick_command(0)
 				elif g.begins_with("Choose Wait") : pick_command(2)
 				elif not a.battle_menu.command_enabled[1] and (g.begins_with("Use an Ability") or g.begins_with("Use one of the Cleric")): pick_command(2)
 				elif g.begins_with("Use an Ability") and who.class_id == "knight": pick_command(1)

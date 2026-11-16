@@ -17,6 +17,9 @@ var progress_saved := false
 ## A line under the title.
 var message := ""
 var _style: StyleBoxFlat
+## The Command List (set up by the fight) and who's in the party.
+var command_list: CommandList = null
+var party: Array = []
 
 
 func _ready() -> void:
@@ -32,7 +35,7 @@ func _ready() -> void:
 
 
 func items() -> Array:
-	return ["Resume", "Restart fight", "Quit to title", _details_item(), _timing_item(), _party_ai_item()]
+	return ["Resume", "Command List", "Restart fight", "Quit to title", _details_item(), _timing_item(), _party_ai_item()]
 
 
 ## Party AI: allies you aren't steering play their own turns.
@@ -54,6 +57,8 @@ func _note(item: String) -> String:
 	match item:
 		"Resume":
 			return "Back to the fight"
+		"Command List":
+			return "Every character's Attacks, Abilities and found Arts, with a preview"
 		"Restart fight":
 			return "Start this fight over"
 		"Quit to title":
@@ -115,6 +120,10 @@ func _select() -> void:
 	match items()[index]:
 		"Resume":
 			close()
+		"Command List":
+			if command_list:
+				visible = false  # the fight stays paused underneath
+				command_list.open(party)
 		"Restart fight":
 			get_tree().paused = false
 			restart_requested.emit()

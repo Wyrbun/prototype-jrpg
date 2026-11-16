@@ -4,7 +4,7 @@ var a
 var t := 0.0
 var step := 0
 var fails := 0
-var cases := [["monk", ["Punch", "Punch", "Kick", "Heavy Kick"]], ["monk", ["Kick", "Kick", "Kick", "Heavy Kick"]], ["monk", ["Heavy Punch", "Kick", "Kick", "Kick", "Heavy Kick"]], ["knight", ["Thrust", "Thrust", "Slash"]], ["archer", ["Shot", "Shot", "Shot"]], ["mage", ["Fire", "Frost"]], ["cleric", ["Bash", "Bash"]], ["assassin", ["Stab", "Stab"]]]
+var cases := [["monk", ["Punch", "Punch", "Kick", "Heavy Kick"]], ["monk", ["Kick", "Kick", "Kick", "Heavy Kick"]], ["monk", ["Heavy Punch", "Kick", "Kick", "Kick", "Heavy Kick"]], ["knight", ["Thrust", "Thrust", "Slash"]], ["archer", ["Shot", "Shot", "Shot"]], ["mage", ["Fire", "Ice"]], ["cleric", ["Bash", "Bash"]], ["assassin", ["Stab", "Stab"]]]
 var ci := 0
 func check(c, l):
 	print(("OK   " if c else "FAIL ") + l)
@@ -64,7 +64,7 @@ func _process(d):
 		a._exec_hits_done = 0
 		a._judge_timing()
 		var ok = a._exec_holding or a._exec_timings[h] == 1 or a._exec_taps > 0
-		if h < e["hits"].size() and int(e["timing"]) == 2 and a._special_hit(e, h): ok = true
+		if h < e["hits"].size() and int(e["timing"]) in [2, 3] and a._special_hit(e, h): ok = true  # Tap / spell code: no box
 		check(ok and a._menu_mode == BattleMenu.Mode.EXECUTING, "  press at the box's left edge counts")
 		a._stop_combo()
 		a._menu_mode = BattleMenu.Mode.HIDDEN

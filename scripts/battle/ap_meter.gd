@@ -39,10 +39,11 @@ var flow_speed := 1.0
 var ghost_cost := 0.0
 ## Someone stands where a strike would cost max AP: the top segment pulses red.
 var at_risk := false
-## Seconds of Concentrate left (AP recharges twice as fast): while above 0,
+## Above 0 while the Mage stands still (Focus: AP refills faster): while above 0,
 ## bright chevrons race along the fill, the frame pulses violet, and an
-## "x2" tag with the time left sits above the bar's right end.
+## boost_text tag sits above the bar's right end.
 var boost_left := 0.0
+var boost_text := "FOCUS +50% AP"
 ## Shown when the next drop in max AP shatters segments.
 var loss_text := "MAX AP LOST"
 
@@ -152,11 +153,26 @@ func _update_tier_effects(delta: float) -> void:
 
 # --- Layout -------------------------------------------------------------------
 
+## The free strip between the party and enemy HP panels (local x; set by
+## the arena each frame from what they drew). Negative: not set.
+var limit_left := -1.0
+var limit_right := -1.0
+const PANEL_GAP := 16.0
+
+
+## The middle of the bar: the screen's, unless that would run into a panel.
+func _center_x(width: float) -> float:
+	var center := size.x / 2.0
+	if limit_left >= 0.0 and limit_right > limit_left:
+		center = clampf(center, limit_left + PANEL_GAP + width / 2.0, limit_right - PANEL_GAP - width / 2.0)
+	return center
+
+
 ## The whole bar (up to the ceiling), centered in this control.
 func _bar_rect() -> Rect2:
 	var width := ceiling * _px()
 	var shake := Vector2(sin(_time * 70.0) * 4.0 * _shake, 0.0)
-	return Rect2(Vector2((size.x - width) / 2.0, size.y - BAR_HEIGHT - 4.0) + shake, Vector2(width, BAR_HEIGHT))
+	return Rect2(Vector2(_center_x(width) - width / 2.0, size.y - BAR_HEIGHT - 4.0) + shake, Vector2(width, BAR_HEIGHT))
 
 
 ## Pixels per AP: 1.25, shrinking when the full bar would get too wide
@@ -165,6 +181,9 @@ func _px() -> float:
 	# Never wider than the gap between the party and enemy HP panels (each
 	# up to ~440 px from its edge), so big parties don't run into them.
 	var room := clampf(size.x - 880.0, 220.0, 460.0)
+	if limit_left >= 0.0 and limit_right > limit_left:
+		# What the panels actually drew (long enemy names, status tags).
+		room = minf(room, maxf(limit_right - limit_left - PANEL_GAP * 2.0, 160.0))
 	return minf(MAX_PX_PER_AP, minf(size.x * 0.36, room) / maxf(ceiling, 1.0))
 
 
@@ -287,7 +306,7 @@ func _draw() -> void:
 		draw_rect(Rect2(r0, bar.position.y - 2.0, r1 - r0, bar.size.y + 4.0), Color(1.0, 0.2, 0.1, 0.6 + 0.4 * pulse), false, 2.0)
 		_text("!", Vector2((r0 + r1) / 2.0, bar.position.y - 6.0), 18, Color(1.0, 0.3, 0.2, 0.6 + 0.4 * pulse), true)
 
-	# Concentrate: chevrons racing right over the fill and a pulsing frame.
+	# Focus (the Mage standing still): chevrons racing right over the fill and a pulsing frame.
 	if boost_left > 0.0:
 		var violet := Color(0.75, 0.55, 1.0)
 		var pulse := 0.5 + 0.5 * sin(_time * 6.0)
@@ -305,7 +324,7 @@ func _draw() -> void:
 						Color(1, 1, 1, 0.55), 2.5)
 			x += spacing
 		draw_rect(bar.grow(3.0 + 2.0 * pulse), Color(violet, 0.35 + 0.4 * pulse), false, 2.0)
-		var tag := "x2 AP  %ds" % ceili(boost_left)
+		var tag := boost_text
 		_text(tag, Vector2(bar.end.x - 34.0, bar.position.y - 8.0), 15, Color(violet.lightened(0.3), 0.85 + 0.15 * pulse), true)
 
 	# Segment dividers and the outer frame.
@@ -337,7 +356,7 @@ func _draw() -> void:
 	# Label: bigger and gold at the top tier.
 	var label := "Party AP  %d / %d" % [floori(value), int(max_value)]
 	var big := t >= 5
-	_text(label, Vector2(size.x / 2.0, bar.position.y + bar.size.y * 0.5 + (8.0 if big else 6.0)),
+	_text(label, Vector2(bar.get_center().x, bar.position.y + bar.size.y * 0.5 + (8.0 if big else 6.0)),
 			22 if big else 17, Color(1.0, 0.85, 0.35) if big else Color.WHITE, true)
 
 	# "+5" / "+30" popups float up and fade.

@@ -39,6 +39,7 @@ func _process(d):
 	g.loaded_def = skill(g, "Right Golem Smash"); g.loaded_skill = g.loaded_def.kind
 	a._begin_strike(g, mods([k]), false)
 	check(a._strike.rings.is_empty(), "Golem Smash (can't be parried): no ring, even on the Knight")
+	check(a._strike.markers.size() == 1 and (a._strike.markers[0].material_override as StandardMaterial3D).albedo_color.b > 0.9, "  a blue mark: it can be Defended")
 	a._resolve_strike()
 	print("FAILS: %d" % fails)
 	return true

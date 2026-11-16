@@ -113,8 +113,11 @@ var max_ap_limit_bonus := 0.0
 @export var ap_regen_max_multiplier: float = 2.0
 
 @export_group("Reactions")
-## How long before impact a Parry still counts, in seconds.
-@export var parry_window: float = 0.25
+## How long before impact a Parry still counts, in seconds (the ring is
+## gold for this long).
+@export var parry_window: float = 0.15
+## The same for an edge save (Off-Balance at a ledge), kept at the old 0.25.
+@export var edge_save_window: float = 0.25
 ## How far back on the timeline a missed Parry pushes the fighter.
 @export var parry_miss_push: float = 30.0
 ## How far back on the timeline a successful Parry knocks the enemy.
@@ -182,10 +185,10 @@ var max_ap_limit_bonus := 0.0
 ## AI allies only start dodging an enemy's area this many seconds after its
 ## skill is revealed (a human-like reaction), not as soon as the grey area
 ## shows up. Falling rocks, hazards and blasts are still avoided at once.
-@export var ally_react_seconds: float = 0.4
-## The same for strikes that can't be Parried or Defended (Golem Smash):
-## dodging is the only answer, so they react sooner.
-@export var ally_react_unanswerable_seconds: float = 0.2
+@export var ally_react_seconds: float = 0.1
+## The same for strikes that can't be Parried (Golem Smash): dodging is
+## the real answer (Defend only softens it), so they react sooner.
+@export var ally_react_unanswerable_seconds: float = 0.05
 ## Boss threat: a boss locks onto whoever hurt it most lately, not just the
 ## nearest. Each member scores its share of the threat (0-1) minus
 ## distance / threat_distance_scale; the best score is the target.
@@ -204,6 +207,15 @@ var max_ap_limit_bonus := 0.0
 @export_range(0.3, 1.0) var ally_range_share: float = 0.8
 ## Extra space allies keep from dangerous enemy areas, in meters.
 @export var ally_danger_margin: float = 0.3
+## AI allies keep at least this far from a lethal edge or hole; while an
+## enemy prepares a push, its push distance plus ally_ledge_margin.
+@export var ally_ledge_min: float = 1.5
+@export var ally_ledge_margin: float = 1.0
+## Mage and Cleric (fragile) stand this far off a boss's front, in degrees.
+@export var fragile_flank_degrees: float = 70.0
+## Switches for the AI positioning rules (tuning and tests).
+@export var ally_avoid_grey := true
+@export var ally_fragile_flank := true
 ## How quickly the camera catches up with the fighter you control.
 @export var camera_follow_speed: float = 4.0
 ## How far the camera sits from the action, in meters.
@@ -246,6 +258,8 @@ class Strike:
 	var future_rings: Array[MeshInstance3D] = []
 	## Wind-up of each later hit (shorter than the first).
 	var follow_windup := 0.55
+	## The Parry press also Defends whoever can't Parry but can block (Cleric).
+	var parry_defends := false
 
 
 ## The round being played, kept across scene reloads (0-based; -1 = not
@@ -308,8 +322,24 @@ var _skills: Array[Dictionary] = []
 ## What each combo slot will do (see BattleMenu.plan); also holds "move",
 ## "hits" and "duration" for playback.
 var _plan: Array[Dictionary] = []
-## Seconds of Concentrate left (doubles AP recharge).
-var _concentrate_left := 0.0
+## True while a Mage stands still (Focus): AP refills faster.
+var _focus_boost := false
+const ENCHANTS := ["fire", "ice", "lightning", "energy"]
+## Enchant's element menu: the skill waiting for its element.
+var _element_skill: Dictionary = {}
+## Direction -> element, as her spell codes (Fire up, Ice down, ...).
+const ELEMENT_BY_DIR := {"up": "fire", "down": "ice", "left": "lightning", "right": "energy"}
+## Playhead speed right now: 1, or exec_fast_forward once nothing is left
+## to press.
+var _exec_speed := 1.0
+## Timing rings already launched this combo ("slot:hit" -> its node).
+var _exec_rings: Dictionary = {}
+## Attack effects: which hits of the playing block have started their
+## approach (a fireball in flight...), so they arrive as the hit lands.
+var _exec_launched: Dictionary = {}
+## Mage spell codes: how many arrows of the current code are in.
+var _exec_code := 0
+const CODE_KEYS := {"up": "move_forward", "down": "move_back", "left": "move_left", "right": "move_right"}
 ## Tab between turns: a tap steers the next party member; holding it for
 ## steer_hold_seconds stops time and opens the picker (SteerPicker).
 @export var steer_hold_seconds: float = 0.3
@@ -326,6 +356,8 @@ var _target_index := 0
 var _target_marker: MeshInstance3D = null
 ## Lingering hazards (fire trails): {"area", "owner", "turns", "dps", "acc"}.
 var _hazards: Array[Dictionary] = []
+## Inferno's marked circles waiting to explode: {pos, radius, left, attacker, move, ring}.
+var _blasts: Array[Dictionary] = []
 ## Ceiling Burst circles still to land: {"area", "owner", "time_left",
 ## "damage", "warning", "ring"}. They tick in world time (paused on turns).
 var _falls: Array[Dictionary] = []
@@ -402,6 +434,48 @@ static var party_ai_override := -1  # same, for Party AI (tests)
 ## AI allies' hits deal this share of a normal (untimed) hit, so Party AI
 ## doesn't turn into an easy mode.
 @export var ai_damage_mult: float = 0.8
+## Mage's Ice discount on Fire: per Ice on the bar before it (or in the same
+## Art), up to the max; an Ice last turn adds the carry; never past the cap.
+## A growing circle that stops growing (contained: Shadowflare's sprites
+## all hit; or grown to full size) gives anyone inside time to run out
+## before it strikes: its radius at the slowest party member's walking
+## speed, plus this many seconds (battle time) to react.
+@export var flare_run_out_extra: float = 0.8
+@export var ice_discount_per: float = 0.2
+@export var ice_discount_max: float = 0.4
+@export var ice_discount_carry: float = 0.2
+@export var ice_discount_cap: float = 0.5
+## Lightweight enemies (Gust Sprites): the least push any hit gives them
+## (before their knockback_taken).
+@export var lightweight_push: float = 1.5
+## A Gust Sprite knocked into a wall boss's open mouth (while it pulls): its
+## Detonate goes off inside, this many times the blast's damage, and the
+## boss is Staggered. choke_reach: meters past its body that still count.
+@export var choke_damage_mult: float = 3.0
+@export var choke_reach: float = 0.6
+## Timing rings on the enemy start this long before each press hit, and
+## close in at a steady speed (so a late start begins smaller).
+@export var timing_ring_lead: float = 0.9
+## Once a combo has nothing left to press (every timing done or past), the
+## rest of it plays this many times faster.
+@export var exec_fast_forward: float = 5.0
+## Mage spell codes start this far into the block (a share of it).
+@export var code_start: float = 0.05
+## Mage Focus: a charge every focus_seconds standing still (battle time),
+## up to her focus_max; each adds focus_bar_per AP to her bar (combatant).
+@export var focus_seconds: float = 2.0
+## Walking this far costs one charge (teleports and pushes don't count).
+@export var focus_walk_meters: float = 2.0
+## While she stands still, the party's AP refills this much faster.
+@export var focus_ap_bonus: float = 0.5
+## Enchant: the light effects allies' hits carry.
+@export var enchant_burn: float = 0.2
+@export var enchant_stagger_mult: float = 1.5
+@export var enchant_push: float = 1.0
+## AI Cleric: Healing on the most hurt ally under this share of max HP, Full
+## Cure under ai_full_cure_below (was 0.55 / 0.3).
+@export var ai_heal_below: float = 0.7
+@export var ai_full_cure_below: float = 0.35
 ## True while an AI ally builds its combo: every Art merges, found or not
 ## (it never reveals the ones you haven't found).
 var _ai_building := false
@@ -587,6 +661,11 @@ func _ready() -> void:
 	steer_picker.party = party
 	pause_menu = PauseMenu.new()
 	$UI.add_child(pause_menu)
+	var command_list := CommandList.new()
+	command_list.arena = self
+	$UI.add_child(command_list)
+	pause_menu.command_list = command_list
+	command_list.closed.connect(func(): pause_menu.visible = true)
 	pause_menu.restart_requested.connect(func():
 		_save_playtest("Left early")
 		get_tree().reload_current_scene())
@@ -730,6 +809,12 @@ func _count(key: String) -> void:
 	stats[key] = int(stats.get(key, 0)) + 1
 
 
+## Adds an amount to a play-test count (HP healed, ...).
+func _count_amount(key: String, amount: int) -> void:
+	if amount > 0:
+		stats[key] = int(stats.get(key, 0)) + amount
+
+
 ## Adds a party member mid-fight (the tutorial's new arrivals), next to the
 ## party's starting spot.
 func add_party_member(scene: PackedScene) -> Combatant:
@@ -795,12 +880,12 @@ func _process(delta: float) -> void:
 		elif active == null:
 			_check_steer_hold()
 			var world_delta := delta * battle_speed
-			var concentrate := 2.0 if _concentrate_left > 0.0 else 1.0
-			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * concentrate * world_delta, current_max_ap)
-			_concentrate_left = maxf(_concentrate_left - world_delta, 0.0)
+			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * _focus_ap_mult() * world_delta, current_max_ap)
 			for member in party:
 				member.riposte_left = maxf(member.riposte_left - world_delta, 0.0)
 			_free_roam(delta, world_delta)
+			_tick_focus(world_delta)
+			_tick_fuses(world_delta)
 			_tick_hazards(world_delta)
 			_tick_falls(world_delta)
 			_tick_stances(world_delta)
@@ -816,6 +901,7 @@ func _process(delta: float) -> void:
 		# On a party turn the fighter is locked in place until a command is chosen.
 	_update_answer_tags()
 	_update_cast_areas()
+	_update_mouths()
 	_update_move_preview()
 	_update_timeline_targets()
 	_update_behind_cones()
@@ -840,6 +926,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _game_over:
 			get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")  # the fight is over anyway
 		else:
+			pause_menu.party = party.duplicate()
 			pause_menu.open()  # nothing is lost by accident: quitting is a menu choice
 		return
 	if tutorial != null and tutorial.wants_input(event):
@@ -1019,6 +1106,9 @@ func _start_turn(fighter: Combatant) -> void:
 func _turn_upkeep(fighter: Combatant) -> void:
 	if playtest:
 		playtest.turn(fighter)
+	# Mage: an Ice last turn makes this turn's Fire cheaper (this turn only).
+	fighter.set_meta("ice_carry", fighter.get_meta("ice_carry_next", false))
+	fighter.remove_meta("ice_carry_next")
 	# Effects cast by this fighter count down one of their turns.
 	var ended: PackedStringArray = []
 	for c in combatants:
@@ -1207,8 +1297,8 @@ func _ai_pick_target(fighter: Combatant) -> Combatant:
 	for enemy in _standing(enemies):
 		if enemy.stance == Skills.Kind.COUNTER:
 			continue
-		if enemy.damage_taken_share < 0.5 and not pushes:
-			continue
+		if enemy.damage_taken_share < 0.5 and not pushes and not enemy.lightweight:
+			continue  # (Lightweight ones: any hit pushes them)
 		if not _windup_on() and not _windup_reaches(fighter, enemy):
 			continue
 		choices.append(enemy)
@@ -1251,6 +1341,7 @@ func _ai_ability(fighter: Combatant) -> bool:
 		if enemy.skill_revealed and _loaded_offensive(enemy) and enemy.cast_target == fighter:
 			threatened = true
 	var pick := ""
+	var ai_element := ""  # Enchant's element
 	var target: Combatant = null
 	match fighter.class_id:
 		"cleric":
@@ -1258,10 +1349,14 @@ func _ai_ability(fighter: Combatant) -> bool:
 			for m in _standing(party):
 				if lowest == null or hurt.call(m) < hurt.call(lowest):
 					lowest = m
-			if lowest != null and hurt.call(lowest) < 0.3:
+			var lifeline := _ai_lifeline_target(fighter)
+			if lowest != null and hurt.call(lowest) < ai_full_cure_below:
 				pick = "Full Cure"
 				target = lowest
-			elif lowest != null and hurt.call(lowest) < 0.55:
+			elif lifeline != null:
+				pick = "Lifeline"  # caught in something: dash out to an ally, healing both
+				target = lifeline
+			elif lowest != null and hurt.call(lowest) < ai_heal_below:
 				pick = "Healing"
 				target = lowest
 			else:
@@ -1283,8 +1378,9 @@ func _ai_ability(fighter: Combatant) -> bool:
 		"mage":
 			if threatened and not fighter.statuses.has("arcane_barrier"):
 				pick = "Arcane Barrier"
-			elif _concentrate_left <= 0.0:
-				pick = "Concentrate"  # whenever it can afford it (and it isn't running)
+			elif not _enchant_running():
+				ai_element = _ai_enchant_pick()
+				pick = "Enchant" if ai_element != "" else ""
 		"monk":
 			if hurt.call(fighter) < 0.4:
 				pick = "Deep Breath"
@@ -1292,21 +1388,37 @@ func _ai_ability(fighter: Combatant) -> bool:
 			if hurt.call(fighter) < 0.3 and not fighter.statuses.has("vanish"):
 				pick = "Vanish"
 		"archer":
+			# Hurt: Siphon the enemy it's fighting (her hits then heal her).
+			var foe := _nearest(fighter, _standing(enemies)) if not _standing(enemies).is_empty() else null
+			if hurt.call(fighter) < 0.7 and foe != null and fighter.gap_to(foe) <= 6.0 and not foe.statuses.has("siphoned"):
+				pick = "Siphon Shot"
+				target = foe
 			# Only with AP to spare: after paying for it, it must still have
 			# half its bar for this turn's attack (and keep yours).
-			if not fighter.statuses.has("agility") and ap - 60.0 - reserve >= fighter.combo_limit * 0.5:
+			elif not fighter.statuses.has("agility") and ap - 60.0 - reserve >= fighter.combo_limit * 0.5:
 				pick = "Agility"
 	if pick == "":
 		return false
+	# Heals don't hold back AP for your turn: keeping someone alive comes
+	# first. Can't afford Full Cure? Healing, then.
+	var saving := pick not in ["Full Cure", "Healing"]
+	if pick == "Full Cure" and ap < 60.0:
+		pick = "Healing"
 	for skill in Moves.skills(fighter.class_id):
 		if skill["name"] != pick:
 			continue
-		if float(skill["cost"]) > ap - reserve * 0.5:
+		if float(skill["cost"]) > ap - (reserve * 0.5 if saving else 0.0):
+			if not saving:
+				_count("ai_heal_no_ap")
 			return false  # can't afford it without leaving you dry
 		var saved_controlled := controlled
 		var saved_used := _skill_used
 		controlled = fighter
-		_use_skill(skill, target, fighter.global_position)
+		var cast := skill
+		if ai_element != "":
+			cast = skill.duplicate()
+			cast["element"] = ai_element
+		_use_skill(cast, target, fighter.global_position)
 		controlled = saved_controlled
 		_skill_used = saved_used
 		_menu_mode = BattleMenu.Mode.HIDDEN
@@ -1340,6 +1452,7 @@ func _ai_attack(fighter: Combatant, target: Combatant) -> bool:
 	var played := false
 	if not _plan.is_empty():
 		_ai_play_plan(fighter, target)
+		_spend_focus(fighter)
 		played = true
 	controlled = saved_controlled
 	_menu_mode = BattleMenu.Mode.HIDDEN
@@ -1414,7 +1527,8 @@ func _ai_value(move: Dictionary, target: Combatant, guard_down: bool) -> float:
 	if not guard_down and effect != Moves.Effect.BREAK and not pierces:
 		return 0.0  # blocked by the Defense stance
 	if target.damage_taken_share < 0.5:
-		return value * (3.0 if float(move.get("knockback", 0.0)) > 0.0 else 0.1)
+		# Real pushes send it furthest; on a Lightweight one any hit pushes a little.
+		return value * (3.0 if float(move.get("knockback", 0.0)) > 0.0 else (1.0 if target.lightweight else 0.1))
 	var answer := _move_answer(move, target)
 	if not answer.is_empty():
 		match int(answer[1]):
@@ -1422,6 +1536,36 @@ func _ai_value(move: Dictionary, target: Combatant, guard_down: bool) -> float:
 				value *= 1.5
 			Answer.BAD:
 				return 0.0
+	if move.has("recipe") and Moves.arts("mage").any(func(a): return a["name"] == move["name"]):
+		value = _ai_mage_value(move, target, value)
+	return value
+
+
+## The AI Mage plays her setups: areas by how many they hit, Flare on burning
+## enemies, Shatter on the Frozen, Overcharge on an immune boss cast.
+func _ai_mage_value(move: Dictionary, target: Combatant, value: float) -> float:
+	var near := func(radius: float) -> int:
+		return _standing(enemies).filter(func(e): return e.global_position.distance_to(target.global_position) <= radius + e.body_radius).size()
+	match int(move.get("area", Moves.Area.SINGLE)):
+		Moves.Area.TARGET_CIRCLE:
+			value *= float(near.call(float(move["area_size"])))
+		Moves.Area.ALL:
+			value *= float(_standing(enemies).size())
+	if int(move.get("chain", 0)) > 0:
+		value *= 1.0 + float(move.get("chain_share", 0.75)) * mini(int(move["chain"]), near.call(float(move.get("chain_range", 5.0))) - 1)
+	if move.get("detonate_burns", false):
+		for e in _standing(enemies):
+			if e.burn_turns > 0:
+				value += float(e.burn_damage * maxi(e.burn_stacks, 1) * e.burn_turns) / maxf(_exec_attacker.attack_power if _exec_attacker else 10.0, 1.0)
+	if move.has("shatter"):
+		var shares: Array = move["shatter"]
+		value *= float(shares[0]) if target.statuses.has("frozen") else (float(shares[1]) if target.statuses.has("chilled") else float(shares[2]))
+	if move.has("delayed_blast"):
+		value += float(move["delayed_blast"]["hit"]) * 0.7 * near.call(float(move["delayed_blast"]["radius"]))
+	if move.get("ignore_cancel_lock", false) and _loaded_offensive(target) and _cancel_resisted(target) == "IMMUNE":
+		value *= 2.0
+	if (float(move.get("deep_freeze", 0.0)) > 0.0 or float(move.get("stasis", 0.0)) > 0.0) and _loaded_offensive(target):
+		value *= 1.5
 	return value
 
 
@@ -1433,6 +1577,7 @@ func _ai_play_plan(fighter: Combatant, target: Combatant) -> void:
 		hp_before += enemy.hp
 	_exec_attacker = fighter
 	_pay(fighter, battle_menu.combo_cost())
+	_note_ice_carry(fighter)
 	fighter.statuses.erase("arcane_cost")
 	if fighter.statuses.has("vanish"):
 		fighter.statuses.erase("vanish")
@@ -1510,6 +1655,7 @@ func _free_roam(delta: float, world_delta: float) -> void:
 	if controlled != null and not controlled.is_down and input != Vector2.ZERO:
 		controlled.step(_camera_relative(input), delta)
 		_walk_inside(controlled)
+	_tick_blasts(world_delta)
 	for enemy in enemies:
 		if enemy.skill_revealed and enemy.loaded_skill != Skills.NONE:
 			enemy.set_meta("revealed_for", float(enemy.get_meta("revealed_for", 0.0)) + world_delta)
@@ -1668,6 +1814,8 @@ func _melee_chase(enemy: Combatant, target: Combatant, delta: float) -> void:
 func _enemy_step(enemy: Combatant, delta: float) -> void:
 	if enemy.anchored:
 		return  # a wall boss never moves
+	if enemy.statuses.has("frozen") and enemy.freeze_left > 0.0:
+		return  # Ice Spear: frozen solid
 	var target := _enemy_target(enemy)
 	if target == null:
 		return
@@ -1734,7 +1882,10 @@ func _cast_speed(fighter: Combatant) -> float:
 	if bait >= 0.0:
 		return bait
 	if fighter.loaded_def != null and fighter.loaded_skill != Skills.NONE and fighter.timeline_pos >= cast_zone_start:
-		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed * _stagger_slow(fighter.loaded_def)
+		if fighter.has_meta("settle_speed"):
+			return float(fighter.get_meta("settle_speed"))  # a growing circle that stopped: the run-out window
+		return fighter.loaded_def.cast_speed * fighter.cast_zone_speed * _stagger_slow(fighter.loaded_def) \
+				* float(fighter.get_meta("follow_up_slow", 1.0))  # a long follow-up delay on a fast boss
 	return 1.0
 
 
@@ -1811,9 +1962,28 @@ func _decay_threat(enemy: Combatant) -> void:
 ##      contained), otherwise the nearest enemy.
 func _ally_step(ally: Combatant, delta: float) -> void:
 	var dangers := _ally_dangers(ally)
+	# Doom Gaze first: hiding beats everything, a Windup approach included
+	# (its turn waits in cover, then it walks in once the gaze is over).
+	var hide_at: Variant = _hide_point(ally)
+	if hide_at != null:
+		var target: Vector3 = hide_at
+		if not arena.has_line_of_sight(ally.global_position, target):
+			target = _around_rock(ally, target)  # the rock is in the way: go round its side first
+		var to_hide: Vector3 = target - ally.global_position
+		to_hide.y = 0.0
+		if to_hide.length() > 0.25:
+			ally.step(arena.steer(ally.global_position, to_hide, ally.body_radius), delta)
+			_keep_in_arena(ally)
+		return
+	if _keep_off_ledge(ally, delta, dangers):
+		return
 	if ally.has_meta("windup_target"):
+		_retarget_to_sprite(ally)
 		# Windup: head for the chosen enemy until it's in reach.
 		var goal: Combatant = ally.get_meta("windup_target")
+		if is_instance_valid(goal) and not goal.is_down and goal.lightweight \
+				and _line_up_push(ally, goal, delta, dangers):
+			return  # a Gust Sprite: get on its far side from the drop first
 		if is_instance_valid(goal) and not goal.is_down and not _windup_reaches(ally, goal):
 			# Out of anything about to hit first (a falling rock landing on
 			# its path), then on towards the target.
@@ -1831,17 +2001,6 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 				to_goal.y = 0.0
 			_safe_step(ally, to_goal, delta, dangers)
 			return
-	var hide_at: Variant = _hide_point(ally)
-	if hide_at != null:
-		var target: Vector3 = hide_at
-		if not arena.has_line_of_sight(ally.global_position, target):
-			target = _around_rock(ally, target)  # the rock is in the way: go round its side first
-		var to_hide: Vector3 = target - ally.global_position
-		to_hide.y = 0.0
-		if to_hide.length() > 0.25:
-			ally.step(arena.steer(ally.global_position, to_hide, ally.body_radius), delta)
-			_keep_in_arena(ally)
-		return
 	var stack_at: Variant = _stack_point(ally)
 	if stack_at != null:
 		var to_stack: Vector3 = stack_at - ally.global_position
@@ -1856,7 +2015,14 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 	var threat := _ally_focus(ally)
 	if threat == null:
 		return
+	# Positioning (not attacking): grey areas still being cast aren't walked
+	# into either, the way a person keeps out of a shape on the floor before
+	# knowing what it is. They aren't fled before the reveal.
+	if ally_avoid_grey:
+		dangers = dangers + _grey_areas(ally)
 	var to_threat := threat.global_position - ally.global_position
+	if threat.lightweight and _line_up_push(ally, threat, delta, dangers):
+		return
 	if ally.flanks and not threat.no_positionals:
 		# Assassin: circle round to the enemy's back, within striking reach.
 		var spot := threat.global_position - threat.flat_forward() * (threat.body_radius + ally.body_radius + ally.reach() * 0.6)
@@ -1878,13 +2044,169 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 	var ritual := threat.loaded_def
 	if ritual != null and ritual.special == EnemySkill.Special.HEAL_ALLIES:
 		ideal = minf(ideal, ritual.interrupt_range * 0.8)  # close enough that hits interrupt it
+	var far_enough := ideal - 1.0
+	if ally.focus_max > 0:
+		# Mage: stands still to build Focus. She only walks when the enemy is
+		# out of her reach, or right on top of her.
+		ideal = ally.reach() * 0.95 - 0.15
+		far_enough = minf(1.5, ideal)
+	if ally_fragile_flank and _fragile(ally) and threat.boss:
+		# Mage / Cleric against a boss: the edge of their reach, off its front.
+		ideal = ally.reach() * 0.95 - 0.15
+		far_enough = maxf(far_enough, ideal - 0.6)
+		if _flank_step(ally, threat, ideal, delta, dangers):
+			return
 	if gap > ideal + 0.15:
 		if _safe_step(ally, to_threat, delta, dangers):
 			return
-	elif gap < ideal - 1.0:
+	elif gap < far_enough:
 		if _safe_step(ally, -to_threat, delta, dangers):
 			return
 	ally.face_toward(to_threat, delta)
+
+
+## Lightweight targets (Gust Sprites): the AI gets on the far side of it
+## from the nearest drop, so its hit knocks it toward the drop. Walks round
+## the side rather than through it. Returns true while still walking.
+func _line_up_push(ally: Combatant, target: Combatant, delta: float, dangers: Array[Dictionary]) -> bool:
+	var toward_drop := _drop_direction(target.global_position)
+	if toward_drop == Vector3.ZERO:
+		return false
+	var back_off := minf(ally.reach() * 0.6, 2.0)
+	var spot := target.global_position - toward_drop * (target.body_radius + ally.body_radius + back_off)
+	var to_spot := spot - ally.global_position
+	to_spot.y = 0.0
+	if to_spot.length() <= 0.4:
+		ally.face_toward(target.global_position - ally.global_position, delta)
+		return false  # lined up
+	var to_target := target.global_position - ally.global_position
+	to_target.y = 0.0
+	if to_spot.length() > 1.2 and to_target.normalized().dot(toward_drop) < 0.3:
+		# On the drop side of it: go round, not through it.
+		var side := to_target.cross(Vector3.UP).normalized()
+		if side.dot(to_spot) < 0.0:
+			side = -side
+		to_spot = to_spot.normalized() + side * 0.8
+	return _safe_step(ally, to_spot, delta, dangers)
+
+
+## Mage and Cleric: little HP and no Parry, so they keep their distance.
+func _fragile(ally: Combatant) -> bool:
+	return ally.class_id == "mage" or ally.class_id == "cleric"
+
+
+## A fragile ally in front of a boss steps round to fragile_flank_degrees
+## off its facing, at the given gap. Not when the boss is locked on to it
+## anyway (it would just turn after her), nor against wall bosses (no sides).
+## Returns true while walking.
+func _flank_step(ally: Combatant, boss: Combatant, gap: float, delta: float, dangers: Array[Dictionary]) -> bool:
+	if boss.no_positionals or boss.cast_target == ally:
+		return false
+	var fwd := boss.flat_forward()
+	var off := ally.global_position - boss.global_position
+	off.y = 0.0
+	if off.length() < 0.05 or fwd.angle_to(off.normalized()) >= deg_to_rad(fragile_flank_degrees - 15.0):
+		return false  # already off its front
+	var side := 1.0 if fwd.cross(off).y >= 0.0 else -1.0
+	var dir := fwd.rotated(Vector3.UP, side * deg_to_rad(fragile_flank_degrees))
+	var spot := boss.global_position + dir * (boss.body_radius + ally.body_radius + gap)
+	if not arena.walkable(spot, ally.body_radius):
+		dir = fwd.rotated(Vector3.UP, -side * deg_to_rad(fragile_flank_degrees))
+		spot = boss.global_position + dir * (boss.body_radius + ally.body_radius + gap)
+		if not arena.walkable(spot, ally.body_radius):
+			return false
+	var to_spot := spot - ally.global_position
+	to_spot.y = 0.0
+	if to_spot.length() < 0.4:
+		return false
+	return _safe_step(ally, to_spot, delta, dangers)
+
+
+## Enemy areas still grey (or just revealed, before the ally reacts) that
+## the ally stands outside: positioning steps don't walk into them. One the
+## ally already stands in is left out (no fleeing before the reveal; Golem
+## Smash's grey covers the whole room).
+func _grey_areas(ally: Combatant) -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	var margin := ally.body_radius + ally_danger_margin
+	for enemy in enemies:
+		if not _is_danger(enemy) or _ally_reacted(enemy):
+			continue
+		var special := enemy.loaded_def.special
+		if special == EnemySkill.Special.HEAL_ALLIES or special == EnemySkill.Special.GROWING:
+			continue  # a ritual to break, a Shadowflare's sprites to reach: go in
+		for area in _enemy_areas(enemy):
+			if area.has_meta("follow") and area.get_meta("follow") == ally:
+				continue
+			if not area.contains(ally.global_position, margin):
+				list.append({"area": area, "margin": margin})
+	return list
+
+
+## How far an AI ally keeps from a lethal edge or hole right now: at least
+## ally_ledge_min; while an enemy prepares a push (grey or revealed), that
+## push plus ally_ledge_margin.
+func _ledge_buffer() -> float:
+	var buffer := ally_ledge_min
+	for enemy in _standing(enemies):
+		var def := enemy.loaded_def
+		if def == null or enemy.loaded_skill == Skills.NONE:
+			continue
+		var push := def.launch
+		if def.follow_up != null:
+			push = maxf(push, def.follow_up.launch)
+		if push > 0.0:
+			buffer = maxf(buffer, push + ally_ledge_margin)
+	return buffer
+
+
+## Too close to a drop for what's coming: one step away from it (around
+## danger areas). Returns true while stepping.
+func _keep_off_ledge(ally: Combatant, delta: float, dangers: Array[Dictionary]) -> bool:
+	var drop := _nearest_drop(ally.global_position)
+	if drop.is_empty() or float(drop[1]) - ally.body_radius >= _ledge_buffer():
+		return false
+	var away: Vector3 = -drop[0]
+	if not _safe_step(ally, away, delta, dangers):
+		return false  # boxed in: the danger areas come first
+	_count("ai_ledge_steps")
+	return true
+
+
+## Which way the nearest drop (a lethal edge or a hole) lies from a point;
+## ZERO with none in the arena.
+func _drop_direction(point: Vector3) -> Vector3:
+	var drop := _nearest_drop(point)
+	return Vector3.ZERO if drop.is_empty() else drop[0]
+
+
+## [direction, distance] to the nearest drop (a lethal edge or a hole), or
+## [] with none in the arena.
+func _nearest_drop(point: Vector3) -> Array:
+	var best := Vector3.ZERO
+	var best_d := INF
+	var b: Array = arena._bounds()
+	var p := point - arena.global_position
+	var sides := [[Arena.SIDE_NORTH, Vector3(0, 0, -1), p.z - float(b[2])], [Arena.SIDE_SOUTH, Vector3(0, 0, 1), float(b[3]) - p.z],
+			[Arena.SIDE_WEST, Vector3(-1, 0, 0), p.x - float(b[0])], [Arena.SIDE_EAST, Vector3(1, 0, 0), float(b[1]) - p.x]]
+	if arena.shape == Arena.Shape.RECTANGLE:
+		for side in sides:
+			if arena.lethal_sides & int(side[0]) and float(side[2]) < best_d:
+				best_d = float(side[2])
+				best = side[1]
+	elif arena.lethal_rim and Vector2(p.x, p.z).length() > 0.01:
+		best_d = arena.size.x / 2.0 - Vector2(p.x, p.z).length()
+		best = Vector3(p.x, 0.0, p.z).normalized()
+	for obstacle in arena.obstacles():
+		if not obstacle.is_lethal():
+			continue
+		var off := obstacle.global_position - point
+		off.y = 0.0
+		var d := off.length() - obstacle.radius
+		if d < best_d and off.length() > 0.01:
+			best_d = d
+			best = off.normalized()
+	return [] if best == Vector3.ZERO else [best, best_d]
 
 
 ## If the ally stands in danger, takes one step out of it and returns true.
@@ -1977,7 +2299,8 @@ func _danger_escape(ally: Combatant, dangers: Array[Dictionary]) -> Vector3:
 					var part := area.width / (2 * area.lanes - 1)
 					var across := from_area.dot(right) + area.width / 2.0
 					var best := INF
-					for k in range(1, 2 * area.lanes - 1, 2):  # gaps are the odd slots
+					# Gaps are the odd slots (the even ones when it hits the gaps).
+					for k in range(0 if area.lanes_in_gaps else 1, 2 * area.lanes - 1, 2):
 						var centre := (k + 0.5) * part
 						if absf(centre - across) < absf(best - across):
 							best = centre
@@ -2037,8 +2360,8 @@ func _ally_reacted(enemy: Combatant) -> bool:
 	if not enemy.skill_revealed:
 		return false
 	var delay := ally_react_seconds
-	if not def.parryable() and not def.blockable():
-		delay = ally_react_unanswerable_seconds  # no Parry or Defend to fall back on (Golem Smash)
+	if not def.parryable():
+		delay = ally_react_unanswerable_seconds  # no Parry to answer it (Golem Smash): dodge sooner
 	return float(enemy.get_meta("revealed_for", 0.0)) >= delay
 
 
@@ -2091,6 +2414,9 @@ func _ally_focus(ally: Combatant) -> Combatant:
 			growers.append(enemy)
 	if not healers.is_empty():
 		return _nearest(ally, healers)
+	var light := standing.filter(func(e): return e.lightweight)
+	if not light.is_empty():
+		return _nearest(ally, light)  # a Gust Sprite: push it off before it blows
 	if not growers.is_empty():
 		# Shadowflare: its sprites are what stops it, not the caster.
 		var sprites: Array[Combatant] = []
@@ -2099,9 +2425,35 @@ func _ally_focus(ally: Combatant) -> Combatant:
 				if is_instance_valid(sprite) and not sprite.is_down:
 					sprites.append(sprite)
 		if not sprites.is_empty():
-			return _nearest(ally, sprites)
+			# One ally per sprite: the nearest that no other ally is already
+			# winding up on.
+			var free: Array[Combatant] = sprites.filter(func(sp): return not _claimed_by_other(ally, sp))
+			return _nearest(ally, free if not free.is_empty() else sprites)
 		return _nearest(ally, growers)
 	return _nearest(ally, standing)
+
+
+## Another ally (not this one) is winding up to hit this target.
+func _claimed_by_other(ally: Combatant, target: Combatant) -> bool:
+	for member in party:
+		if member != ally and not member.is_down and member.has_meta("windup_target") \
+				and member.get_meta("windup_target") == target:
+			return true
+	return false
+
+
+## Windup: Shadowflare's sprites came out after this ally chose its target
+## (or its sprite was hit by someone else): it switches to a sprite nobody
+## else is going for.
+func _retarget_to_sprite(ally: Combatant) -> void:
+	var goal: Combatant = ally.get_meta("windup_target")
+	if is_instance_valid(goal) and not goal.is_down and goal.has_meta("orbit_angle"):
+		return  # already on a sprite
+	var focus := _ally_focus(ally)
+	if focus == null or not focus.has_meta("orbit_angle") or focus == goal:
+		return
+	ally.set_meta("windup_target", focus)
+	_count("ai_sprite_retargets")
 
 
 ## Takes one step toward a direction, or the closest detour (up to 90° off)
@@ -2277,7 +2629,7 @@ func _begin_edge_save(fighter: Combatant) -> void:
 func _edge_save_press() -> void:
 	if int(_edge_save["reacted"]) != 0:
 		return
-	if float(_edge_save["time_left"]) <= parry_window:
+	if float(_edge_save["time_left"]) <= edge_save_window:
 		_edge_save["reacted"] = 1
 	else:
 		_edge_save["reacted"] = 2
@@ -2296,7 +2648,7 @@ func _update_edge_save(delta: float) -> void:
 		2:
 			color = Color(1.0, 0.25, 0.2)
 		_:
-			if left <= parry_window:
+			if left <= edge_save_window:
 				color = Color(1.0, 0.85, 0.2)
 	var grow := 1.0 + 2.0 * clampf(left / maxf(edge_save_seconds, 0.01), 0.0, 1.0)
 	if is_instance_valid(ring):
@@ -2443,10 +2795,11 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.cancel_lock > 0:
 		enemy.cancel_lock -= 1  # boss cancel immunity counts its actions
 	enemy.freeze_left = 0.0
+	enemy.statuses.erase("frozen")
 	if enemy.burn_turns > 0:
 		# Mage's Fire: it burns as it acts.
 		enemy.burn_turns -= 1
-		var burnt := enemy.take_damage(enemy.burn_damage, false)
+		var burnt := enemy.take_damage(enemy.burn_damage * maxi(enemy.burn_stacks, 1), false)
 		_popup(enemy, "BURN %d" % burnt, Color(1.0, 0.5, 0.2))
 		_count("burn_ticks")
 		if enemy.is_down:
@@ -2462,6 +2815,8 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 	if not enemy.skill_revealed:
 		_reveal_skill(enemy)
 	var skill_name := enemy.loaded_def.skill_name
+	if enemy.loaded_def.self_destruct:
+		enemy.set_meta("detonating", true)  # it goes off once this lands (_finish_enemy_skill)
 	if playtest:
 		playtest.cast(enemy, skill_name)
 	if enemy.loaded_def.special == EnemySkill.Special.HEAL_ALLIES:
@@ -2508,6 +2863,10 @@ func _enemy_unleash(enemy: Combatant, reset_timeline: bool) -> void:
 ## Clean-up after an Attack or Smash, hit or miss.
 func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	if enemy.attack_range:
+		if enemy.attack_range.top_level:
+			# An arena-aligned area goes back onto its caster.
+			enemy.attack_range.top_level = false
+			enemy.attack_range.transform = enemy.attack_range.get_meta("local_transform", Transform3D.IDENTITY)
 		enemy.attack_range.rotation.y = 0.0  # Golem Smash turned it to one side
 		enemy.attack_range.clip_half = Vector2.ZERO
 		enemy.attack_range.clip_circle = 0.0
@@ -2521,6 +2880,9 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	_clear_cast_extras(enemy)
 	enemy.show_skill_text("")
 	enemy.cast_target = null
+	enemy.remove_meta("follow_up_slow")
+	enemy.remove_meta("settled_radius")
+	enemy.remove_meta("settle_speed")
 	enemy.set_meta("aim_locked", false)
 	enemy.set_meta("forced_targets", [])
 	enemy.set_meta("ap_penalty_done", false)
@@ -2532,6 +2894,10 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.loaded_def = null
 	enemy.remove_meta("bait_for")
 	enemy.remove_meta("bait_left")
+	if enemy.get_meta("detonating", false):
+		enemy.remove_meta("detonating")
+		_self_destruct(enemy)
+		return
 	if reset_timeline:
 		_send_to_start(enemy)
 
@@ -2633,6 +2999,12 @@ func _build_cast_areas(enemy: Combatant) -> void:
 	elif enemy.attack_range:
 		enemy.attack_range.rotation.y = -deg_to_rad(def.aim_offset_degrees)  # 90: its right side
 		_set_arena_clip(enemy.attack_range, def.fills_arena)
+		if def.arena_aligned:
+			# On the arena, not on the caster: it stays put while the caster turns.
+			enemy.attack_range.set_meta("local_transform", enemy.attack_range.transform)
+			enemy.attack_range.top_level = true
+			enemy.attack_range.global_transform = Transform3D(Basis.IDENTITY, Vector3(arena.global_position.x,
+					enemy.attack_range.global_position.y, arena.global_position.z))
 		# Golem Smash: the grey area covers the whole room until the reveal
 		# shows which half it hits.
 		enemy.attack_range.show_skill(def, true, _cast_radius(enemy), 360.0 if def.hides_side else -1.0)
@@ -2679,6 +3051,8 @@ func _cast_radius(enemy: Combatant) -> float:
 	var def := enemy.loaded_def
 	if def == null or def.special != EnemySkill.Special.GROWING:
 		return -1.0
+	if enemy.has_meta("settled_radius"):
+		return float(enemy.get_meta("settled_radius"))
 	if enemy.contained:
 		return enemy.get_meta("contained_radius", def.radius)
 	var progress := clampf((enemy.timeline_pos - cast_zone_start) / (TIMELINE_LENGTH - cast_zone_start), 0.0, 1.0)
@@ -2716,11 +3090,34 @@ func _update_cast_areas() -> void:
 				_flash("%s's %s is contained: it stops growing" % [enemy.display_name, def.skill_name])
 				if enemy.skill_revealed:
 					enemy.show_skill_text(def.skill_name.to_upper() + " (CONTAINED)", def.color())
+				_settle_growing(enemy)
+			elif not enemy.has_meta("settled_radius") and enemy.timeline_pos >= TIMELINE_LENGTH - 0.6:
+				_settle_growing(enemy)  # full size: it stops here, then the run-out window
 			var radius := _cast_radius(enemy)
 			if enemy.attack_range and absf(enemy.attack_range.radius - radius) > 0.05:
 				enemy.attack_range.show_skill(def, not enemy.skill_revealed, radius)
 			if def.orbit_sprites > 0 and active == null and _strike == null:
 				_move_orbiters(enemy, radius, get_process_delta_time() * battle_speed)
+
+
+## A growing circle stops at its current size, and the rest of its cast
+## takes as long as the slowest party member needs to walk out of it from
+## its middle (plus flare_run_out_extra), however far along the bar it was.
+func _settle_growing(enemy: Combatant) -> void:
+	var radius := _cast_radius(enemy)
+	enemy.set_meta("settled_radius", radius)
+	var slowest := INF
+	for member in _standing(party):
+		slowest = minf(slowest, member.current_move_speed())
+	if slowest == INF or slowest <= 0.1:
+		slowest = 4.0
+	var seconds := radius / slowest + flare_run_out_extra
+	if not enemy.skill_revealed and enemy.timeline_pos < reveal_at:
+		enemy.timeline_pos = reveal_at  # stopped while grey: it's revealed now, so the window is all readable
+	var left := maxf(TIMELINE_LENGTH - enemy.timeline_pos, 0.01)
+	enemy.set_meta("settle_speed", left / (seconds * enemy.speed * time_scale * _haste(enemy)))
+	enemy.set_meta("settle_seconds", seconds)
+	_count("flare_settles")
 
 
 ## Shadowflare: its sprites appear on the circle's edge, evenly spread.
@@ -2878,6 +3275,8 @@ func _heal_allies(caster: Combatant) -> void:
 				share = mini(share, def.heal_cap)  # Healing Ritual: at most 60 on a boss
 			var amount := ally.heal(share)
 			if amount > 0:
+				SpellFx.heal(self, ally)
+			if amount > 0:
 				_popup(ally, "+%d" % amount, Color(0.45, 0.95, 0.5))
 				healed.append("%s +%d" % [ally.display_name, amount])
 	if healed.is_empty():
@@ -2897,13 +3296,30 @@ func _spawn_trail(enemy: Combatant) -> void:
 				sources.append(placed)
 	elif enemy.attack_range != null:
 		sources.append(enemy.attack_range)
+	var turns := def.trail_turns
+	if def.trail_turns_below_half > 0 and enemy.hp <= enemy.max_hp * 0.5:
+		turns = def.trail_turns_below_half  # the floor keeps shrinking late in the fight
 	for source in sources:
+		if def.trail_cap > 0:
+			# Too many lines down: the oldest goes out.
+			var same := _hazards.filter(func(h): return h["owner"] == enemy and h.get("group", "") == def.trail_group)
+			while same.size() >= def.trail_cap:
+				_remove_hazard(same.pop_front())
+				_count("trails_put_out")
 		var area := AttackRange.new()
 		add_child(area)
 		area.global_transform = source.global_transform
 		area.show_hazard(def, Color(1.0, 0.45, 0.1))
-		_hazards.append({"area": area, "owner": enemy, "turns": def.trail_turns,
-				"dps": def.trail_damage_per_second, "acc": {}, "name": def.skill_name})
+		var hazard := {"area": area, "owner": enemy, "turns": turns,
+				"dps": def.trail_damage_per_second, "acc": {}, "name": def.skill_name, "group": def.trail_group}
+		if def.trail_touch_damage > 0:
+			# Stepping in hurts at once; whoever stands in it as it appears doesn't pay that.
+			var inside := {}
+			for member in _standing(party):
+				inside[member] = area.contains(member.global_position, member.body_radius * 0.6)
+			hazard["touch"] = def.trail_touch_damage
+			hazard["inside"] = inside
+		_hazards.append(hazard)
 	if not sources.is_empty():
 		_flash("The ground keeps burning!")
 
@@ -2996,9 +3412,7 @@ func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
 			marked.append(member)
 	enemy.set_meta("forced_targets", marked)
 	_mark_forced(enemy, marked)
-	var rate := enemy.speed * time_scale * battle_speed
-	# (never back before the casting zone, or it would start a new cast)
-	enemy.set_meta("follow_up_at", maxf(TIMELINE_LENGTH - def.follow_up_delay * rate, cast_zone_start + 0.01))
+	_schedule_follow_up(enemy, def.follow_up_delay)
 	if reset_timeline:
 		_send_to_start(enemy)  # on its own turn, _end_turn does this
 
@@ -3028,10 +3442,38 @@ func _start_follow_up(enemy: Combatant, def: EnemySkill, reset_timeline: bool) -
 			text += "  -  ROCKS EXPLODE"
 	enemy.show_skill_text(text, next.color())
 	_add_telegraphs(enemy)
-	var rate := enemy.speed * time_scale * battle_speed
-	enemy.set_meta("follow_up_at", maxf(TIMELINE_LENGTH - def.follow_up_delay * rate, cast_zone_start + 0.01))
+	_schedule_follow_up(enemy, def.follow_up_delay)
 	if reset_timeline:
 		_send_to_start(enemy)
+
+
+## A follow-up strikes `delay` real seconds from now. Its spot on the bar is
+## that far before the end; when that would be before the casting zone (a
+## fast boss, a long delay), it starts at the zone's edge and the bar runs
+## slower for it (follow_up_slow) so the delay still holds.
+func _schedule_follow_up(enemy: Combatant, delay: float) -> void:
+	enemy.remove_meta("follow_up_slow")
+	var rate := _follow_up_rate(enemy)
+	var room := TIMELINE_LENGTH - (cast_zone_start + 0.01)
+	var needed := delay * rate
+	if needed > room and needed > 0.0:
+		enemy.set_meta("follow_up_slow", room / needed)
+		needed = room
+	enemy.set_meta("follow_up_at", TIMELINE_LENGTH - needed)
+
+
+## Timeline units per real second for an enemy's loaded follow-up.
+func _follow_up_rate(enemy: Combatant) -> float:
+	var cast := 1.0
+	if enemy.loaded_def != null:
+		cast = enemy.loaded_def.cast_speed * enemy.cast_zone_speed * _stagger_slow(enemy.loaded_def)
+	return enemy.speed * time_scale * battle_speed * cast * _haste(enemy)
+
+
+## Real seconds until a pending follow-up strikes (tests, reports).
+func _follow_up_seconds(enemy: Combatant) -> float:
+	var at := float(enemy.get_meta("follow_up_at", enemy.timeline_pos))
+	return (TIMELINE_LENGTH - at) / maxf(_follow_up_rate(enemy) * float(enemy.get_meta("follow_up_slow", 1.0)), 0.001)
 
 
 ## Orange spheres over everyone a follow-up will hit no matter what.
@@ -3062,16 +3504,20 @@ func _tick_hazards(world_delta: float) -> void:
 		var acc: Dictionary = hazard["acc"]
 		if hazard.has("touch"):
 			var inside: Dictionary = hazard["inside"]
+			var spike := float(hazard["dps"]) <= 0.0
 			for member in _standing(party):
 				var now := area.contains(member.global_position, member.body_radius * 0.6)
 				if now and not inside.get(member, false):
-					var taken := _hurt(member, int(hazard["touch"]), false, "Rock spike")
-					_popup(member, str(taken), Color(0.85, 0.7, 0.5))
-					_flash("%s walks into a rock spike!" % member.display_name)
+					var source := "Rock spike" if spike else "%s fire" % hazard["name"]
+					var taken := _hurt(member, int(hazard["touch"]), false, source)
+					_popup(member, str(taken), Color(0.85, 0.7, 0.5) if spike else Color(1.0, 0.45, 0.15))
+					_flash(("%s walks into a rock spike!" if spike else "%s steps into the fire!") % member.display_name)
+					_count("fire_step_ins" if not spike else "spike_step_ins")
 					if member.is_down:
 						_check_party()
 				inside[member] = now
-			continue
+			if spike:
+				continue
 		for member in _standing(party):
 			if not area.contains(member.global_position, member.body_radius * 0.5):
 				continue
@@ -3366,9 +3812,18 @@ func _drop_cover_rock(enemy: Combatant) -> void:
 	var r := def.cover_rock_radius
 	var dirs := [Vector3.FORWARD, Vector3.RIGHT, Vector3.BACK, Vector3.LEFT]
 	dirs.shuffle()
+	# In a corner none of the four may fit: then the diagonals, and last
+	# the way to the arena's middle (there must always be a rock to hide behind).
+	var diagonals := [Vector3(1, 0, 1).normalized(), Vector3(1, 0, -1).normalized(), Vector3(-1, 0, 1).normalized(), Vector3(-1, 0, -1).normalized()]
+	diagonals.shuffle()
+	dirs.append_array(diagonals)
+	var to_middle := arena.global_position - enemy.global_position
+	to_middle.y = 0.0
+	if to_middle.length() > 0.5:
+		dirs.append(to_middle.normalized())
 	var chosen := Vector3.ZERO
 	var where := Vector3.ZERO
-	for distance in [def.cover_rock_distance, def.cover_rock_distance * 0.75, def.cover_rock_distance * 0.55]:
+	for distance in [def.cover_rock_distance, def.cover_rock_distance * 0.75, def.cover_rock_distance * 0.55, def.cover_rock_distance * 1.3]:
 		for dir in dirs:
 			var spot: Vector3 = enemy.global_position + dir * distance
 			var hide: Vector3 = spot + dir * (r + 1.8)  # room behind it for the party
@@ -3548,7 +4003,7 @@ func _add_telegraphs(enemy: Combatant) -> void:
 		var full := area.angle_degrees >= 360.0
 		var count := 8 if full else 5
 		if area.shape == EnemySkill.Shape.BAND and area.lanes > 1:
-			count = area.lanes
+			count = area.lanes - 1 if area.lanes_in_gaps else area.lanes
 		for i in count:
 			var t := (i + 0.5) / count
 			var a := TAU * t if full else -half + 2.0 * half * t
@@ -3564,7 +4019,7 @@ func _add_telegraphs(enemy: Combatant) -> void:
 				if area.shape == EnemySkill.Shape.BAND and area.lanes > 1:
 					# One arrow down the middle of each lane (count = lanes).
 					var part := area.width / (2 * area.lanes - 1)
-					across = -area.width / 2.0 + (2 * mini(i, area.lanes - 1) + 0.5) * part
+					across = -area.width / 2.0 + (2 * mini(i, area.lanes - 1) + (1 if area.lanes_in_gaps else 0) + 0.5) * part
 				var near := area.inner_radius if area.shape == EnemySkill.Shape.BAND else 0.0
 				if enemy.anchored:
 					near = maxf(near, enemy.body_radius)  # clear of its body
@@ -3572,14 +4027,82 @@ func _add_telegraphs(enemy: Combatant) -> void:
 			base.y = 0.07
 			var dir := -radial if def.pull > 0.0 else radial
 			var arrow := _make_arrow()
-			(arrow.material_override as StandardMaterial3D).albedo_color = Color(0.75, 0.02, 0.02, 0.95)
+			# Pushes: dark red arrows; pulls: dark teal ones.
+			(arrow.material_override as StandardMaterial3D).albedo_color = Color(0.02, 0.4, 0.38, 0.95) if def.pull > 0.0 else Color(0.75, 0.02, 0.02, 0.95)
 			area.add_child(arrow)
 			arrow.position = base
 			arrow.look_at(area.to_global(base + dir), Vector3.UP)
 			arrow.scale = Vector3(1.7, 1.0, 1.7)  # big and dark: it has to read over any area color
 			_telegraph_arrows.append({"node": arrow, "base": base, "dir": dir})
 			nodes.append(arrow)
+	nodes.append_array(_follow_up_preview(enemy, def))
+	nodes.append_array(_shelter_marks(enemy, def))
 	enemy.set_meta("telegraphs", nodes)
+
+
+## A combo's next part, faintly, under the part being cast (Deep Breath shows
+## Maw Bite's zone), once it's revealed. Areas placed on the party (lines,
+## circles under you) aren't previewed: they'd follow you anyway.
+func _follow_up_preview(enemy: Combatant, def: EnemySkill) -> Array:
+	var next := def.follow_up
+	if next == null or next.placed_on_party() or enemy.attack_range == null:
+		return []
+	var ghost := AttackRange.new()
+	ghost.preview = true
+	enemy.add_child(ghost)
+	ghost.transform = enemy.attack_range.transform
+	ghost.position.y += 0.01  # just above the area being cast
+	ghost.show_skill(next)
+	return [ghost]
+
+
+## Wall bosses: while a whole-arena attack is cast, the floor each rock shelters
+## (straight behind it, away from the wall) is drawn clear.
+func _shelter_marks(enemy: Combatant, def: EnemySkill) -> Array:
+	if not enemy.anchored or not def.fills_arena:
+		return []  # only the big whole-arena breaths
+	var fwd := enemy.flat_forward()
+	var marks: Array = []
+	for rock in arena.obstacles():
+		if not rock.blocks_sight():
+			continue
+		var start := rock.global_position
+		var depth_left := _depth_to_edge(start, fwd)
+		if depth_left <= rock.radius:
+			continue
+		var quad := MeshInstance3D.new()
+		var plane := PlaneMesh.new()
+		depth_left -= 0.3  # stop short of the edge line
+		plane.size = Vector2(rock.radius * 2.0, depth_left)
+		quad.mesh = plane
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(0.72, 0.76, 0.8, 0.82)  # the floor's grey: no colour, no danger
+		quad.material_override = mat
+		quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(quad)
+		var mid := start + fwd * depth_left / 2.0
+		quad.global_position = Vector3(mid.x, 0.045, mid.z)
+		quad.look_at(quad.global_position + fwd, Vector3.UP)
+		marks.append(quad)
+	return marks
+
+
+## How far from a point to the arena's edge, straight along a direction.
+func _depth_to_edge(point: Vector3, dir: Vector3) -> float:
+	var b: Array = arena._bounds()
+	var p := point - arena.global_position
+	var best := 100.0
+	if dir.x > 0.01:
+		best = minf(best, (float(b[1]) - p.x) / dir.x)
+	elif dir.x < -0.01:
+		best = minf(best, (float(b[0]) - p.x) / dir.x)
+	if dir.z > 0.01:
+		best = minf(best, (float(b[3]) - p.z) / dir.z)
+	elif dir.z < -0.01:
+		best = minf(best, (float(b[2]) - p.z) / dir.z)
+	return maxf(best, 0.0)
 
 
 func _clear_telegraphs(enemy: Combatant) -> void:
@@ -3652,8 +4175,12 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 	var members := _standing(party)
 	var scores: Array[float] = []
 	var total := 0.0
+	var hp_share := float(enemy.hp) / maxf(enemy.max_hp, 1)
 	for skill in pool:
 		var score := float(skill.weight)
+		if not skill.allowed_at_hp(hp_share):
+			scores.append(0.0)  # another phase's skill (Gale Maw under half HP)
+			continue
 		match skill.special:
 			EnemySkill.Special.HEAL_ALLIES:
 				var hurt := 0
@@ -3706,7 +4233,8 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 		scores.append(score)
 		total += score
 	if total <= 0.0:
-		return pool[randi() % pool.size()]
+		var allowed := pool.filter(func(s): return s.allowed_at_hp(hp_share))
+		return allowed.pick_random() if not allowed.is_empty() else pool[randi() % pool.size()]
 	var roll := randf() * total
 	for i in pool.size():
 		roll -= scores[i]
@@ -3721,6 +4249,19 @@ func _choose_enemy_skill(enemy: Combatant) -> EnemySkill:
 ## repeat it.
 func _sure_hp_skill(enemy: Combatant, pool: Array[EnemySkill]) -> EnemySkill:
 	var done: Array = enemy.get_meta("sure_done", [])
+	# Phases first: every threshold reached (and not yet used) is spent by one cast.
+	for skill in pool:
+		var due := false
+		for share in skill.phase_at_hp:
+			var key := "%s@%.2f" % [skill.skill_name, share]
+			if done.has(key) or enemy.hp > enemy.max_hp * share:
+				continue
+			done.append(key)
+			due = true
+		if due:
+			enemy.set_meta("sure_done", done)
+			_count("phase_casts")
+			return skill
 	for skill in pool:
 		if skill.sure_below_hp <= 0.0 or done.has(skill.skill_name):
 			continue
@@ -4027,12 +4568,24 @@ func _update_strike(delta: float) -> void:
 func _try_parry() -> void:
 	if _strike.reaction != Reaction.NONE or _strike.def.is_mechanic():
 		return  # unavoidable hits don't ask for a reaction
-	if not _strike.def.parryable():
-		_flash("%s can't be parried!" % _strike.def.skill_name)
+	var can_parry := _strike.def.parryable() and _strike_targets_can("parry")
+	if not can_parry:
+		# Nobody here can Parry this, but someone can block (the Cleric):
+		# the Parry key Defends instead.
+		if _parry_key_defends():
+			_try_defend()
+			return
+		if not _strike.def.parryable():
+			_flash("%s can't be parried!" % _strike.def.skill_name)
+		else:
+			_flash("%s can't parry" % _names(_strike.targets))
 		return
-	if not _strike_targets_can("parry"):
-		_flash("%s can't parry" % _names(_strike.targets))
-		return
+	if _parry_key_defends():
+		# A mixed group (Knight + Cleric): the Parry is for those who can, a
+		# Defend (same AP cost) for those who can only block.
+		if ap >= defend_cost and not _strike.parry_defends:
+			ap -= defend_cost
+			_strike.parry_defends = true
 	if _strike.time_left <= parry_window:
 		_strike.reaction = Reaction.PARRY
 	else:
@@ -4040,6 +4593,17 @@ func _try_parry() -> void:
 		for target in _strike.targets:
 			if _covered(target, "parry"):
 				_popup(target, "MISS", Color(1.0, 0.35, 0.3))  # too early: said at once, over their head
+
+
+## True if a target can't Parry this strike but can block it.
+func _parry_key_defends() -> bool:
+	if not _strike.def.blockable():
+		return false
+	for target in _strike.targets:
+		var parries := _covered(target, "parry") and _strike.def.parryable()
+		if not parries and _covered(target, "block") and not _strike.mods.get(target, {}).get("unblockable", false):
+			return true
+	return false
 
 
 ## Q: Defend. Costs AP, can't be combined with a parry attempt.
@@ -4079,6 +4643,11 @@ func _resolve_strike() -> void:
 	var avoidable: Array[Combatant] = []  # took a hit they could have avoided
 	if s.def.hits > 1:
 		lines.append("%s %d/%d" % [skill_name, s.def.hits - s.hits_left, s.def.hits])
+	# Looks: a heavy blow sends a shockwave from the enemy as it lands.
+	var heavy_blow := s.def.damage >= 40 or s.skill == Skills.Kind.SMASH
+	if heavy_blow and not s.def.placed_on_party() and not s.def.fills_arena \
+			and (s.def.shape == EnemySkill.Shape.CIRCLE or s.def.shape == EnemySkill.Shape.CONE):
+		SpellFx.enemy_blow(self, s.enemy, s.def.color(), minf(s.def.radius, 6.0))
 
 	# One Parry/Defend input covers everyone hit, but only those whose class
 	# can parry/block get the benefit; the rest take the full hit.
@@ -4099,6 +4668,7 @@ func _resolve_strike() -> void:
 			if playtest:
 				playtest.parried(s.enemy, skill_name)
 			_popup(target, "AUTO-PARRY!", Color(0.78, 0.45, 1.0))
+			SpellFx.enemy_hit(self, s.enemy, target, s.def.color(), heavy_blow, "parry")
 			lines.append("%s auto-parries %s's %s (a Mark is spent)" % [target.display_name, s.enemy.display_name, skill_name])
 			continue
 		var can_parry := _covered(target, "parry") and s.def.parryable()
@@ -4108,6 +4678,7 @@ func _resolve_strike() -> void:
 			if playtest:
 				playtest.parried(s.enemy, skill_name)
 			_popup(target, "PARRY!", Color(1.0, 0.85, 0.2))
+			SpellFx.enemy_hit(self, s.enemy, target, s.def.color(), heavy_blow, "parry")
 			lines.append("%s parried %s's %s!" % [target.display_name, s.enemy.display_name, skill_name])
 			continue
 		if one_hp:
@@ -4124,18 +4695,21 @@ func _resolve_strike() -> void:
 					avoidable.append(target)
 				_popup(target, "1 HP!", Color(1.0, 0.3, 0.2))
 				lines.append("%s is caught in the overlap: down to 1 HP!" % target.display_name)
-		elif s.reaction == Reaction.DEFEND and can_block:
+		elif (s.reaction == Reaction.DEFEND or (s.parry_defends and not can_parry)) and can_block:
 			_count("defends")
 			var share := defend_share_vs_smash if s.skill == Skills.Kind.SMASH else defend_share_vs_attack
 			var taken := _hurt(target, ceili(damage * share), true, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 			if playtest:
 				playtest.defended(s.enemy, skill_name)
 			_popup(target, str(taken), Color(0.6, 0.8, 1.0))
+			SpellFx.enemy_hit(self, s.enemy, target, s.def.color(), heavy_blow, "defend")
 			var guard_note := " Guard broken!" if s.skill == Skills.Kind.SMASH else ""
 			lines.append("%s defended:%s -%d HP (recoverable)" % [target.display_name, guard_note, taken])
 		else:
 			var taken := _hurt(target, damage, false, "%s: %s" % [s.enemy.display_name, skill_name], s.enemy, skill_name)
 			_popup(target, str(taken), Color(1.0, 0.4, 0.3))
+			if taken > 0:
+				SpellFx.enemy_hit(self, s.enemy, target, s.def.color(), heavy_blow, "hit")
 			if _avoidable_hit(s.enemy, s.def, s.mods, target, s.targets):
 				avoidable.append(target)
 			if s.reaction == Reaction.PARRY_MISSED and can_parry:
@@ -4231,6 +4805,7 @@ func _resolve_strike() -> void:
 			_begin_strike(s.enemy, next_mods, s.reset_timeline, s.follow_windup, s.hits_left - 1)
 			if s.reaction == Reaction.DEFEND:
 				_strike.reaction = Reaction.DEFEND  # one Defend (one AP payment) guards the whole chain
+			_strike.parry_defends = s.parry_defends  # so does the Cleric's Defend through the Parry key
 			return
 	_leave_hazards(s.enemy)
 	if s.def.follow_up != null and not s.def.push_out and not s.enemy.is_down and not _standing(party).is_empty():
@@ -4399,6 +4974,10 @@ func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
 	away.y = 0.0
 	if away.length_squared() < 0.0001:
 		away = -fighter.flat_forward()
+	SpellFx.dust(self, fighter, away.normalized(), meters)
+	if fighter.lightweight:
+		_knock_lightweight(fighter, away.normalized(), meters)
+		return
 	var steps := 8
 	for i in steps:
 		fighter.global_position += away.normalized() * meters / steps
@@ -4407,11 +4986,143 @@ func _knock_away(fighter: Combatant, from: Vector3, meters: float) -> void:
 			return  # pushed over a drop
 
 
+## Lightweight knock-back: small steps, so no hole is skipped; a wall,
+## corner or rock bounces it off (it never sticks), and touching a hole or
+## a drop with any part of its body makes it fall at once.
+func _knock_lightweight(fighter: Combatant, dir: Vector3, meters: float) -> void:
+	var left := meters
+	var bounces := 0
+	while left > 0.001 and not fighter.is_down:
+		var stride := minf(left, 0.15)
+		var want := fighter.global_position + dir * stride
+		fighter.global_position = want
+		if _check_choke(fighter):
+			return  # knocked into an open mouth
+		if _can_fall(fighter) and _touches_drop(fighter):
+			_count("lightweight_falls")
+			_fall(fighter)
+			return
+		arena.keep_inside(fighter, fighter.body_radius, arena.has_drops() and _can_fall(fighter))
+		for wall_boss in _standing(enemies):
+			# A wall boss's body is a wall too (its mouth closed).
+			if not wall_boss.anchored:
+				continue
+			var off := fighter.global_position - wall_boss.global_position
+			off.y = 0.0
+			var need := wall_boss.body_radius + fighter.body_radius
+			if off.length() < need and off.length() > 0.001:
+				fighter.global_position = wall_boss.global_position + off.normalized() * need + Vector3(0, fighter.global_position.y - wall_boss.global_position.y, 0)
+		var pushed_back := fighter.global_position - want
+		pushed_back.y = 0.0
+		if pushed_back.length() > 0.005:
+			# Hit a wall or a rock: bounce off it (reflect over its normal).
+			var n := pushed_back.normalized()
+			dir = (dir - 2.0 * dir.dot(n) * n).normalized()
+			bounces += 1
+			if bounces == 1:
+				_count("lightweight_bounces")
+			if bounces > 6:
+				return  # wedged in a corner: stop there
+		left -= stride
+
+
+## Gust Sprite fed to a wall boss: while its pull is being cast (Inhale,
+## Deep Breath, Gale Draw: the mouth is open), a Lightweight enemy knocked
+## against its body makes it choke: the sprite's Detonate goes off inside
+## it (choke_damage_mult x the blast) and the boss is Staggered.
+func _check_choke(sprite: Combatant) -> bool:
+	if not sprite.lightweight or sprite.is_down:
+		return false
+	for boss in _standing(enemies):
+		if not _mouth_open(boss):
+			continue
+		var off := sprite.global_position - boss.global_position
+		off.y = 0.0
+		if off.dot(boss.flat_forward()) <= 0.0 or off.length() > boss.body_radius + sprite.body_radius + choke_reach:
+			continue
+		_choke(boss, sprite)
+		return true
+	return false
+
+
+## A wall boss with its mouth open: casting a whole-arena pull (Inhale,
+## Deep Breath, Gale Draw). Shown as a black mouth on its body.
+func _mouth_open(boss: Combatant) -> bool:
+	return boss.anchored and not boss.is_down and boss.loaded_def != null and boss.loaded_skill != Skills.NONE \
+			and boss.loaded_def.pull > 0.0 and boss.loaded_def.fills_arena
+
+
+## The open mouth: a black disc on the wall boss's front while _mouth_open.
+func _update_mouths() -> void:
+	for enemy in enemies:
+		if not enemy.anchored:
+			continue
+		var mouth: MeshInstance3D = enemy.get_meta("mouth") if enemy.has_meta("mouth") else null
+		if mouth == null:
+			mouth = MeshInstance3D.new()
+			var disc := CylinderMesh.new()
+			disc.top_radius = 1.5
+			disc.bottom_radius = 1.5
+			disc.height = 0.12
+			mouth.mesh = disc
+			var mat := StandardMaterial3D.new()
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.albedo_color = Color(0.02, 0.02, 0.03)
+			mouth.material_override = mat
+			mouth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			enemy.add_child(mouth)
+			mouth.rotation_degrees = Vector3(90, 0, 0)  # the disc faces forward (-Z)
+			mouth.position = Vector3(0.0, enemy.body_radius * 0.45, -enemy.body_radius - 0.03)
+			enemy.set_meta("mouth", mouth)
+		mouth.visible = _mouth_open(enemy)
+		var nose := enemy.get_node_or_null("Nose") as Node3D
+		if nose:
+			nose.visible = not mouth.visible  # the facing marker sits where the mouth opens
+
+
+func _choke(boss: Combatant, sprite: Combatant) -> void:
+	var blast := 0
+	for def in sprite.skills:
+		if def.self_destruct:
+			blast = def.damage
+	if sprite.loaded_skill != Skills.NONE:
+		_finish_enemy_skill(sprite, false)
+	sprite.unkillable = false
+	sprite.hp = 0
+	sprite._go_down()
+	if sprite.attack_range:
+		sprite.attack_range.visible = false
+	_count("chokes")
+	var dealt := boss.take_damage(roundi(blast * choke_damage_mult), false)
+	_popup(boss, "CHOKES! %d" % dealt, Color(1.0, 0.55, 0.2))
+	_flash("The %s chokes on the %s! It blows up inside it." % [boss.display_name, sprite.display_name], 3.5)
+	if not boss.is_down and boss.loaded_def != null:
+		_stagger(boss)
+	_check_enemies()
+
+
+## Any part of the body over a hole or a drop (its centre or its rim).
+func _touches_drop(fighter: Combatant) -> bool:
+	var at := fighter.global_position
+	if arena.lethal_at(at):
+		return true
+	var r := fighter.body_radius * 0.9
+	for k in 8:
+		var angle := TAU * k / 8.0
+		if arena.lethal_at(at + Vector3(cos(angle) * r, 0.0, sin(angle) * r)):
+			return true
+	return false
+
+
 ## Drags a fighter towards a point (boss pulls), stopping next to whoever is
 ## there. Being dragged across a hole or a lethal edge means falling.
 func _pull_toward(fighter: Combatant, to: Vector3, meters: float, stop_gap: float) -> void:
 	if fighter.anchored:
 		return
+	var toward := to - fighter.global_position
+	toward.y = 0.0
+	if toward.length() > 0.01:
+		SpellFx.dust(self, fighter, toward.normalized(), minf(meters, toward.length() - stop_gap))
 	var steps := 8
 	for i in steps:
 		var dir := to - fighter.global_position
@@ -4428,7 +5139,8 @@ func _pull_toward(fighter: Combatant, to: Vector3, meters: float, stop_gap: floa
 ## Defend against a push or pull: a Block-capable fighter (or one a
 ## guarding Knight covers) is moved defend_move_share as far.
 func _brace_share(s: Strike, target: Combatant) -> float:
-	if s.reaction == Reaction.DEFEND and _covered(target, "block"):
+	var defends := s.reaction == Reaction.DEFEND or (s.parry_defends and not (_covered(target, "parry") and s.def.parryable()))
+	if defends and _covered(target, "block"):
 		_count("braced_moves")
 		return defend_move_share
 	return 1.0
@@ -4450,6 +5162,7 @@ func _teetering(fighter: Combatant) -> bool:
 
 ## Wall boss pulls: straight toward its wall, stopping against its body.
 func _pull_to_wall(fighter: Combatant, boss: Combatant, meters: float) -> void:
+	SpellFx.dust(self, fighter, -boss.flat_forward(), meters)
 	var steps := 8
 	for i in steps:
 		if fighter.gap_to(boss) <= 0.2:
@@ -4528,6 +5241,8 @@ func _summon(boss: Combatant) -> void:
 		fighter.look_at(fighter.global_position + boss.flat_forward(), Vector3.UP)
 		fighter.timeline_pos = randf_range(0.0, 20.0)
 		fighter.set_meta("summoner", boss)
+		if fighter.fuse_seconds > 0.0:
+			fighter.set_meta("fuse_left", fighter.fuse_seconds)
 		# Dead summons leave the lists (hidden, still in the tree).
 		for old in mine.duplicate():
 			if is_instance_valid(old) and old.is_down:
@@ -4544,13 +5259,50 @@ func _summon(boss: Combatant) -> void:
 	boss.set_meta("summons", mine)
 	if made > 0:
 		_count("summons")
-		var lines: PackedStringArray = ["%s spits out %d Gust Sprite%s! Too tough to beat down: push it off the ledge." % [boss.display_name, made, "" if made == 1 else "s"]]
-		if made > 0 and mine.any(func(c): return is_instance_valid(c) and c.damage_taken_share < 0.5):
-			for member in _standing(party):
-				var how := _push_recipe(member)
-				if how != "":
-					lines.append("%s can push with %s" % [member.display_name, how])
-		_flash("\n".join(lines))
+		_flash("%s spits out %d Gust Sprite%s! Too tough to beat down, but every hit knocks it back: into a hole or off the ledge." % [boss.display_name, made, "" if made == 1 else "s"])
+
+
+## Fuses (Gust Sprites): counted in battle time from when it appeared. At
+## zero its self_destruct skill is forced and cast at once (whatever it was
+## preparing is dropped). An interrupt only delays it: it casts again.
+func _tick_fuses(world_delta: float) -> void:
+	for enemy in enemies:
+		if enemy.is_down or not enemy.has_meta("fuse_left"):
+			continue
+		var left := float(enemy.get_meta("fuse_left"))
+		if left <= 0.0:
+			continue
+		left -= world_delta
+		enemy.set_meta("fuse_left", maxf(left, 0.0))
+		if left > 0.0:
+			if left < 5.0 and left + world_delta >= 5.0:
+				_popup(enemy, "5 s!", Color(1.0, 0.45, 0.25))
+			continue
+		var boom: EnemySkill = null
+		for def in enemy.skills:
+			if def.self_destruct:
+				boom = def
+		if boom == null:
+			continue
+		enemy.forced_skill = boom
+		if enemy.loaded_skill != Skills.NONE:
+			_finish_enemy_skill(enemy, false)
+		enemy.timeline_pos = cast_zone_start - 0.01  # starts casting it next frame
+		_popup(enemy, "DETONATING!", Color(1.0, 0.35, 0.2))
+		_flash("The %s is about to explode! Get away, or knock it off the edge first." % enemy.display_name)
+		_count("fuses_out")
+
+
+## Detonate landed: the caster is gone.
+func _self_destruct(enemy: Combatant) -> void:
+	_popup(enemy, "BOOM!", Color(1.0, 0.45, 0.2))
+	_count("self_destructs")
+	enemy.unkillable = false
+	enemy.hp = 0
+	enemy._go_down()
+	if enemy.attack_range:
+		enemy.attack_range.visible = false
+	_check_enemies()
 
 
 ## Summons go down with the one who called them.
@@ -4694,13 +5446,29 @@ func _menu_input(event: InputEvent) -> void:
 		elif event.is_action_released("confirm"):
 			get_viewport().set_input_as_handled()
 			_judge_release()
+		else:
+			# Mage spell codes: WASD while the spell casts.  # (EXECUTING only)
+			for dir in CODE_KEYS:
+				if event.is_action_pressed(CODE_KEYS[dir]) and not event.is_echo():
+					get_viewport().set_input_as_handled()
+					_judge_code(dir)
+					break
 		return
+	if battle_menu.element_pick and _menu_mode == BattleMenu.Mode.SKILLS:
+		_element_input(event)
+		return
+	battle_menu.element_pick = false
 	var up := event.is_action_pressed("move_forward")
 	var down := event.is_action_pressed("move_back")
 	var confirm := event.is_action_pressed("confirm")
 	var cancel := event.is_action_pressed("cancel")
 	var begin := event.is_action_pressed("end_turn")
 	var arts_key := _menu_mode == BattleMenu.Mode.COMBO and event.is_action_pressed("swap_character")
+	if _menu_mode == BattleMenu.Mode.COMBO and battle_menu.arts_pages > 1 \
+			and (event.is_action_pressed("move_left") or event.is_action_pressed("move_right")):
+		get_viewport().set_input_as_handled()
+		_turn_arts_page(1 if event.is_action_pressed("move_right") else -1)
+		return
 	if not (up or down or confirm or cancel or begin or arts_key):
 		return
 	get_viewport().set_input_as_handled()
@@ -4868,7 +5636,7 @@ func _windup_fallback(fighter: Combatant) -> Combatant:
 	for enemy in _standing(enemies):
 		if enemy.stance == Skills.Kind.COUNTER or not _windup_reaches(fighter, enemy):
 			continue
-		if _ai_runs(fighter) and enemy.damage_taken_share < 0.5 and not _ai_has_push(fighter):
+		if _ai_runs(fighter) and enemy.damage_taken_share < 0.5 and not enemy.lightweight and not _ai_has_push(fighter):
 			continue
 		choices.append(enemy)
 	return _nearest(fighter, choices) if not choices.is_empty() else null
@@ -5077,8 +5845,9 @@ func _move_answer(move: Dictionary, target: Combatant) -> Array:
 		return ["BLOCKED", Answer.BAD, "%s's Defense blocks it. Piercing or breaking moves get through." % who]
 	if target.damage_taken_share < 0.5:
 		# Gust Sprites: tough, but a push can send them off the ledge.
-		if float(move.get("knockback", 0.0)) > 0.0:
-			return ["PUSHES", Answer.GOOD, "%s takes little damage, but it's light: this pushes it %s m. Off the ledge, it's gone." % [who, _num_m(float(move["knockback"]) * target.knockback_taken)]]
+		if float(move.get("knockback", 0.0)) > 0.0 or target.lightweight:
+			var push := maxf(float(move.get("knockback", 0.0)), lightweight_push if target.lightweight else 0.0)
+			return ["PUSHES", Answer.GOOD, "%s takes little damage, but it's light: this pushes it %s m (walls bounce it). Into a hole or off the ledge, it's gone." % [who, _num_m(push * target.knockback_taken)]]
 		var how := _push_recipe(controlled)
 		var try := ("Try %s: a hidden Art that pushes." % how) if how != "" else "Use a move that pushes."
 		return ["TOUGH", Answer.WARN, "%s takes only %d%% damage. Push it off the ledge instead. %s" % [who, roundi(target.damage_taken_share * 100.0), try]]
@@ -5216,7 +5985,29 @@ func _apply_flurry() -> void:
 
 ## What adding this move would cost now.
 func _next_cost(index: int) -> float:
-	return float(_moves[index]["cost"])
+	var cost := float(_moves[index]["cost"])
+	if controlled != null and controlled.class_id == "mage" and _moves[index]["name"] == "Fire":
+		var ices := 0
+		for k in battle_menu.combo:
+			if _moves[k]["name"] == "Ice":
+				ices += 1
+		cost -= roundf(cost * _ice_discount_share(ices))
+	return cost
+
+
+## Mage: a combo with Ice in it makes Fire cheaper on her next turn.
+func _note_ice_carry(fighter: Combatant) -> void:
+	if fighter.class_id != "mage":
+		return
+	var plain: Array = battle_menu.combo.map(func(k): return _moves[k]["name"])
+	if plain.has("Ice"):
+		fighter.set_meta("ice_carry_next", true)
+		_count("ice_carries")
+	var saved := 0
+	for entry in _plan:
+		saved += int((entry["move"] as Dictionary).get("ice_discount", 0))
+	if saved > 0:
+		_count_amount("ice_discount_ap", saved)
 
 
 ## AP the fighter can spend (party AP for everyone; the Monk's own is only
@@ -5373,7 +6164,7 @@ func _parse_combo(with_unknown: bool) -> Array:
 				continue  # an Art picked from the list is never cut in half
 			if int(art.get("needs_marks", 0)) > marks_left:
 				continue  # not enough Marks on the target
-			if i + recipe.size() <= names.size() and names.slice(i, i + recipe.size()) == recipe:
+			if i + recipe.size() <= names.size() and _recipe_matches(names.slice(i, i + recipe.size()), recipe, art.get("any_order", false)):
 				move = art.duplicate(true)
 				var cost := 0
 				for k in recipe.size():
@@ -5382,9 +6173,56 @@ func _parse_combo(with_unknown: bool) -> Array:
 				length = recipe.size()
 				marks_left -= int(art.get("needs_marks", 0))
 				break
+		if length > 1 and int(move.get("timing", 0)) == Moves.TimingType.CODE:
+			move["code"] = Moves.spell_code(names.slice(i, i + length))  # the bar's order
 		groups.append({"start": i, "length": length, "move": move})
 		i += length
+	_apply_ice_discount(groups, names)
 	return groups
+
+
+## A recipe on the bar: in its order, or in any order (the Mage's elements).
+func _recipe_matches(moves: Array, recipe: Array, any_order: bool) -> bool:
+	if not any_order:
+		return moves == recipe
+	var a := moves.duplicate()
+	var b := recipe.duplicate()
+	a.sort()
+	b.sort()
+	return a == b
+
+
+## Mage: each Ice on the bar makes every Fire after it (and in the same Art)
+## cost ice_discount_per less, up to ice_discount_max; an Ice last turn
+## takes ice_discount_carry off on top (ice_discount_cap in all).
+func _ice_discount_share(ice_count: int) -> float:
+	var share := minf(ice_count * ice_discount_per, ice_discount_max)
+	if controlled != null and controlled.get_meta("ice_carry", false):
+		share += ice_discount_carry
+	return minf(share, ice_discount_cap)
+
+
+func _apply_ice_discount(groups: Array, names: Array) -> void:
+	if controlled == null or controlled.class_id != "mage":
+		return
+	var fire_cost := 0.0
+	for m in _moves:
+		if m["name"] == "Fire":
+			fire_cost = float(m["cost"])
+	var ice_seen := 0
+	for group in groups:
+		var parts: Array = names.slice(int(group["start"]), int(group["start"]) + int(group["length"]))
+		ice_seen += parts.count("Ice")
+		var fires := parts.count("Fire")
+		if fires == 0:
+			continue
+		var off := roundi(fires * fire_cost * _ice_discount_share(ice_seen))
+		if off <= 0:
+			continue
+		var move: Dictionary = (group["move"] as Dictionary).duplicate(true)
+		move["cost"] = int(move["cost"]) - off
+		move["ice_discount"] = off
+		group["move"] = move
 
 
 ## When the combo starts: finds undiscovered Arts hidden in the bar. Each
@@ -5480,6 +6318,18 @@ func _remove_last_move() -> void:
 
 ## The Arts list (Tab in the combo bar): pick a known Art and its whole
 ## recipe goes on the bar at once.
+## A/D: the Arts list's next / previous page (when it has more than one). With
+## the list focused, the pick moves to the first known Art on that page.
+func _turn_arts_page(step: int) -> void:
+	battle_menu.arts_page = (battle_menu.arts_page + step + battle_menu.arts_pages) % battle_menu.arts_pages
+	if battle_menu.arts_focus:
+		var first := battle_menu.arts_page * battle_menu.arts_per_page
+		for i in range(first, mini(first + battle_menu.arts_per_page, battle_menu.arts.size())):
+			if battle_menu.arts[i]["known"]:
+				battle_menu.arts_index = i
+				break
+
+
 func _arts_list_input(up: bool, down: bool, confirm: bool, back: bool, toggle: bool, begin: bool) -> void:
 	var known: Array = []
 	for i in battle_menu.arts.size():
@@ -5505,6 +6355,7 @@ func _arts_list_input(up: bool, down: bool, confirm: bool, back: bool, toggle: b
 		var at := known.find(battle_menu.arts_index)
 		at = (at + (1 if down else -1) + known.size()) % known.size()
 		battle_menu.arts_index = known[at]
+		battle_menu.arts_page = battle_menu.arts_index / maxi(battle_menu.arts_per_page, 1)  # the page follows the pick
 	elif confirm:
 		_add_art(battle_menu.arts_index)
 
@@ -5565,16 +6416,28 @@ func _update_arts_list() -> void:
 		var next := ""
 		for start in range(maxi(names.size() - recipe.size() + 1, 0), names.size()):
 			var tail: Array = names.slice(start)
-			if tail.size() < recipe.size() and recipe.slice(0, tail.size()) == tail \
-					and _would_finish_art(recipe[tail.size()], art["name"]):
-				next = recipe[tail.size()]
+			if tail.size() >= recipe.size():
+				continue
+			var wanted := ""
+			if art.get("any_order", false):
+				# Any order: the tail is part of the recipe and one element is missing.
+				var left := recipe.duplicate()
+				for move_name in tail:
+					left.erase(move_name)
+				if left.size() == recipe.size() - tail.size() and left.size() == 1:
+					wanted = left[0]
+			elif recipe.slice(0, tail.size()) == tail:
+				wanted = recipe[tail.size()]
+			if wanted != "" and _would_finish_art(wanted, art["name"]):
+				next = wanted
 				break
 		var art_cost := 0
 		for move_name in recipe:
 			for m in _moves:
 				if m["name"] == move_name:
 					art_cost += int(m["cost"])
-		var timing_name: String = {Moves.TimingType.HOLD: "Hold & let go", Moves.TimingType.TAP: "Tap x%d" % int(art.get("taps", 0))}.get(
+		var timing_name: String = {Moves.TimingType.HOLD: "Hold & let go", Moves.TimingType.TAP: "Tap x%d" % int(art.get("taps", 0)),
+				Moves.TimingType.CODE: "Code " + code_text(art.get("code", []))}.get(
 				int(art.get("timing", Moves.TimingType.PRESS)), "Press")
 		rows.append({"name": art["name"], "recipe": _recipe_text(art), "known": true, "index": index,
 				"desc": art["desc"], "cost": art_cost, "timing": timing_name,
@@ -5584,6 +6447,7 @@ func _update_arts_list() -> void:
 	battle_menu.arts_hidden = hidden
 	battle_menu.arts_hidden_sizes = hidden_sizes
 	battle_menu.arts_hidden_notes = hidden_notes
+	battle_menu.arts_any_order = controlled != null and controlled.class_id == "mage"
 	var hints: PackedStringArray = []
 	for art in all:
 		if ArtsBook.known(controlled.class_id, art["name"]):
@@ -5598,20 +6462,9 @@ func _update_arts_list() -> void:
 		var right := pattern.filter(func(m): return m != "").size()
 		hints.append("%s  (%d of %d)" % [" + ".join(pattern.map(func(m): return m if m != "" else "?")), right, pattern.size()])
 	battle_menu.arts_hints = hints
+	# (The "PUSH IT OFF THE LEDGE" box with a push Art's recipe went when
+	# Gust Sprites became Lightweight: every hit knocks them back now.)
 	battle_menu.arts_urgent = ""
-	if _push_needed():
-		var how := _push_recipe(controlled)
-		if how != "":
-			battle_menu.arts_urgent = "PUSH IT OFF THE LEDGE! Try %s: a hidden Art that pushes." % how
-
-
-## A mechanic that needs a push is up: a Gust Sprite (too tough to beat down,
-## light enough to push off the ledge) is standing.
-func _push_needed() -> bool:
-	for enemy in _standing(enemies):
-		if enemy.damage_taken_share < 0.5 and enemy.knockback_taken > 1.0:
-			return true
-	return false
 
 
 ## The recipe of a pushing Art this fighter hasn't discovered, if it has no
@@ -5732,6 +6585,8 @@ func _recipe_text(art: Dictionary) -> String:
 	if known_inside:
 		return art["recipe_text"]
 	var recipe: Array = art["recipe"]
+	if art.get("any_order", false) and recipe.size() > 1 and recipe.count(recipe[0]) == recipe.size():
+		return "%s x%d" % [recipe[0], recipe.size()]  # Fire x3
 	var text := " + ".join(recipe)
 	if text.length() <= 40:
 		return text
@@ -5819,7 +6674,11 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 			times.append(float(i + 1) / hits.size())
 	# Monk's Punch / Kick: only one hit is timed, the others land by themselves.
 	var untimed: Array[bool] = []
+	var code_timing := int(move.get("timing", Moves.TimingType.PRESS)) == Moves.TimingType.CODE
 	for i in hits.size():
+		if code_timing:
+			untimed.append(i != hits.size() - 1)  # one code, due before the last hit
+			continue
 		match String(move.get("timed", "all")):
 			"last":
 				untimed.append(i != hits.size() - 1)
@@ -5841,17 +6700,21 @@ func _plan_slot(move: Dictionary) -> Dictionary:
 		"timing": int(move.get("timing", Moves.TimingType.PRESS)),
 		"hold_start": float(move.get("hold_start", 0.35)),
 		"taps": int(move.get("taps", 0)), "tap_start": float(move.get("tap_start", 0.12)),
+		"code": (move.get("code", []) as Array).duplicate(), "code_start": float(move.get("code_start", code_start)),
 	}
 
 
 ## Starts playing the combo. _update_combo then runs it frame by frame.
 func _execute_combo() -> void:
+	_exec_rings.clear()
 	_menu_mode = BattleMenu.Mode.EXECUTING
 	_exec_attacker = controlled
 	_last_landed_ms = -100000  # no late-press grace carried over from another combo
 	_ap_before_combo = _pool(controlled)
 	_pay(controlled, battle_menu.combo_cost())  # a Headbutt's fresh bar included
+	_note_ice_carry(controlled)
 	_exec_limit = controlled.combo_limit
+	_spend_focus(controlled)  # the bar keeps its size while it plays (_exec_limit)
 	_exec_resume_slot = -1
 	if combo_counter:
 		combo_counter.begin(controlled.display_name)
@@ -5892,8 +6755,11 @@ func _start_combo_slot(slot: int) -> void:
 	_exec_timings.fill(Timing.NONE)
 	_exec_holding = false
 	_exec_taps = 0
+	_exec_code = 0
+	_exec_launched.clear()
 	battle_menu.exec_holding = false
 	battle_menu.exec_taps = 0
+	battle_menu.exec_code = 0
 	battle_menu.executing_slot = slot
 	battle_menu.slot_progress = 0.0
 	var art_move: Dictionary = _plan[slot]["move"]
@@ -5916,6 +6782,7 @@ func _start_combo_slot(slot: int) -> void:
 ## landing its hits at their planned moments.
 func _update_combo(delta: float) -> void:
 	if _exec_lead_in > 0.0:
+		_launch_timing_rings(_exec_lead_in)  # the first hits' rings already close in
 		_exec_lead_in -= delta
 		battle_menu.lead_in_progress = clampf(1.0 - _exec_lead_in / combo_lead_in, 0.0, 1.0)
 		if _exec_lead_in <= 0.0:
@@ -5960,15 +6827,21 @@ func _update_combo(delta: float) -> void:
 	var duration: float = entry["duration"]
 	var hits: Array = entry["hits"]
 	var times: Array = entry["times"]
+	# Nothing left to press in the whole combo: the rest plays fast.
+	_exec_speed = 1.0 if _inputs_left() else exec_fast_forward
+	delta *= _exec_speed
 	_exec_time += delta
 	battle_menu.slot_progress = clampf(_exec_time / duration, 0.0, 1.0)
+	_launch_approaches(entry)
+	_launch_timing_rings(0.0)
 
 	while _exec_hits_done < hits.size() and _exec_time >= duration * float(times[_exec_hits_done]):
 		var multiplier: float = hits[_exec_hits_done]
 		multiplier *= 1.0 + _settle_special_timing(entry, _exec_hits_done)
 		var untimed := _untimed(entry, _exec_hits_done)
 		var perfect := _exec_timings[_exec_hits_done] == Timing.PERFECT
-		if _exec_timings[_exec_hits_done] == Timing.NONE and not untimed and skipped_hit_max_ap_loss > 0.0:
+		if _exec_timings[_exec_hits_done] == Timing.NONE and not untimed and skipped_hit_max_ap_loss > 0.0 \
+				and int(entry["timing"]) != Moves.TimingType.CODE:  # an unfinished code costs nothing
 			_shrink_max_ap(skipped_hit_max_ap_loss, _exec_attacker)  # opted out of the timing
 		if perfect:
 			multiplier *= 1.0 + perfect_damage_bonus
@@ -5994,7 +6867,8 @@ func _update_combo(delta: float) -> void:
 		if perfect:
 			_popup(_exec_attacker, "PERFECT!", Color(1.0, 0.85, 0.2))
 			_count("perfects")
-			var kind_name: String = {Moves.TimingType.HOLD: "perfects_hold", Moves.TimingType.TAP: "perfects_tap"}.get(
+			var kind_name: String = {Moves.TimingType.HOLD: "perfects_hold", Moves.TimingType.TAP: "perfects_tap",
+					Moves.TimingType.CODE: "perfects_code"}.get(
 					entry["timing"] if _special_hit(entry, _exec_hits_done - 1) else -1, "")
 			if kind_name != "":
 				_count(kind_name)
@@ -6031,11 +6905,105 @@ func _update_combo(delta: float) -> void:
 				combo_counter.finish()
 
 
+## True while the combo still has something the player can press: a timing
+## box ahead, a Hold to let go, a code to type, Energy's or Tortoise
+## Special's taps still adding damage. False = the rest plays by itself, so
+## it's fast-forwarded (exec_fast_forward).
+func _inputs_left() -> bool:
+	for slot in range(_exec_slot, _plan.size()):
+		var e := _plan[slot]
+		var hits: Array = e["hits"]
+		var timing := int(e["timing"])
+		var surge := float(e["move"].get("surge", 0.0)) > 0.0
+		for h in range(_exec_hits_done if slot == _exec_slot else 0, hits.size()):
+			if _untimed(e, h):
+				continue
+			if slot != _exec_slot:
+				return true  # a later move: its timing is still ahead
+			var special := _special_hit(e, h)
+			if special and timing == Moves.TimingType.HOLD and _exec_holding:
+				return true  # still to let go
+			var result: int = _exec_timings[h]
+			if result == Timing.NONE:
+				return true
+			if result == Timing.PERFECT and special and surge:
+				if e["move"].get("surge_uncapped", false) or _exec_taps < int(e["taps"]):
+					return true  # more taps still add damage
+	return false
+
+
+## Starts each upcoming hit's approach effect so it arrives exactly when the
+## playhead lands that hit (SpellFx.approach_lead seconds ahead).
+func _launch_approaches(entry: Dictionary) -> void:
+	if _combo_target == null or _combo_target.is_down or _exec_attacker == null:
+		return
+	var hits: Array = entry["hits"]
+	var times: Array = entry["times"]
+	var duration: float = entry["duration"]
+	for h in range(_exec_hits_done, hits.size()):
+		if _exec_launched.has(h):
+			continue
+		var move: Dictionary = entry["move"]
+		if move.has("last_hit") and h == hits.size() - 1:
+			move = move.duplicate()
+			move.merge(move["last_hit"], true)
+		var lead := SpellFx.approach_lead(_exec_attacker, move)
+		var hit_time := duration * float(times[h])
+		if lead <= 0.0:
+			_exec_launched[h] = true
+			continue
+		if _exec_time < hit_time - lead:
+			break  # later hits start later still
+		_exec_launched[h] = true
+		SpellFx.approach(self, _exec_attacker, _combo_target, move, maxf((hit_time - _exec_time) / _exec_speed, 0.04))
+
+
+## Timing rings on the enemy: for every press hit, a ring closes in on the
+## target at a steady speed, starting timing_ring_lead seconds before the
+## hit (also across into the next block, and during the lead-in); a fixed
+## gold ring marks the timing box: press while the closing ring is inside
+## it. extra: seconds still to wait before the current block starts.
+func _launch_timing_rings(extra: float) -> void:
+	if _combo_target == null or _combo_target.is_down or _exec_slot >= _plan.size():
+		return
+	var into := 0.0 if extra > 0.0 else _exec_time  # where the playhead is in the current block
+	var offset := extra
+	for slot in range(_exec_slot, mini(_exec_slot + 2, _plan.size())):
+		var e := _plan[slot]
+		var duration: float = e["duration"]
+		var times: Array = e["times"]
+		var first := _exec_hits_done if slot == _exec_slot and extra <= 0.0 else 0
+		for h in range(first, (e["hits"] as Array).size()):
+			if _untimed(e, h) or _special_hit(e, h):
+				continue  # Holds, Taps and codes have their own cues
+			var key := "%d:%d" % [slot, h]
+			if _exec_rings.has(key):
+				continue
+			var until := offset + duration * float(times[h]) - (into if slot == _exec_slot else 0.0)
+			if until > timing_ring_lead or until <= 0.0:
+				continue
+			var window := battle_menu.box_fraction(e) * duration
+			_exec_rings[key] = SpellFx.timing_ring(self, _combo_target, until, window, timing_ring_lead)
+		offset += duration - (into if slot == _exec_slot else 0.0)
+
+
+## A press judged: its ring flashes gold (Perfect) or red (miss).
+func _ring_result(slot: int, hit: int, perfect: bool) -> void:
+	var key := "%d:%d" % [slot, hit]
+	if _exec_rings.has(key):
+		SpellFx.timing_ring_done(_exec_rings[key], perfect)
+
+
 ## The hint under the bar while a combo plays, for the current move's timing.
 func _timing_prompt() -> String:
 	if _exec_slot < _plan.size() and _exec_lead_in <= 0.0:
 		var entry := _plan[_exec_slot]
 		if _special_hit(entry, _next_timed(entry)):
+			if int(entry["timing"]) == Moves.TimingType.CODE:
+				var code_line := "TYPE %s with WASD before the hit: Perfect!  (a wrong arrow starts it over)" % code_text(entry["code"])
+				if float(entry["move"].get("surge", 0.0)) > 0.0:
+					code_line = "TYPE %s with WASD, then TAP {confirm} freely: every tap adds damage" % code_text(entry["code"])
+				return Keybinds.fill(code_line)
 			if int(entry["timing"]) == Moves.TimingType.HOLD:
 				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
 			if entry["move"].get("surge_uncapped", false):
@@ -6172,6 +7140,11 @@ func _settle_special_timing(entry: Dictionary, hit: int) -> float:
 	if not _special_hit(entry, hit):
 		return 0.0
 	match int(entry["timing"]):
+		Moves.TimingType.CODE:
+			if float(entry["move"].get("surge", 0.0)) > 0.0 and _exec_taps > 0:
+				# Energy: the taps after the code add damage.
+				_popup(_exec_attacker, "SURGE x%d" % _exec_taps, Color(0.75, 0.55, 1.0))
+				return float(entry["move"]["surge"]) * float(_exec_taps)
 		Moves.TimingType.HOLD:
 			if _exec_holding:
 				# Still holding when the arrow flies: let go too late.
@@ -6199,6 +7172,194 @@ func _settle_special_timing(entry: Dictionary, hit: int) -> float:
 func _mark_timing(hit: int, result: int) -> void:
 	_exec_timings[hit] = result
 	battle_menu.slot_results[_exec_slot][hit] = result
+
+
+## Party AP refill: faster while a Mage stands still (Focus).
+func _focus_ap_mult() -> float:
+	return 1.0 + focus_ap_bonus if _focus_boost else 1.0
+
+
+## Mage Focus, every free-roam frame: standing still builds a charge every
+## focus_seconds (up to focus_max), walking focus_walk_meters loses one.
+## Jumps (teleports, pushes) aren't walking and cost nothing.
+func _tick_focus(world_delta: float) -> void:
+	var still_any := false
+	for member in party:
+		if member.focus_max <= 0:
+			continue
+		var last: Vector3 = member.get_meta("focus_pos", member.global_position)
+		member.set_meta("focus_pos", member.global_position)
+		if member.is_down:
+			if member.focus > 0:
+				member.set_focus(0)
+			continue
+		var moved := Vector2(member.global_position.x - last.x, member.global_position.z - last.z).length()
+		if moved > 0.002 and moved < 0.5:
+			member.focus_clock = 0.0
+			member.focus_walked += moved
+			while member.focus_walked >= focus_walk_meters:
+				member.focus_walked -= focus_walk_meters
+				if member.focus > 0:
+					member.set_focus(member.focus - 1)
+					_count("focus_walked_off")
+					_popup(member, "-FOCUS", Color(0.7, 0.65, 0.9))
+			continue
+		if moved >= 0.5:
+			continue  # a jump: not walking, not standing still either
+		still_any = true
+		member.focus_clock += world_delta
+		if member.focus_clock >= focus_seconds:
+			member.focus_clock -= focus_seconds
+			if member.focus < member.focus_max:
+				member.set_focus(member.focus + 1)
+				_count("focus_charges")
+				if member.focus == member.focus_max:
+					_popup(member, "FOCUS MAX", Color(0.75, 0.55, 1.0))
+	_focus_boost = still_any
+
+
+## She attacks: Focus is spent (the bar back to its base), then rebuilds.
+func _spend_focus(fighter: Combatant) -> void:
+	if fighter == null or fighter.focus_max <= 0:
+		return
+	if fighter.focus > 0:
+		_count_amount("focus_spent", fighter.focus)
+	fighter.set_focus(0)
+	fighter.focus_clock = 0.0
+	fighter.focus_walked = 0.0
+
+
+## Enchant: every ally but the Mage carries the element for `turns` of her
+## turns. One at a time: a new one replaces the old.
+func _enchant(user: Combatant, element: String, turns: int) -> void:
+	for member in party:
+		for e in ENCHANTS:
+			member.statuses.erase("enchant_" + e)
+	for ally in _standing(party):
+		if ally != user:
+			ally.add_status("enchant_" + element, turns, user)
+			_popup(ally, element.to_upper(), Color(0.75, 0.55, 1.0))
+	_count("enchants")
+	_count("enchant_" + element)
+
+
+func _enchant_running() -> bool:
+	for member in party:
+		for e in ENCHANTS:
+			if member.statuses.has("enchant_" + e):
+				return true
+	return false
+
+
+## AI Cleric's Lifeline: she stands in a danger area she can't walk out of
+## in time (or is hurt along with an ally), and an ally within reach stands
+## clear of it. The most hurt such ally; null if none.
+func _ai_lifeline_target(cleric: Combatant) -> Combatant:
+	var dangers := _ally_dangers(cleric)
+	var caught := _in_danger(cleric.global_position, dangers)
+	var best: Combatant = null
+	for ally in _standing(party):
+		if ally == cleric or cleric.gap_to(ally) > 8.0 or _in_danger(ally.global_position, dangers):
+			continue
+		var low := float(ally.hp) / maxf(ally.max_hp, 1.0)
+		var both_hurt := low < 0.6 and float(cleric.hp) / maxf(cleric.max_hp, 1.0) < 0.6
+		if not caught and not both_hurt:
+			continue
+		if best == null or low < float(best.hp) / maxf(best.max_hp, 1.0):
+			best = ally
+	return best
+
+
+## AI Mage's Enchant: Lightning while a Stagger bar is up (a boss move to
+## break), Ice against a crowd, Fire otherwise. "" with nobody to carry it.
+func _ai_enchant_pick() -> String:
+	if _standing(party).size() < 2:
+		return ""
+	var foes := _standing(enemies)
+	for enemy in foes:
+		var view: Dictionary = enemy.stagger_view()
+		if not view.is_empty() and not view.get("hits", false):
+			return "lightning"
+	if foes.size() >= 3:
+		return "ice"
+	return "fire"
+
+
+## Siphon Shot: a hit on an enemy she Siphoned heals the Archer 3% of her
+## max HP (6% on a Perfect). Only her own hits.
+func _siphon(attacker: Combatant, move: Dictionary) -> void:
+	var target := _combo_target
+	if target == null or target.is_down or not target.statuses.has("siphoned"):
+		return
+	if target.statuses["siphoned"].get("caster") != attacker or attacker.is_down:
+		return
+	var share := 0.03 * (2.0 if _exec_hit_perfect and attacker == _exec_attacker else 1.0)
+	var healed: int = attacker.heal(maxi(roundi(attacker.max_hp * share), 1))
+	if healed > 0:
+		_count_amount("siphon_healed", healed)
+		_popup(attacker, "+%d" % healed, Color(0.45, 1.0, 0.55))
+		SpellFx.sparks(self, attacker.global_position + Vector3(0, 1.0, 0), Color(0.45, 1.0, 0.55), 6)
+
+
+## An ally's hit under Enchant: the move with the element's light effect
+## added (a copy; moves that already do more keep theirs).
+func _enchanted(attacker: Combatant, move: Dictionary) -> Dictionary:
+	if attacker.team != Combatant.Team.PARTY:
+		return move
+	for e in ENCHANTS:
+		if not attacker.statuses.has("enchant_" + e):
+			continue
+		var out := move.duplicate()
+		match e:
+			"fire":
+				if float(out.get("burn", 0.0)) <= 0.0:
+					out["burn"] = enchant_burn
+					out["burn_turns"] = 1
+			"ice":
+				out["chill"] = true
+			"lightning":
+				out["stagger_mult"] = float(out.get("stagger_mult", 1.0)) * enchant_stagger_mult
+			"energy":
+				out["knockback"] = maxf(float(out.get("knockback", 0.0)), enchant_push)
+		_count("enchanted_hits")
+		return out
+	return move
+
+
+## A WASD direction during a Mage spell: the next arrow of its code moves
+## the code on, done = Perfect (before the hit lands); a wrong one starts it
+## over. Never a miss.
+func _judge_code(dir: String) -> void:
+	if _exec_outro >= 0.0 or _exec_lead_in > 0.0 or _exec_reveal_left > 0.0 \
+			or _counter_recover > 0.0 or _counter_from != null or _exec_slot >= _plan.size():
+		return
+	var entry := _plan[_exec_slot]
+	var code: Array = entry.get("code", [])
+	if int(entry["timing"]) != Moves.TimingType.CODE or code.is_empty():
+		return
+	var hit := (entry["hits"] as Array).size() - 1
+	if _exec_hits_done > hit or _exec_code >= code.size():
+		return  # landed, or already typed
+	if _exec_time < float(entry["duration"]) * float(entry["code_start"]):
+		return
+	if String(code[_exec_code]) == dir:
+		_exec_code += 1
+		if _exec_code >= code.size():
+			_mark_timing(hit, Timing.PERFECT)
+	else:
+		_exec_code = 0
+		_count("code_restarts")
+		_popup(_exec_attacker, "RESTART", Color(0.85, 0.8, 0.6))
+	battle_menu.exec_code = _exec_code
+
+
+## "W S A" for a code (the keys to press).
+static func code_text(code: Array) -> String:
+	var keys := {"up": "W", "down": "S", "left": "A", "right": "D"}
+	var parts: PackedStringArray = []
+	for dir in code:
+		parts.append(keys.get(dir, "?"))
+	return " ".join(parts)
 
 
 ## Confirm let go during the combo: ends a Hold. Inside the release box =
@@ -6242,6 +7403,14 @@ func _judge_timing() -> void:
 	var duration: float = entry["duration"]
 	var window: float = battle_menu.box_fraction(entry) * duration
 	var hit := _next_timed(entry)
+	if hit < _exec_timings.size() and _special_hit(entry, hit) and int(entry["timing"]) == Moves.TimingType.CODE:
+		# A spell code: the key does nothing (never a miss), except Energy's
+		# free taps once the code is in.
+		if float(entry["move"].get("surge", 0.0)) > 0.0 and _exec_code >= (entry["code"] as Array).size() \
+				and _exec_taps < int(entry["taps"]):
+			_exec_taps += 1
+			battle_menu.exec_taps = _exec_taps
+		return
 	if hit < _exec_timings.size() and _special_hit(entry, hit):
 		if int(entry["timing"]) == Moves.TimingType.TAP:
 			if _exec_time < duration * float(entry["tap_start"]):
@@ -6285,6 +7454,7 @@ func _judge_timing() -> void:
 	if _exec_time >= hit_time - window:
 		_exec_timings[hit] = Timing.PERFECT
 		battle_menu.slot_results[_exec_slot][hit] = Timing.PERFECT
+		_ring_result(_exec_slot, hit, true)
 	elif Time.get_ticks_msec() - _last_landed_ms <= late_press_grace * 1000.0:
 		# A press just after a hit landed is that hit's late press, not an
 		# early one for the next box: no Perfect for it, but no miss either.
@@ -6297,6 +7467,7 @@ func _judge_timing() -> void:
 ## party loses all its AP and max AP resets.
 func _timing_miss(hit: int, why: String) -> void:
 	_mark_timing(hit, Timing.MISS)
+	_ring_result(_exec_slot, hit, false)
 	_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
 	var reset_note := _reset_max_ap()
 	ap = 0.0  # a missed timing costs all the party's AP
@@ -6403,6 +7574,10 @@ func _stop_combo() -> void:
 func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_hit: bool, last_hit: bool = true) -> bool:
 	if attacker.is_down:
 		return false
+	move = _enchanted(attacker, move)
+	_siphon(attacker, move)
+	if attacker.team == Combatant.Team.PARTY and _combo_target != null and not _combo_target.is_down:
+		SpellFx.impact(self, attacker, _combo_target, move, _exec_hit_perfect)  # looks only
 	# Support effects come with the last hit (a Hold's Perfect is known by then).
 	if last_hit and float(move["barrier"]) > 0.0:
 		_give_barrier(attacker, move)
@@ -6414,6 +7589,14 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 			multiplier *= float(move.get("front_mult", 1.0))  # no positionals: every bonus applies
 		_step_behind(attacker, _combo_target)
 		_count("shadowsteps")
+	if last_hit and move.get("detonate_burns", false):
+		_detonate_burns(attacker)
+	if last_hit and move.has("delayed_blast") and _combo_target != null and not _combo_target.is_down:
+		_add_blast(attacker, move, _combo_target.global_position)
+	if last_hit and float(move.get("ap_refund", 0.0)) > 0.0:
+		ap = minf(ap + float(move["ap_refund"]), current_max_ap)
+		_popup(attacker, "+%d AP" % int(move["ap_refund"]), Color(0.75, 0.55, 1.0))
+		_count("ap_refunds")
 	var keep_going := true
 	for victim in _hit_victims(attacker, move):
 		var enemy: Combatant = victim[0]
@@ -6430,6 +7613,103 @@ func _land_hit(attacker: Combatant, move: Dictionary, multiplier: float, first_h
 			return false
 		_flash("%s turns to %s" % [attacker.display_name, _combo_target.display_name])
 	return true
+
+
+## Ice Spear: a regular enemy freezes (no moving, its timeline stopped) and
+## its turn is pushed back; a boss only loses turn time, halved each time.
+func _deep_freeze(target: Combatant, move: Dictionary) -> void:
+	var push := float(move.get("turn_push", 0.0))
+	if target.boss:
+		var times := int(target.get_meta("freeze_resist", 0))
+		target.set_meta("freeze_resist", times + 1)
+		push *= pow(0.5, times)
+		_knock_back_enemy(target, push)
+		_popup(target, "CHILLED TO THE BONE  -%d" % roundi(push), Color(0.6, 0.85, 1.0))
+		_count("boss_freezes")
+		return
+	target.freeze_left = maxf(target.freeze_left, float(move["deep_freeze"]))
+	target.add_status("frozen", 1, target)
+	_knock_back_enemy(target, push)
+	_popup(target, "FROZEN", Color(0.6, 0.9, 1.0))
+	_count("deep_freezes")
+
+
+## Stasis: a regular enemy's timeline stops; a boss only loses turn time,
+## halved each time.
+func _stasis(target: Combatant, move: Dictionary) -> void:
+	if target.boss:
+		var times := int(target.get_meta("stasis_resist", 0))
+		target.set_meta("stasis_resist", times + 1)
+		var push := float(move.get("turn_push", 0.0)) * pow(0.5, times)
+		_knock_back_enemy(target, push)
+		_popup(target, "SLOWED  -%s" % MoveInfo._num(push), Color(0.7, 0.75, 1.0))
+		return
+	target.freeze_left = maxf(target.freeze_left, float(move["stasis"]))
+	_popup(target, "STASIS %ss" % MoveInfo._num(float(move["stasis"])), Color(0.7, 0.75, 1.0))
+	_count("stasis_holds")
+
+
+## Flare: every burning enemy takes all its Burn left at once.
+func _detonate_burns(attacker: Combatant) -> void:
+	for enemy in _standing(enemies):
+		if enemy.burn_turns <= 0:
+			continue
+		var total := enemy.burn_damage * maxi(enemy.burn_stacks, 1) * enemy.burn_turns
+		enemy.burn_turns = 0
+		enemy.burn_stacks = 1
+		var dealt := enemy.take_damage(total, false)
+		_add_threat(enemy, attacker, dealt)
+		if playtest:
+			playtest.deal(attacker, dealt)
+		_popup(enemy, "FLARE %d" % dealt, Color(1.0, 0.55, 0.15))
+		_count("flares")
+	_check_enemies()
+
+
+## Inferno: a marked circle that explodes after `seconds` of running time.
+func _add_blast(attacker: Combatant, move: Dictionary, at: Vector3) -> void:
+	var info: Dictionary = move["delayed_blast"]
+	var ring := _make_ring(float(info["radius"]), 0.18, Color(1.0, 0.35, 0.1, 0.9))
+	add_child(ring)
+	ring.global_position = Vector3(at.x, 0.06, at.z)
+	_blasts.append({"pos": at, "radius": float(info["radius"]), "left": float(info["seconds"]),
+			"attacker": attacker, "move": move, "ring": ring, "hit": float(info["hit"])})
+	_flash("%s's %s: the circle explodes in %s s" % [attacker.display_name, move["name"], MoveInfo._num(float(info["seconds"]))])
+
+
+func _tick_blasts(seconds: float) -> void:
+	for blast in _blasts.duplicate():
+		blast["left"] = float(blast["left"]) - seconds
+		var ring: Node3D = blast["ring"]
+		if is_instance_valid(ring):
+			ring.scale = Vector3.ONE * (1.0 + 0.08 * sin(float(blast["left"]) * 12.0))  # pulses as it counts down
+		if float(blast["left"]) > 0.0:
+			continue
+		_blasts.erase(blast)
+		if is_instance_valid(ring):
+			ring.queue_free()
+		var attacker: Combatant = blast["attacker"]
+		var move: Dictionary = blast["move"]
+		var hit_any := false
+		for enemy in _standing(enemies):
+			var gap := Vector2(enemy.global_position.x - blast["pos"].x, enemy.global_position.z - blast["pos"].z).length() - enemy.body_radius
+			if gap > float(blast["radius"]):
+				continue
+			hit_any = true
+			var mult := float(blast["hit"]) * (1.0 + staggered_bonus if enemy.statuses.has("staggered") else 1.0)
+			var dealt := enemy.take_damage(ceili(attacker.attack_power * mult), false)
+			_add_threat(enemy, attacker, dealt)
+			_fill_stagger(attacker, enemy, dealt, move)
+			if playtest:
+				playtest.deal(attacker, dealt)
+			_popup(enemy, str(dealt), Color(1.0, 0.5, 0.15))
+			if float(move.get("burn", 0.0)) > 0.0 and not enemy.is_down:
+				enemy.burn_damage = maxi(enemy.burn_damage if enemy.burn_turns > 0 else 0, ceili(attacker.attack_power * float(move["burn"])))
+				enemy.burn_stacks = maxi(enemy.burn_stacks if enemy.burn_turns > 0 else 1, int(move.get("burn_stacks", 1)))
+				enemy.burn_turns = int(move.get("burn_turns", 2))
+		_count("blasts_hit" if hit_any else "blasts_missed")
+		_flash("%s explodes%s" % [move["name"], "" if hit_any else ": nobody in it"])
+		_check_enemies()
 
 
 ## Puts a fighter right behind an enemy, facing it (Shadowstep).
@@ -6482,6 +7762,14 @@ func _hit_victims(attacker: Combatant, move: Dictionary) -> Array:
 				result.append([enemy, 1.0])
 		_:
 			result.append([_combo_target, 1.0])
+	if int(move.get("chain", 0)) > 0 and _combo_target != null:
+		# Chain Lightning: jumps to the nearest others within chain_range.
+		var others := _standing(enemies).filter(func(e): return e != _combo_target \
+				and e.global_position.distance_to(_combo_target.global_position) <= float(move.get("chain_range", 5.0)))
+		others.sort_custom(func(x, y): return x.global_position.distance_to(_combo_target.global_position) \
+				< y.global_position.distance_to(_combo_target.global_position))
+		for e in others.slice(0, int(move["chain"])):
+			result.append([e, float(move.get("chain_share", 0.75))])
 	return result
 
 
@@ -6659,6 +7947,7 @@ func _give_barrier(user: Combatant, move: Dictionary) -> void:
 	for ally in _standing(party):
 		if ally.global_position.distance_to(user.global_position) <= radius:
 			var gained := ally.add_shield(ceili(ally.max_hp * share), user)
+			SpellFx.shield(self, ally)
 			if gained > 0:
 				_popup(ally, "+%d BARRIER" % gained, Color(0.55, 0.8, 1.0))
 
@@ -6673,6 +7962,9 @@ func _art_heal(user: Combatant, move: Dictionary) -> void:
 	for ally in _standing(party):
 		if ally.global_position.distance_to(user.global_position) <= radius:
 			var healed := ally.heal(ceili(ally.max_hp * share))
+			if healed > 0:
+				SpellFx.heal(self, ally)
+			_count_amount("hp_healed", healed)
 			if healed > 0:
 				_popup(ally, "+%d" % healed, Color(0.5, 1.0, 0.55))
 				_count("art_healing")
@@ -6769,6 +8061,7 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		# Execute: each Mark it spends adds 15% (0.6x on its 4x from behind).
 		multiplier *= 1.0 + float(move["mark_bonus"]) * target.marks
 	var was_guarding := target.stance == Skills.Kind.DEFENSE
+	var was_chilled := target.statuses.has("chilled")  # Static Frost freezes the Chilled
 	if target.stance == Skills.Kind.DEFENSE:
 		match move["effect"]:
 			Moves.Effect.BREAK:
@@ -6803,6 +8096,20 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		else:
 			_popup(target, "%d / %d" % [hits, needed], Color(1.0, 0.75, 0.4))
 
+	if move.has("shatter") and target.team == Combatant.Team.ENEMY:
+		# Shatter: Frozen 2.5x (ends the Freeze), Chilled 1.6x, else 0.6x.
+		var shares: Array = move["shatter"]
+		if target.statuses.has("frozen"):
+			multiplier *= float(shares[0])
+			target.statuses.erase("frozen")
+			target.freeze_left = 0.0
+			note = "Shattered!"
+			_count("shatters")
+		elif target.statuses.has("chilled"):
+			multiplier *= float(shares[1])
+			_popup(target, "CRACKED", Color(0.6, 0.85, 1.0))
+		else:
+			multiplier *= float(shares[2])
 	if target.statuses.has("exposed"):
 		multiplier *= 1.0 + exposed_bonus  # Archer's Exposing Shot
 	if target.statuses.has("staggered"):
@@ -6830,16 +8137,21 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 			note = "%s interrupted!" % ritual.skill_name
 		else:
 			_popup(target, "%d / %d" % [target.interrupt_count, ritual.interrupt_hits], Color(0.5, 1.0, 0.6))
-	if move["stun"] and not target.is_down and _loaded_offensive(target):
+	if move["stun"] and not target.is_down and _loaded_offensive(target) \
+			and not (move.get("stun_not_bosses", false) and target.boss):
 		# Stunning Arrow / Crusader's Edge: an enemy about to strike loses the
 		# attack and drops back out of the casting zone. Once per action of
 		# its own (shared with the Knight's halt), so it can't be locked.
-		if target.control_used:
+		if target.control_used and not move.get("ignore_cancel_lock", false):
 			_popup(target, "NO STUN", Color(0.7, 0.7, 0.7))
-		elif _try_cancel(target):
+		elif _try_cancel(target, move.get("ignore_cancel_lock", false)):
 			target.control_used = true
 			note = "Stunned! Attack cancelled"
 			_count("stuns")
+	if target.lightweight and not target.is_down and float(move["knockback"]) < lightweight_push:
+		# Lightweight (Gust Sprites): any hit knocks it back.
+		move = move.duplicate()
+		move["knockback"] = lightweight_push
 	# Smash: breaking a guard spends the blow, so no knock-back that hit.
 	if float(move["knockback"]) > 0.0 and not target.is_down \
 			and not (was_guarding and move.get("knockback_unguarded", false)):
@@ -6862,6 +8174,11 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		if target.burn_turns <= 0:
 			_popup(target, "BURNING", Color(1.0, 0.5, 0.2))
 		target.burn_damage = maxi(target.burn_damage if target.burn_turns > 0 else 0, ceili(attacker.attack_power * float(move["burn"])))
+		# Fireball / Inferno: Burn x2 / x3 (each tick that many times over).
+		var stacks := int(move.get("burn_stacks", 1))
+		target.burn_stacks = maxi(target.burn_stacks if target.burn_turns > 0 else 1, stacks)
+		if stacks > 1:
+			_popup(target, "BURN x%d" % target.burn_stacks, Color(1.0, 0.5, 0.2))
 		target.burn_turns = int(move.get("burn_turns", 2))
 		_count("burns")
 	if float(move.get("expose", 0.0)) > 0.0 and not target.is_down and target.team == Combatant.Team.ENEMY:
@@ -6876,6 +8193,12 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 			_popup(target, "CHILLED", Color(0.6, 0.85, 1.0))
 		target.add_status("chilled", 1, target)
 		_count("chills")
+	if float(move.get("deep_freeze", 0.0)) > 0.0 and not target.is_down and target.team == Combatant.Team.ENEMY:
+		_deep_freeze(target, move)
+	if move.has("freeze_if_chilled") and was_chilled and not target.is_down and target.team == Combatant.Team.ENEMY:
+		_deep_freeze(target, move["freeze_if_chilled"])
+	if float(move.get("stasis", 0.0)) > 0.0 and not target.is_down and target.team == Combatant.Team.ENEMY:
+		_stasis(target, move)
 	if float(move.get("freeze", 0.0)) > 0.0 and not target.is_down and target.team == Combatant.Team.ENEMY \
 			and _last_hit_of_slot():
 		# Guard Strike / Shield Rush: its timeline stops for a moment. Once per
@@ -6942,7 +8265,7 @@ func _fill_stagger(attacker: Combatant, target: Combatant, dealt: int, move: Dic
 		if target.skill_revealed:
 			_popup(target, "NOT HEAD-ON", Color(0.7, 0.7, 0.75))
 		return false
-	target.stagger_fill += dealt * (stagger_heavy_mult if heavy_move(move) else 1.0)
+	target.stagger_fill += dealt * (stagger_heavy_mult if heavy_move(move) else 1.0) * float(move.get("stagger_mult", 1.0))
 	if target.stagger_fill < target.stagger_need(def):
 		return false
 	_stagger(target)
@@ -6959,6 +8282,7 @@ func _stagger(enemy: Combatant) -> void:
 	enemy.staggers_taken += 1  # resistance: its next bars are bigger
 	enemy.add_status("staggered", 1, enemy)
 	_popup(enemy, "STAGGERED", Color(1.0, 0.8, 0.25))
+	SpellFx.stagger(self, enemy)
 	if def.stagger_into != null:
 		var revealed := enemy.skill_revealed
 		_clear_cast_extras(enemy)
@@ -6998,8 +8322,11 @@ func _cancel_resisted(enemy: Combatant) -> String:
 
 ## Cancels a boss's skill if it isn't resisted; shows why when it is.
 ## Returns true if the skill was cancelled.
-func _try_cancel(enemy: Combatant) -> bool:
+func _try_cancel(enemy: Combatant, ignore_lock := false) -> bool:
 	var why := _cancel_resisted(enemy)
+	if ignore_lock and why == "IMMUNE":
+		why = ""  # Overcharge: through the cancel immunity (not UNSTOPPABLE)
+		_count("overcharge_cancels")
 	if why != "":
 		_popup(enemy, why, Color(0.75, 0.8, 0.95))
 		_count("cancels_resisted")
@@ -7110,10 +8437,36 @@ func _open_skills() -> void:
 		_flash("%s has no skills" % controlled.display_name)
 		return
 	_menu_mode = BattleMenu.Mode.SKILLS
+	battle_menu.element_pick = false
 	battle_menu.moves = _skills
 	battle_menu.move_usable = usable
 	battle_menu.move_notes = notes
 	battle_menu.move_index = 0
+
+
+## Enchant's element menu: a direction picks the element and casts it;
+## back closes the menu (the skills list stays).
+func _element_input(event: InputEvent) -> void:
+	if event.is_echo():
+		return
+	if event.is_action_pressed("cancel"):
+		get_viewport().set_input_as_handled()
+		battle_menu.element_pick = false
+		_element_skill = {}
+		return
+	for dir in CODE_KEYS:
+		if event.is_action_pressed(CODE_KEYS[dir]):
+			get_viewport().set_input_as_handled()
+			_cast_element(ELEMENT_BY_DIR[dir])
+			return
+
+
+func _cast_element(element: String) -> void:
+	var skill := _element_skill.duplicate()
+	skill["element"] = element
+	battle_menu.element_pick = false
+	_element_skill = {}
+	_use_skill(skill, controlled, controlled.global_position)
 
 
 ## Who a skill can be used on, nearest first.
@@ -7127,6 +8480,9 @@ func _skill_choices(skill: Dictionary) -> Array[Combatant]:
 		Moves.Target.OTHER_ALLY:
 			choices = _standing(party)
 			choices.erase(controlled)
+			if skill.has("range"):
+				choices = choices.filter(func(m): return controlled.gap_to(m) <= float(skill["range"]))
+				choices.sort_custom(func(a, b): return controlled.gap_to(a) < controlled.gap_to(b))
 		Moves.Target.ENEMY:
 			for enemy in _standing(enemies):
 				if skill.get("needs_marks", false):
@@ -7142,6 +8498,11 @@ func _choose_skill(index: int) -> void:
 	var skill := _skills[index]
 	if not battle_menu.move_usable[index]:
 		_flash("%s: %s" % [skill["name"], battle_menu.move_notes[index]])
+		return
+	if skill.get("choose_element", false):
+		# Enchant: a small menu of four directions picks the element.
+		_element_skill = skill
+		battle_menu.element_pick = true
 		return
 	match skill["target"]:
 		Moves.Target.SELF, Moves.Target.NONE:
@@ -7247,6 +8608,7 @@ func _clear_target_marker() -> void:
 ## back with Abilities greyed out, so you can still Attack or Wait.
 func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 	var user := controlled
+	battle_menu.element_pick = false  # Enchant's menu only lives while she's picking
 	_pay(user, float(skill["cost"]))
 	_count("skills")
 	_count("skills_" + user.class_id)
@@ -7257,8 +8619,29 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 		"Light Heal", "Healing", "Full Cure":
 			var who := target if target != null else user
 			var healed := who.heal(ceili(who.max_hp * float(skill["heal"])))
+			if healed > 0:
+				SpellFx.heal(self, who)
+			_count_amount("hp_healed", healed)
 			_popup(who, "+%d" % healed, Color(0.45, 0.95, 0.5))
 			message += ": %s recovers %d HP" % [who.display_name, healed]
+		"Lifeline":
+			# Cleric: dash beside an ally (out of any area she stood in), both heal.
+			var from := user.global_position
+			user.global_position = _spot_next_to(target, user)
+			var dir := user.global_position - from
+			dir.y = 0.0
+			if dir.length() > 0.1:
+				user.face_toward(dir, 1.0, 100000.0)
+				SpellFx.dust(self, user, -dir.normalized(), minf(dir.length(), 3.0))
+			var total := 0
+			for who in [user, target]:
+				var healed: int = who.heal(ceili(who.max_hp * float(skill["heal"])))
+				if healed > 0:
+					SpellFx.heal(self, who)
+				_popup(who, "+%d" % healed, Color(0.45, 0.95, 0.5))
+				total += healed
+			_count_amount("hp_healed", total)
+			message += " to %s: both recover HP (%d in all)" % [target.display_name, total]
 		"Brace", "Agility":
 			user.add_status(String(skill["name"]).to_lower(), turns, user)
 			_popup(user, String(skill["name"]).to_upper(), skill["color"])
@@ -7295,6 +8678,9 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			message += ": %s now targets %s" % [target.display_name, user.display_name]
 		"Deep Breath":
 			var healed := user.heal(ceili(user.max_hp * float(skill["heal"])))
+			if healed > 0:
+				SpellFx.heal(self, user)
+			_count_amount("hp_healed", healed)
 			_popup(user, "+%d" % healed, Color(0.45, 0.95, 0.5))
 			message += ": recovers %d HP" % healed
 			if user.climbs() and user.lost_step > user.combo_limit:
@@ -7309,9 +8695,10 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 		"Arcane Barrier":
 			user.add_status("arcane_barrier", 0, user)
 			_popup(user, "BARRIER", skill["color"])
-		"Concentrate":
-			_concentrate_left = float(skill["seconds"])
-			message += ": AP recharges twice as fast"
+		"Enchant":
+			var element := String(skill.get("element", "fire"))
+			_enchant(user, element, int(skill["turns"]))
+			message = "%s uses Enchant: %s on every ally" % [user.display_name, element.capitalize()]
 		"Teleport":
 			if target != null and target != user:
 				user.global_position = _spot_next_to(target, user)
@@ -7322,6 +8709,7 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 		"Shielding":
 			for ally in _standing(party):
 				var gained := ally.add_shield(ceili(ally.max_hp * float(skill["shield"])), user)
+				SpellFx.shield(self, ally)
 				_popup(ally, "+%d SHIELD" % gained, Color(0.55, 0.8, 1.0))
 		"Hook":
 			if target.stance != Skills.NONE:
@@ -7349,6 +8737,11 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 				target.set_marks(0)
 				message += " (its Marks are used up)"
 			_popup(target, "HOOKED", skill["color"])
+		"Siphon Shot":
+			target.add_status("siphoned", int(skill["turns"]), user)
+			_popup(target, "SIPHONED", skill["color"])
+			SpellFx.ring(self, Vector3(target.global_position.x, 0, target.global_position.z), Color(0.45, 1.0, 0.55), 1.8)
+			message += ": %s is Siphoned; her hits on it heal her" % target.display_name
 		"Death Sentence":
 			_add_marks(target, int(skill["marks"]))
 			message += ": %s has %d Marks" % [target.display_name, target.marks]
@@ -7356,6 +8749,7 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			var count := target.marks
 			target.set_marks(0)
 			var gained := user.add_shield(ceili(user.max_hp * float(skill["shield"]) * count), user)
+			SpellFx.shield(self, user)
 			_popup(user, "+%d SHIELD" % gained, Color(0.55, 0.8, 1.0))
 			message += ": %d Marks become a %d shield" % [count, gained]
 		"Vanish":
@@ -7573,6 +8967,11 @@ func _camera_focus() -> Vector3:
 func _update_ui(delta: float) -> void:
 	party_status.controlled = controlled
 	party_status.auto = _party_ai_on()
+	if ap_meter:
+		# Keep the AP bar between the two HP panels (tags and long names included).
+		var origin := ap_meter.global_position.x
+		ap_meter.limit_left = party_status.global_position.x + party_status.drawn_right - origin
+		ap_meter.limit_right = enemy_status.global_position.x + enemy_status.drawn_left - origin
 	for member in party:
 		var in_reach := false
 		for enemy in _standing(enemies):
@@ -7647,8 +9046,8 @@ func _update_ui(delta: float) -> void:
 		ap_meter.value = ap
 		ap_meter.max_value = current_max_ap
 		ap_meter.ceiling = max_ap_ceiling()
-		ap_meter.flow_speed = _ap_gain_multiplier() * (2.0 if _concentrate_left > 0.0 else 1.0)
-		ap_meter.boost_left = _concentrate_left
+		ap_meter.flow_speed = _ap_gain_multiplier() * _focus_ap_mult()
+		ap_meter.boost_left = 1.0 if _focus_boost else 0.0
 		ap_meter.ghost_cost = battle_menu.combo_cost() if _menu_mode == BattleMenu.Mode.COMBO and _party_turn() else 0.0
 		ap_meter.at_risk = _max_ap_at_risk()
 
@@ -7679,6 +9078,11 @@ func _strike_prompt() -> String:
 				else ("%s: no Marks out, can't parry" % _names(auto))
 	if not _strike_targets_can("block"):
 		defend_hint = Keybinds.fill("{defend}: ") + "%s can't block" % _names(_strike.targets)
+	var parry_defends_only := (not _strike.def.parryable() or not _strike_targets_can("parry")) and _parry_key_defends()
+	if parry_defends_only and _strike.targets.filter(func(t): return t.auto_parry_with_marks).is_empty():
+		# Only blockers here (the Cleric): either key Defends.
+		parry_hint = Keybinds.fill("{parry} / {defend}: Defend (%d AP)" % defend_cost)
+		defend_hint = ""
 	if _strike.def.is_mechanic():
 		# No prompt: there's nothing to press.
 		return _flash_message if _flash_time_left > 0.0 else ""

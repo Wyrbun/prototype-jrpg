@@ -335,7 +335,7 @@ func _build_steps() -> void:
 
 	# 5. Parry and Defend
 	_note(5, "Parry",
-		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets (if they can Parry it; others just get a mark: blue if they can Defend, red if not). Press {parry} as the ring turns gold to Parry: no damage, the enemy is knocked back on the timeline, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
+		"You don't always have to dodge. When a strike comes, a ring shrinks onto whoever it targets (if they can Parry it; others just get a mark: blue if they can Defend, and then {parry} Defends for them too; red if not). Press {parry} as the ring turns gold to Parry: no damage, the enemy is knocked back on the timeline, and your max AP grows. Attacks that hit several times show a ring for each hit, and each one can be Parried.\n\nPress too early and you take the full hit, your next turn is delayed, and the party loses all its AP.")
 	_goal(5, "Parry",
 		"Stand inside the revealed area and wait for the ring.",
 		"Parry a strike ({parry} when the ring turns gold)",
@@ -366,6 +366,14 @@ func _build_steps() -> void:
 		func():
 			_golem_show("Counter")
 			_knight_soon())
+	steps[-1]["tick"] = func():
+		# Attacking into it ends the stance (parried or countered) and the
+		# Golem stood frozen with nothing up, so Wait could never count:
+		# once the turn is over, it raises Counter again.
+		if battle.active == null and battle._strike == null and golem.hold \
+				and golem.stance != Skills.Kind.COUNTER and golem.loaded_def == null:
+			_golem_show("Counter")
+			_knight_soon()
 	_goal(6, "Smash",
 		"It's preparing a Smash: a heavy hit that Defend handles badly. Attack-type moves (Slash, Thrust, Double Slash) interrupt it and knock it out of the casting zone. Bosses shrug off the first two: it takes three hits, or one breaking move like Smash.",
 		"Interrupt the Smash with an Attack-type move",
@@ -377,7 +385,7 @@ func _build_steps() -> void:
 
 	# 7. More party members and Abilities
 	_note(7, "The Archer",
-		"Each class has its own attacks, Abilities and reactions. Meet them one at a time, starting with the Archer.\n\nThe Archer can't Block or Parry, but her Riposte Ability counters a strike instead.\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
+		"Each class has its own attacks, Abilities and reactions. Meet them one at a time, starting with the Archer.\n\nThe Archer can't Block or Parry: she keeps herself up with Siphon Shot instead (her hits on a Siphoned enemy heal her).\n\nSome Archer moves are HOLD moves (a blue HOLD badge; rounded blue boxes on the bar): press {confirm} in the first box, keep holding, and let go in the last box for a Perfect. A bad let-go only loses the Perfect.",
 		func():
 			_golem_rest()
 			_set_party(["archer"]))
@@ -389,20 +397,20 @@ func _build_steps() -> void:
 			_soon("archer")
 			_top_up_ap(80.0))
 	_note(7, "The Mage",
-		"The Mage's spells hit areas: Fire runs through a line and sets enemies burning (they take damage each time they act, twice), Frost chills a small circle (enemies walk at half speed until their next turn), and Gust pushes away everyone around the Mage.\n\nFire and Frost are TAP moves (a pink TAP badge; a dashed pink stretch with one diamond per tap): tap {confirm} that many times before the hit. Each tap adds damage and all of them make a Perfect, but stop there: one tap too many is a miss, like a wrong press.\n\nArcane Surge is the exception, her single-target spell: tap as fast as you can, every tap adds damage and extra taps are fine.\n\nHer Concentrate Ability doubles AP recharge for a while (the AP meter shows it).",
+		"The Mage casts four elements, and any of them combined on the bar, in any order, become her Arts:\n- Fire (W): a line that sets enemies burning (damage each time they act, twice)\n- Ice (S): chills a small circle (half walking speed), and every Fire after it costs 20% less AP (her next turn too)\n- Lightning (A): one target, and it interrupts the attack it's preparing\n- Energy Blast (D): one target, pushed 3 m away\n\nSpells are typed as codes: while one casts, type its arrows with WASD (shown on the bar) before the hit for a Perfect. An Art's code is its elements in bar order (Ice then Fire = S W). A wrong arrow starts the code over; an unfinished code is just a normal hit. Energy: type its code, then tap {confirm} freely for more damage.\n\nFocus: her bar starts at 50 AP. Standing still builds a charge every 2 s (up to 5), each +10 AP of bar for her next combo; walking 2 m loses one, attacking spends them all. While she stands still, the party's AP refills 50% faster.\n\nEnchant (an Ability): every ally but her carries an element for 2 of her turns.",
 		func(): _set_party(["mage"]))
 	_goal(7, "The Mage",
-		"Choose Attack at the Mage's COM, then walk her into range ({move}) before ACT: Fire reaches 4.5 m, the other spells 3 m.",
+		"Choose Attack at the Mage's COM, then walk her into range ({move}) before ACT: her spells reach 5 m.",
 		"Attack with the Mage",
 		func(): return _stat("combos_mage") >= 1,
 		func():
 			_soon("mage")
 			_top_up_ap(80.0))
 	_note(7, "The Cleric",
-		"The Cleric keeps the party alive with Healing, Shielding and Full Cure, and Haste makes an ally's turns come sooner.\n\nShe can still fight up close: Bash costs 10 AP, every Bash that lands raises the party's max AP, and each Bash in a row hits a little harder.\n\nHer Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
+		"The Cleric keeps the party alive with Healing, Shielding and Full Cure, and Haste makes an ally's turns come sooner. Lifeline dashes her to an ally within 8 m, out of whatever she stood in, and heals them both.\n\nShe can still fight up close: Bash costs 10 AP, every Bash that lands raises the party's max AP, and each Bash in a row hits a little harder.\n\nHer Divine Barrier is a HOLD move too: a Perfect let-go gives a bigger barrier over a wider circle.",
 		func(): _set_party(["cleric"]))
 	_goal(7, "The Cleric",
-		"Healing, Shielding, Haste or Full Cure: any of them counts.",
+		"Healing, Shielding, Haste, Full Cure or Lifeline: any of them counts.",
 		"Use one of the Cleric's Abilities",
 		func(): return _stat("skills_cleric") >= 1,
 		func():

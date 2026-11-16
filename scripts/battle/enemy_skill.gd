@@ -12,6 +12,9 @@ extends Resource
 ## BAND (wall bosses): a strip across the arena, `width` wide, from
 ## inner_radius to radius in front of the enemy; with `lanes` above 1 it's
 ## split into that many lanes with equal gaps between them.
+## Areas that pull you in (Inhale, Undertow): teal, not the pushes' pink.
+const PULL_COLOR := Color(0.2, 0.85, 0.78)
+
 enum Shape { CONE, CIRCLE, LINE, DONUT, BAND }
 ## How the skill works beyond "one area in front of the enemy":
 ## - ON_EACH_TARGET: a circle (radius) dropped on every party member.
@@ -51,6 +54,9 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## BAND: how many lanes (1 = one solid strip). Lanes and the gaps between
 ## them share the width equally: 3 lanes = lane, gap, lane, gap, lane.
 @export_range(1, 6) var lanes: int = 1
+## BAND with lanes: hit the gaps of that pattern instead (3 lanes -> the 2
+## strips between them, leaving 3 safe lanes). Gale Maw's Double Gale Lanes.
+@export var lanes_in_gaps: bool = false
 
 @export_group("Hit")
 ## Damage of a hit that isn't Parried or Defended.
@@ -76,6 +82,17 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## anyone standing in it loses trail_damage_per_second.
 @export var trail_turns: int = 0
 @export var trail_damage_per_second: float = 0.0
+## Stepping into its fire costs this much at once (on top of the burn).
+@export var trail_touch_damage: int = 0
+## At most this many of its trails (sharing trail_group) are down at once;
+## a new one puts out the oldest. 0 = no cap.
+@export var trail_cap: int = 0
+@export var trail_group: String = ""
+## Under half HP its trails last this many turns instead (0 = the same).
+@export var trail_turns_below_half: int = 0
+## Laid on the arena itself, not in front of the caster: centred on the
+## arena, along its length (Wings of Fire's lines split it into lanes).
+@export var arena_aligned: bool = false
 ## Mechanic skills: they can't be dodged, only answered. Revealed with
 ## "UNAVOIDABLE"; taking one only costs max AP if you failed its answer.
 ## Circles/lines placed on the party (ON_EACH_TARGET, LINE_TO_EACH,
@@ -187,6 +204,11 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var cover_rock_distance: float = 5.0
 @export var cover_rock_radius: float = 1.5
 
+@export_group("Self-destruct")
+## The caster blows itself up when this lands (hit or miss): the Gust
+## Sprite's Detonate, cast when its fuse runs out (Combatant.fuse_seconds).
+@export var self_destruct: bool = false
+
 @export_group("Special")
 @export var special: Special = Special.NONE
 ## ON_EACH_TARGET / LINE_TO_EACH: the rule for anyone in 2+ areas.
@@ -234,6 +256,25 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 ## (0.75 = 75%), it prepares this skill next, for sure. Skipped if it already
 ## used this skill (or, for a Ceiling Burst, already dropped rocks).
 @export_range(0.0, 1.0) var sure_below_hp: float = 0.0
+## A phase: cast at its next cast each time HP first drops to one of these
+## shares (0.5 and 0.2: twice a fight), no matter how often it was used.
+## Give it weight 0 to make it phase-only (Shadowflare).
+@export var phase_at_hp: PackedFloat32Array = PackedFloat32Array()
+## Above 0: only chosen while HP is below this share (0.5 = under half HP).
+## Follow-ups ignore it.
+@export_range(0.0, 1.0) var only_below_hp: float = 0.0
+## Above 0: only chosen while HP is at or above this share (the version a
+## second phase replaces).
+@export_range(0.0, 1.0) var only_above_hp: float = 0.0
+
+
+## Whether the enemy may choose this skill at this HP share (0-1).
+func allowed_at_hp(share: float) -> bool:
+	if only_below_hp > 0.0 and share >= only_below_hp:
+		return false
+	if only_above_hp > 0.0 and share < only_above_hp:
+		return false
+	return true
 @export var interrupt_hits: int = 3
 @export var interrupt_range: float = 1.5
 
@@ -274,6 +315,8 @@ func is_offensive() -> bool:
 func color() -> Color:
 	if special == Special.HEAL_ALLIES:
 		return Color(0.4, 0.95, 0.5)
+	if pull > 0.0:
+		return PULL_COLOR  # pulls read apart from pushes (pink)
 	return Skills.info(kind)["color"]
 
 

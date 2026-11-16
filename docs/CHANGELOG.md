@@ -4,6 +4,403 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Cleric: Lifeline; version 0.8.0
+
+- **Lifeline** (Cleric, 30 AP, another ally within 8 m): she dashes beside
+  the ally, out of whatever area she stood in, and both heal 15% of their
+  max HP. An escape that heals, for damage she can't Parry. AI Cleric
+  (`_ai_lifeline_target`): after Full Cure, when she stands in a revealed
+  area and an ally in reach stands clear of it, or when both are under
+  60% HP. Abilities on another ally with a `range` now only list allies in
+  range. Tutorial text and the move info mention it. Test
+  `tests/_lifeline.gd`.
+- Version 0.8.0 (Project Settings, Windows preset, README links);
+  `RELEASES.md` has the notes.
+
+## Shadowflare: time to run out; effects outlive a downed caster
+
+- **Shadowflare** (any growing circle) stops either when contained (all 3
+  sprites hit) or at full size, and then waits long enough for the slowest
+  party member to walk out of it from its middle: its radius at their speed
+  plus `flare_run_out_extra` (0.8 s battle time). Before, a contained one ran
+  6x faster (`contained_cast_speedup`, removed) and a full-size one struck the
+  moment it got there. Stopped while grey, it's revealed at once.
+  `tests/_shadowphase.gd`. AI-only Living Armor fights: 5/10 -> 10/10 wins,
+  Shadowflare damage 3,156 -> 1,019.
+- **Effects outlive their caster:** a status counts down on its caster's
+  turns; with the caster down (or gone) it now counts down on its holder's
+  own turns instead (`Combatant._ticker`). A downed Mage's Enchant never ran
+  out before; same for Shields, Siphon, Taunt and the rest. `tests/_mage4.gd`.
+
+## AI allies: dodging, positioning, ledges, Shadowflare; Lesson 6 fix
+
+- Four play-test logs (Rounds 8-11) and new AI-only boss sims
+  (`tests/_bosssim.gd`, now with GREY=0 / FLANK=0 / REACT=s switches)
+  showed the cause of most AI deaths: a skill lands about 0.45 s of battle
+  time after its reveal, and allies waited 0.4 s before dodging (0.2 s for
+  strikes that can't be Parried), so they almost never got out. About half
+  their damage from dodgeable strikes would have missed with a prompt dodge.
+- **Reaction:** `ally_react_seconds` 0.1 s, `ally_react_unanswerable_seconds`
+  0.05 s.
+- **Grey areas:** while positioning, AI allies don't walk into an area still
+  grey (they still don't leave one early). Not Shadowflare or healing
+  rituals. Switch: `ally_avoid_grey`.
+- **Ledges:** AI allies keep `ally_ledge_min` (1.5 m) from a lethal edge or
+  hole; while an enemy prepares a push (grey or revealed, follow-ups
+  included), its push plus `ally_ledge_margin` (1 m). Counts
+  `ai_ledge_steps`.
+- **Mage and Cleric vs. bosses:** the edge of their reach, and
+  `fragile_flank_degrees` (70°) off the boss's front (not wall bosses, not
+  when it's locked on to them). Switch: `ally_fragile_flank`.
+- **Shadowflare:** each AI ally goes for a different sprite; one that chose
+  the Armor (or a sprite someone else hit) switches. Counts
+  `ai_sprite_retargets`.
+- **Doom Gaze in a corner** dropped no rock (no room at the four compass
+  points), so everyone was struck down (3 of 12 sims, old AI too). It now
+  tries the diagonals, then towards the middle. `tests/_doomgaze.gd`.
+- Old vs new AI, 10 AI-only fights each: Golem 10/10 both; Gale Maw 0 -> 5;
+  Dragon 0 -> 1; Living Armor 5 -> 5 (after the Doom Gaze fix; Shadowflare
+  is now contained sometimes, but often too late).
+- **Tutorial, Lesson 6 (Counter):** attacking into the stance broke it and
+  left the Golem frozen with nothing up, so Wait could never count. The
+  Golem now raises Counter again after that turn. `tests/_tut.gd` with
+  COUNTER_ATTACK=1 attacks into it once first.
+- `tests/_aireact.gd` updated for the new reaction times.
+
+## Timing ring on the target; Doom Gaze pinned; Gust Sprite stands still
+
+- **Timing ring on the enemy** (`SpellFx.timing_ring`): every timed press
+  hit of a party attack or Art draws a white ring on the floor round its
+  target that closes in, plus a gold ring and band for the timing box. It
+  appears `timing_ring_lead` (0.9 s) before the hit and shrinks at a steady
+  rate, so the ring reaching the gold band is the box opening: you can
+  watch the enemy instead of the AP bar. A Perfect flashes it gold, a miss
+  red. Melee classes lost their old approach effect (the ring replaces it).
+  The Command List preview and Practice show the same ring.
+- **Doom Gaze** is `arena_aligned`: its area sits on the arena's centre,
+  square with the arena, covering the whole floor; it no longer turns with
+  the Living Armor. Test `tests/_doomgaze.gd`.
+- **Gust Sprite is stationary** (`move_speed` 0): it no longer walks back
+  and undoes a push. In 4 AI-only sims the party knocked it off the ledge
+  in 11-15 s, 2 hits each.
+- New sim `tests/_bosssim.gd` (R = round index, S = seed): a boss round
+  played by a full AI party; saves the usual play-test report.
+
+## Archer: Siphon Shot replaces Riposte
+
+- She had no answer to damage she can't dodge (no Block, no Parry, no heal).
+  **Siphon Shot** (30 AP, one enemy within 6 m): Siphoned for 3 of her
+  turns; each of her own hits on it heals her 3% of her max HP (6% on a
+  Perfect). AI Archer casts it under 70% HP. Tutorial text updated.
+- Test `tests/_siphon.gd`.
+
+## Command List (Pause menu)
+
+- **Pause > Command List** (`scripts/battle/command_list.gd`): every party
+  member's Attacks, the Arts they've found (hidden ones stay hidden; the
+  header counts them) and Abilities, with costs and the move's details. A
+  live preview plays the selected move on a loop in a small 3D window: the
+  character (in its colours), a target, the move's own timing bar (block
+  length, hits, timing box / code / Hold, playhead) and its effects, timed
+  like the real thing (Perfect on the timed hits). Abilities show their
+  heal / shield / move / buff effect. A/D: character, W/S: move, Esc: back
+  to the pause menu. The fight stays paused.
+- **Practice:** J on an attack or Art starts practising it: the preview
+  waits for your input each round (a 1 s lead-in), judged like a fight: J
+  in the timing box, Holds started in their box and let go on the hit, Taps,
+  WASD for the Mage's codes (and Energy's taps after). Each hit shows its
+  result (PERFECT / TOO EARLY / NO PRESS / RESTART...), a Perfect plays the
+  Perfect impact, and a counter shows Perfect rounds. Misses cost nothing.
+  Esc stops practising.
+- **Counter drill** (Tab, in the Command List): while practising, half the
+  rounds (at random) the target is in a Counter stance (red, "COUNTER
+  STANCE"). Your first hit is caught and the playhead waits while its
+  counter-swing comes (the fight's own lead and window): press J as the red
+  line reaches the playhead to break it (the round goes on), or you're
+  countered (the round ends). Counts "Counters broken".
+- The practice bar is drawn at the battle bar's own scale (a block as wide
+  as in a fight, the same minimum box), and plays at the fight's speed.
+- Screenshot test `tests/_shotcommands.gd` (with checks; `--fixed-fps 60`).
+
+## Combos fast-forward once nothing is left to press
+
+- When a combo has no input left anywhere (every timing box done or past, no
+  Hold to let go, no code to type, no taps still adding damage), the rest of
+  it plays 5x faster (`exec_fast_forward`, `_inputs_left`). Hits, effects
+  and their timing stay in step. Test in `tests/_mage4.gd`.
+
+## Dragon Hatchling review: it takes floor away
+
+- **Fire Wave** as often as Breath; its fire lasts 5 Dragon turns (was 3),
+  burns 20 HP/s (was 10) and costs 15 to step into; at most 3 lines, a 4th
+  puts out the oldest. New EnemySkill fields `trail_touch_damage`,
+  `trail_cap`, `trail_group`, `trail_turns_below_half`, `arena_aligned`.
+- **Scorch and Breathe:** Fire Wave, then Breath 1.5 s later: stack in what
+  the fire leaves.
+- **Wings of Fire** (half HP, once): four fire lines along the arena, two
+  on its edges (laid on the arena, not the Dragon), lasting the rest of the
+  fight: three 3.4 m lanes, over half the floor on fire.
+  Burning Spike's circles then last 5 turns.
+- Tests `tests/_dragon.gd`, `_specials` (5-turn fire); screenshots
+  `tests/_shotdragon.gd`.
+
+## Attack effects for the whole party, and enemy hits
+
+- `SpellFx` now covers every party class, in two parts timed to the combo
+  bar: an **approach** that starts just before each hit and arrives exactly
+  as the playhead lands it (`approach_lead`, launched by
+  `_launch_approaches`): the Mage's fireball / violet ball in flight, ice
+  shards rising, lightning gathering above; the Archer's arrow; a ring
+  closing on the target for the melee classes. Then the **impact**: Knight a
+  blade arc (a ground ring on pushes), Assassin a quick X of two slashes,
+  Cleric a golden flash, Monk a punch shockwave, the Mage's elements as
+  before. A **Perfect** hit gets a bigger impact plus a gold ring and
+  sparks. Multi-hit moves time each hit; Arts and finishers are bigger. AI
+  combos (played at once) show the impacts.
+- **Enemy hits:** a burst on whoever is hit (bigger for heavy blows), a
+  blue guard flash on a Defend, a gold flash and slash on a Parry; heavy
+  blows (40+ damage or Smash, circles and cones) send a shockwave from the
+  enemy; a broken Stagger bar bursts gold.
+- **Heals, shields, pushes:** green motes rising on every heal (Healing,
+  Full Cure, Light Heal, Deep Breath, Art heals, an enemy's Healing Ritual),
+  a pale blue bubble on every shield, and puffs of dust along the path of
+  anyone knocked back or pulled.
+- Screenshot tests `tests/_shotparty.gd`, `tests/_shotenemyfx.gd` (run with
+  `--fixed-fps 60`).
+
+## Enchant: one Ability with an element menu
+
+- The four "Enchant: ..." Abilities are one **Enchant**. Choosing it opens a
+  small menu (only while the player is picking): Fire up, Ice down,
+  Lightning left, Energy right, as in her spell codes (WASD or the arrow
+  keys); back closes it and the Abilities list stays. The AI picks its
+  element directly. Screenshot test `tests/_shotenchant.gd`.
+
+## Spell effects: the Mage's four elements
+
+- New `scripts/battle/spell_fx.gd` (`SpellFx`): simple effects built from
+  shapes and particles in code, no art files. Building blocks: a flying ball
+  with a trail, a burst, a ground ring, a spark puff, a lightning bolt,
+  rising shards. Looks only: damage still lands on the combo's timing.
+- The Mage's hits play them (`_land_hit`): Fire a fireball that bursts and
+  carries on along its line, Ice shards rising round the target then
+  shattering into frost, Lightning a jagged bolt from above, Energy Blast a
+  violet ball and a shockwave ring. Arts play their elements together,
+  bigger, until they get their own.
+- Screenshot test `tests/_shotfx.gd` (OUT=folder; KIND=art for four Arts).
+
+## Gale Maw review
+
+- **Deep Breath** gets a Stagger bar (70), like Inhale. (The review found the
+  other bars and the damage on its push/pull attacks were already in place;
+  they stay as they were.)
+- **Feed it a Gust Sprite:** knocked into its body while it pulls (Inhale,
+  Deep Breath, Gale Draw), the sprite makes it choke: its Detonate goes off
+  inside (3x, 135) and the Maw is Staggered. With its mouth closed, its body
+  bounces sprites off. The AI still pushes sprites off the ledge.
+- While its mouth is open (a pull being cast), a black mouth shows on its
+  front, so you can see when a sprite will choke it.
+- **Readability:** pull areas are teal (`EnemySkill.PULL_COLOR`) with teal
+  arrows; pushes stay pink. A combo's follow-up shows faintly under its first
+  part once revealed (`AttackRange.preview`). During its whole-arena breaths
+  the floor each rock shelters is drawn clear (`_shelter_marks`).
+- Test `tests/_mawreview.gd`; screenshots `tests/_shotmaw.gd` (OUT=folder).
+
+## Mage rework, Parts 7-8: Focus, Enchant, spell codes; Lightweight Gust Sprites
+
+- **Focus** replaces Concentrate: the Mage's bar is 50 AP, +10 per Focus
+  charge (up to 5, so 100). Charges build from the start of every fight
+  while she stands still (one per 2 s), walking 2 m loses one, attacking
+  spends them all. While she stands still the party's AP refills 50% faster
+  (the AP meter's violet chevrons now mean Focus). HUD: "FOCUS 3  BAR 80".
+- **Reach 5 m** for every Mage spell and her own reach (the Archer keeps 6).
+- **Enchant: Fire / Ice / Lightning / Energy** (30 AP, in Concentrate's
+  slot): every ally but her carries the element for 2 of her turns: a 1-turn
+  Burn, a Chill, 1.5x Stagger fill, or a 1 m push on their hits.
+- **Spell codes** (new CODE timing) replace the Mage's taps and presses: Fire
+  W, Ice S, Lightning A, Energy D, typed while the spell casts; an Art's code
+  is its elements in bar order. Done before the hit = Perfect; a wrong arrow
+  restarts it; unfinished = a normal hit, no penalty. Energy: code, then
+  free taps. Arrows drawn on the bar and as badges in the move list.
+- **AI Mage** stands still in reach to build Focus and casts Enchant
+  (Lightning on a Stagger bar, Ice against 3+, else Fire).
+- **Gust Sprites are Lightweight:** every hit knocks them back (at least
+  1.5 m, x1.5), walls and corners bounce them off, and touching a hole or the
+  ledge drops them at once. The "PUSH IT OFF THE LEDGE!" box with a push
+  Art's recipe is gone (redundant now), and so is the push recipe in the
+  summon message (`_push_needed` removed).
+  AI allies now attack Gust Sprites with any move (real pushes still
+  valued 3x).
+- **Gust Sprites must be pushed off:** unkillable (damage stops at 1 HP),
+  and a 25 s fuse (battle time) after which they cast **Detonate** (4 m
+  circle, 45 damage, launch 3 m, not parryable) and blow up. The AI goes for
+  them first and lines up each hit from the far side of the nearest drop.
+  Sim `tests/_spritesim.gd` (S=seed): 8 of 8 fights, the AI party knocked
+  the sprite off the ledge in 14-39 s (game time), before the fuse ran out
+  (it used to be 1 of 8, the rest beaten down by damage).
+- Tests `tests/_mage4.gd`, `tests/_gustsprite.gd` (Lightweight), `_aimage`
+  (Enchant); screenshot test `tests/_shotcode.gd` (MODE=list).
+
+## Mage rework, step 3: all 19 Arts, the AI Mage, a compact Arts list
+
+- The last six Arts: Plasma (Fire + Lightning: Burn + interrupt), Static
+  Frost (Ice + Lightning: Chill + interrupt; freezes the already Chilled),
+  Tri-Disaster (Fire + Ice + Lightning: all three on a 2.5 m circle),
+  Thermal Shock (Fire + Ice + Energy: the heavy Defense-breaker), Nova
+  (Fire + Lightning + Energy: everything within 4 m of the Mage), Stasis
+  (Ice + Lightning + Energy: every enemy's timeline stops 3 s; bosses lose
+  8 turn time, halving). Steam Burst 3.4 -> 2.8 (it leaves Burn and Chill).
+- **AI Mage** values her setups (`_ai_mage_value`): areas by enemies hit,
+  Flare by Burn to detonate, Shatter on Frozen / Chilled, Overcharge on an
+  immune boss cast, Ice Spear / Stasis on an enemy preparing an attack.
+- **Arts list:** pages turned with A/D when the Arts don't fit (19 did not:
+  the list ran off the top of the screen); it shows the page of the Art the
+  bar is heading for. "Fire x3" recipes, "moves in any order merge", and
+  hidden Arts summed by length past 6. Screenshot
+  test `tests/_shotarts.gd` (KNOWN=all|few). Test `tests/_mage3.gd`.
+
+## Mage rework, step 2: doubles, triples and the Energy mixes
+
+- New Arts (13 in all now): Inferno (Fire x3: a circle that explodes 3 s
+  later, Burn x3), Ice Spear (Ice x3: Freeze 3 s and turn pushed back;
+  bosses only lose turn time, halving), Chain Lightning (Lightning x2: jumps
+  to 2 more), Thunder (Lightning x3: 3 strikes, the last stuns; on bosses a
+  3x Stagger fill), Arcane Barrage (Energy x2), Arcane Overload (Energy x3:
+  biggest hit, 8 m push, 20 AP back), Flare (Fire + Energy: detonates every
+  burning enemy), Shatter (Ice + Energy: Frozen 2.5x / Chilled 1.6x / else
+  0.6x), Overcharge (Lightning + Energy: cancels through boss immunity).
+- Fireball now leaves Burn x2. New move fields: `burn_stacks`,
+  `delayed_blast`, `deep_freeze` + `turn_push`, `chain`, `stun_not_bosses`,
+  `stagger_mult`, `ap_refund`, `detonate_burns`, `shatter`,
+  `ignore_cancel_lock`. Frozen enemies don't move.
+- Reports count `deep_freezes`, `boss_freezes`, `shatters`, `flares`,
+  `blasts_hit` / `blasts_missed`, `ap_refunds`, `overcharge_cancels`.
+  Test `tests/_mage2.gd`.
+
+## Mage rework, step 1: four elements, order-free Arts, Ice makes Fire cheaper
+
+Design: the "Mage Rework: Elements and Arts" doc (six parts, settled).
+
+- **Four elements** replace Fire / Frost / Gust / Arcane Surge: Fire (line,
+  Burn), Ice (Chill), Lightning (single target, interrupts), Energy Blast
+  (Arcane Surge's open Tap, plus Gust's 3 m push).
+- **Order-free Arts** (`any_order`, every Mage Art): Fire + Ice = Ice + Fire.
+  The next-move hint in the Arts list follows suit.
+- **Ice discount:** 20% off each Fire after an Ice (and in the same Art), up
+  to 40%; a combo with Ice takes 20% off next turn's Fire too; 50% at most.
+- **Biggest bar:** 90 -> 110 AP.
+- Arts carried over: Fireball, Blizzard, Steam Burst (now leaves Burn and
+  Chill from its parts) and Meteor (all four elements; `no_inherit` keeps
+  the push and interrupt out). Firestorm and Tempest are gone with Gust.
+- Reports count `ice_carries` and `ice_discount_ap`. Test `tests/_mage1.gd`.
+
+## Shadowflare: 12 s, and quick once contained
+
+- A Round 9 log: both Shadowflare phases were stopped, the party took 18
+  damage in all, and the Armor got 4 turns in 2:39: 20 s casts left it idle.
+  Cast speed 0.072 -> 0.12 (about 12 s). Once all three Shadow Sprites are
+  hit, the rest of a contained cast runs 6x faster (`contained_cast_speedup`,
+  any growing circle).
+
+## AI Cleric heals sooner and first
+
+- "Is the Cleric healing at all?" In a Round 9 log she cast Haste twice and
+  never healed while three allies went down: one Shadowflare took them from
+  healthy to dead in one hit, and Healing only started under 55% HP. Heals
+  were also skipped when they would dip into the AP held for your turn.
+- Now: Healing under 70% (`ai_heal_below`), Full Cure under 35%
+  (`ai_full_cure_below`); heals ignore the AP reserve; no AP for Full Cure
+  means Healing instead. Reports count `hp_healed` (every skill and Art
+  heal) and `ai_heal_no_ap`. Test `tests/_aicleric.gd`.
+
+## Shadowflare is a phase: at 50% and 20% HP, 20 s to stop it
+
+- A Round 9 log: one Shadowflare dealt 361 and took down the Archer, Mage
+  and Cleric; at about 8 s there still wasn't time to get to all three
+  Shadow Sprites.
+- It's now a phase (`EnemySkill.phase_at_hp`): the Armor casts it at its
+  next cast after dropping to 50% HP, and again at 20%, and never at
+  random (weight 0; it used to be a random pick, forced once at 70%). A
+  big hit that crosses both thresholds spends both on one cast. Reports
+  count `phase_casts`.
+- Cast speed 0.17 -> 0.072: about 20 s at Round 9 speed to hit the
+  sprites. Test `tests/_shadowphase.gd`.
+
+## Golem Smashes can be Defended
+
+- A Golem log: the Cleric went down to two half-room Smashes (56 each) she
+  couldn't Defend, so the new Parry-key Defend saved her almost nothing.
+  All eight Golem Smash skills drop `cannot_be_blocked`: still no Parry
+  (dodge them), but Defend (either key for the Cleric) takes 56 down to 34.
+  AI allies still react 0.2 s after the reveal: that shorter reaction now
+  applies to any strike that can't be Parried.
+
+
+- A fighter who can't Parry a strike but can block it (the Cleric, blue
+  mark) now Defends when you press Parry: alone it's a plain Defend (same
+  AP cost); in a group with a Knight, the Knight parries and the Cleric
+  Defends (one Defend's AP, kept for the rest of a multi-hit chain). The
+  prompt reads "E / Q: Defend" when only blockers are hit. Test
+  `tests/_parrydefend.gd`.
+
+## Fix: AI allies with a Windup target walked into Doom Gaze
+
+- A Round 9 log: the Mage and Assassin (Party AI) both died to one Doom
+  Gaze. An ally heading for its Windup target kept walking at the Armor
+  instead of hiding: the Windup approach came before the hide check. Now
+  hiding comes first; the turn waits in cover and walks in after the gaze.
+  Test `tests/_gazewindup.gd` (failed before the fix: 17 m from cover).
+
+## Tighter Parry timing; Shadowflare slow but deadly
+
+- `parry_window` 0.25 -> 0.15 s (real time), with Expedition 33's parry as
+  the reference: read the swing, press once, on the hit. An early press
+  was already a committed miss. Edge saves (Off-Balance at a ledge) keep
+  0.25 s (`edge_save_window`); the counter-parry is unchanged (0.12 s).
+- **Shadowflare** was still too fast to stop: cast speed 0.25 -> 0.17
+  (about 8.4 s at Round 9 speed), damage 52 -> 100, and it can't be
+  Parried any more (Defend still halves it). Stop it with the Shadow
+  Sprites, or get out.
+
+## Dragon: Burning Spike toned down
+
+- A Round 10 log: Burning Spike dealt 386 of the party's 684 damage taken
+  (4 casts, 16 hits; it can't be dodged, only broken). Damage 26 -> 20,
+  weight 2 -> 1 (now half as likely as Fire Wave, a third as likely as
+  Breath), Stagger bar 120 -> 100 (easier to break).
+
+## Gale Maw under half HP: Double Gale Lanes, push / pull + lanes; real follow-up delays
+
+- **Double Gale Lanes** (under half HP, replacing Gale Lanes): the 2 gaps
+  between the lanes first (`EnemySkill.lanes_in_gaps`), leaving 3 safe
+  lanes, then Gale Lanes on those 3 lanes 2.5 s later.
+- **Push / pull + lanes only under half HP:** Gale Burst (Exhale) and the
+  new Gale Draw (Inhale) are followed by Double Gale Lanes 1 s later.
+  Skills can now be limited by HP: `only_below_hp` / `only_above_hp`.
+- **Follow-up delays are real seconds now.** A fast boss's bar couldn't fit
+  the delay before the end, so it was cut short: the Golem's double Smash
+  gave ~1.3 s, not 2. The follow-up now starts at the casting zone's edge
+  and its bar runs slower (`follow_up_slow`) when needed. Tests check the
+  real delay (`_follow_up_seconds`).
+
+## Shadowflare slower, Crush faster, Maw Bite covers its front, AP bar fix
+
+- **Shadowflare** cast in about 4.1 s at Round 9 speed, too short to get a
+  turn in and hit its Shadow Sprites. Cast speed 0.35 -> 0.25: about 5.7 s
+  (and the circle grows that much slower).
+- **Crush** turns at 160°/s in its last second (was 80).
+- **Gale Maw's Maw Bite** covers its whole front (180°, was 100°) out to
+  8 m: no sidestepping round it, only backing out of reach (or Parry /
+  Defend). Fighting up close is high risk, high reward.
+- **Gale Maw: only Maw Bite can be Parried.** Gale Lanes, Breaker, Wall
+  Sweep and Undertow join Inhale, Exhale, Deep Breath and Gale Burst as
+  `cannot_be_parried` (Defend still works where it did). Its biggest hit
+  is the one you answer with timing.
+- **AP bar:** with a high ceiling it ran over the enemy's status tags and
+  name. The HP panels now report how wide they drew (tags on the left
+  included) and the AP meter shrinks and shifts to stay between them. Test
+  screenshot `tests/_shotap.gd`.
+
 ## AI reaction to Smashes: 0.2 s
 
 - At 0.4 s the AI allies couldn't escape the half-room Smashes (Archer and

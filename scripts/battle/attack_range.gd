@@ -28,7 +28,10 @@ var shape: int = EnemySkill.Shape.CONE
 var width: float = 1.2
 var inner_radius: float = 0.0
 var lanes: int = 1
+var lanes_in_gaps := false
 var _live_color := Color.RED
+## A faint preview (a combo's follow-up): drawn see-through, never alert.
+var preview := false
 var _alert := false
 var _base_radius: float
 var _base_angle: float
@@ -72,6 +75,7 @@ func show_skill(skill: EnemySkill, hidden: bool = false, radius_override: float 
 	width = skill.width
 	inner_radius = skill.inner_radius
 	lanes = skill.lanes
+	lanes_in_gaps = skill.lanes_in_gaps
 	_live_color = HIDDEN_COLOR if hidden else skill.color()
 	live = true
 	mesh = _build_mesh()
@@ -117,7 +121,7 @@ func contains(point: Vector3, extra_radius: float = 0.0) -> bool:
 				return true
 			var part := width / (2 * lanes - 1)
 			var slot := int(floor((across + width / 2.0) / part))
-			if slot % 2 == 0:
+			if slot % 2 == (1 if lanes_in_gaps else 0):
 				return true
 			# In a gap: still caught if the body pokes into a lane next to it.
 			var in_slot := fposmod(across + width / 2.0, part)
@@ -149,6 +153,8 @@ func _refresh_color() -> void:
 		return
 	var c := _live_color
 	c.a = 0.6 if _alert else 0.32
+	if preview:
+		c.a = 0.24
 	_material.albedo_color = c
 
 
@@ -162,8 +168,9 @@ func _build_mesh() -> ArrayMesh:
 		EnemySkill.Shape.BAND:
 			var count := maxi(lanes, 1)
 			var part := width / (2 * count - 1)
-			for lane in count:
-				var x0 := -width / 2.0 + lane * 2 * part
+			var strips := count - 1 if lanes_in_gaps and count > 1 else count
+			for lane in strips:
+				var x0 := -width / 2.0 + (lane * 2 + (1 if lanes_in_gaps and count > 1 else 0)) * part
 				var x1 := x0 + part
 				var near := -inner_radius
 				var far := -radius

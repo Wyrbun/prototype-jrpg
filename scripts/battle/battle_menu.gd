@@ -46,6 +46,7 @@ const GOLD := Color(0.95, 0.78, 0.35)
 ## Tap is pink with diamonds.
 const HOLD_COLOR := Color(0.35, 0.75, 1.0)
 const TAP_COLOR := Color(1.0, 0.45, 0.85)
+const CODE_COLOR := Color(0.55, 0.85, 1.0)
 const PANEL_BG := Color(0.06, 0.07, 0.11, 0.9)
 
 var mode: int = Mode.HIDDEN
@@ -101,6 +102,10 @@ var slot_results: Array = []
 ## The playing slot's Hold / Tap state (set by the battle while it plays).
 var exec_holding := false
 var exec_taps := 0
+## Enchant's element menu is open (four directions, like her codes).
+var element_pick := false
+## Mage spell codes: arrows of the current code typed so far.
+var exec_code := 0
 ## The Arts panel beside the move list while building a combo: one row per
 ## Art, {name, recipe, known, next, color, finisher} (set by the battle).
 var arts: Array = []
@@ -118,6 +123,15 @@ var arts_hints: PackedStringArray = []
 var arts_urgent := ""
 ## Each hidden Art's length, AP and blocker ("four-move, 35 AP (needs bar 50)").
 var arts_hidden_notes: PackedStringArray = []
+## The class's recipes merge in any order (the Mage).
+var arts_any_order := false
+## Where the Arts panel may reach up to (below the timeline).
+const ARTS_TOP := 112.0
+## Pages when the Arts don't all fit (the Mage's 19): A/D turn them.
+var arts_page := 0
+var arts_per_page := 99  # set by the last draw
+var arts_pages := 1
+var _last_heading := ""
 ## While a hidden Art reveals itself mid-combo: its name and the banner's
 ## progress (0 -> 1).
 var reveal_name := ""
@@ -201,6 +215,8 @@ func _draw() -> void:
 		_draw_combo_bar(font)
 	elif mode == Mode.SKILLS:
 		_draw_move_list(font)
+		if element_pick:
+			_draw_element_pick(font)
 	elif mode == Mode.TARGET:
 		var panel := Rect2((size.x - 640) / 2.0, size.y - 270, 640, 72)
 		_panel(panel)
@@ -315,19 +331,37 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 		return  # no room on a narrow window
 	var hidden_line := ""
 	var hidden_size := Vector2.ZERO
+	var room := beside.end.y - ARTS_TOP - (60.0 if arts_urgent != "" else 0.0)
 	if arts_hidden > 0:
 		hidden_line = ("Hidden:" if not arts.is_empty() else "To discover:")
-		if arts_hidden_notes.is_empty():
-			hidden_line += " " + _hidden_by_length()
-		for note in arts_hidden_notes:
+		if arts_hidden_notes.is_empty() or arts_hidden_notes.size() > 6:
+			hidden_line += " " + _hidden_by_length()  # many hidden (the Mage): counts by length
+		for note in (arts_hidden_notes if arts_hidden_notes.size() <= 6 else PackedStringArray()):
 			hidden_line += "\n  • " + note
 		for h in arts_hints:
 			hidden_line += "\n??? " + h
 		hidden_size = font.get_multiline_string_size(hidden_line, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 14)
 	var extra := hidden_size.y + 10.0 if arts_hidden > 0 else 0.0  # wraps on a narrow panel
 	# Bottom-aligned with the move list, growing upward: it never reaches
-	# down into the combo bar, however many Arts the class has.
-	var panel_height := 38.0 + arts.size() * row_height + extra
+	# down into the combo bar, however many Arts the class has. Too many for
+	# two-line rows (the Mage's 19): one line each, recipe on the right.
+	# Too many to fit: pages of whole two-line rows, turned with A/D.
+	arts_per_page = maxi(int((room - 38.0 - extra) / row_height), 3)
+	arts_pages = maxi(ceili(float(arts.size()) / arts_per_page), 1)
+	# When the bar starts heading for a different Art, show its page (once:
+	# A/D still turns pages freely after).
+	var heading_now := ""
+	for i in arts.size():
+		if arts[i]["next"] != "":
+			heading_now = arts[i]["name"]
+			if heading_now != _last_heading and not arts_focus:
+				arts_page = i / arts_per_page
+			break
+	_last_heading = heading_now
+	arts_page = clampi(arts_page, 0, arts_pages - 1)
+	var first := arts_page * arts_per_page
+	var shown := arts.slice(first, mini(first + arts_per_page, arts.size()))
+	var panel_height := 38.0 + shown.size() * row_height + extra
 	var panel := Rect2(x, beside.end.y - panel_height, width, panel_height)
 	_panel(panel)
 	if arts_urgent != "":
@@ -339,11 +373,17 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 		draw_multiline_string_outline(font, box.position + Vector2(12, 8 + font.get_ascent(16)), arts_urgent, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 16, -1, 4, Color.BLACK)
 		draw_multiline_string(font, box.position + Vector2(12, 8 + font.get_ascent(16)), arts_urgent, HORIZONTAL_ALIGNMENT_LEFT, width - 24.0, 16, -1, orange.lightened(0.3))
 	HudStyle.draw_header(self, panel.position + Vector2(12, 27), "ARTS", 20, GOLD)
-	var tip := "choose one to add it whole" if arts_focus else "moves in this order merge  ·  Tab: details"
+	var tip := "choose one to add it whole" if arts_focus else ("moves in any order merge" if arts_any_order else "moves in this order merge") + "  ·  Tab: details"
+	if arts_pages > 1:
+		tip = ("A/D: page  ·  " if arts_focus else "A/D: page  ·  Tab: details")
+		var page_text := "%d / %d" % [arts_page + 1, arts_pages]
+		var pw := font.get_string_size(page_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		_text(font, Vector2(panel.end.x - pw - 12, panel.position.y + 27), page_text, 16, GOLD)
 	_text(font, panel.position + Vector2(74, 27), tip, 14, Color(0.6, 0.62, 0.7))
-	for i in arts.size():
+	for k in shown.size():
+		var i := first + k
 		var art: Dictionary = arts[i]
-		var row := Rect2(panel.position + Vector2(6, 36 + i * row_height), Vector2(width - 12, row_height - 2))
+		var row := Rect2(panel.position + Vector2(6, 36 + k * row_height), Vector2(width - 12, row_height - 2))
 		var heading: bool = art["next"] != ""
 		if heading:
 			draw_rect(row, Color(GOLD, 0.18))
@@ -697,6 +737,31 @@ func _draw_combo_bar(font: Font) -> void:
 				_small_tag(font, start_box, "HOLD", HOLD_COLOR)
 				_small_tag(font, box, "LET GO", HOLD_COLOR)
 				continue
+			elif special and timing == 3:
+				# CODE (light blue, arrows): a stretch to type the spell's code in,
+				# one arrow per element; Energy's taps come after.
+				var code: Array = move.get("code", [])
+				var code_x := segment.position.x + segment.size.x * float(move.get("code_start", 0.05))
+				var stretch := Rect2(code_x, box.position.y, maxf(hit_x - code_x, 8.0), box.size.y)
+				var typed := exec_code if playing else (code.size() if result == 1 else 0)
+				draw_rect(stretch, fill if result != 0 else Color(CODE_COLOR, 0.14))
+				draw_rect(stretch, CODE_COLOR, false, 1.5)
+				var arrow_r := clampf(stretch.size.x / (code.size() + 1) * 0.4, 5.0, 8.0)
+				var gap := minf(stretch.size.x / (code.size() + 1), arrow_r * 3.0)
+				var first_x := stretch.get_center().x - gap * (code.size() - 1) / 2.0
+				for k in code.size():
+					var centre := Vector2(first_x + gap * k, stretch.end.y - arrow_r - 4.0)
+					# A dark tile under each arrow so it reads on any block colour.
+					draw_rect(Rect2(centre - Vector2(arrow_r + 2.0, arrow_r + 2.0), Vector2(arrow_r * 2.0 + 4.0, arrow_r * 2.0 + 4.0)), Color(0.06, 0.06, 0.1, 0.85))
+					_code_arrow(centre, String(code[k]), arrow_r, Color(1.0, 0.85, 0.2) if k < typed else Color(0.55, 0.85, 1.0))
+				var surge := float((move.get("move", move) as Dictionary).get("surge", 0.0)) > 0.0
+				var tag := "CODE"
+				if playing and surge and typed >= code.size():
+					tag = "TAP %d/%d" % [exec_taps, int(move.get("taps", 0))]
+				elif surge:
+					tag = "CODE + TAP"
+				_small_tag(font, stretch, tag, CODE_COLOR)
+				continue
 			elif special and timing == 2:
 				# TAP (pink, diamonds): a dashed stretch where every tap counts,
 				# one diamond per tap.
@@ -929,6 +994,37 @@ func _arrow(centre: Vector2, down: bool) -> void:
 	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), Color(0, 0, 0, 0.8), 1.0)
 
 
+## Enchant's element menu: a plus of four elements, each on the direction
+## of its spell code (Fire up, Ice down, Lightning left, Energy right).
+func _draw_element_pick(font: Font) -> void:
+	var panel := Rect2((size.x - 420) / 2.0, size.y / 2.0 - 190, 420, 300)
+	_panel(panel)
+	HudStyle.draw_header(self, panel.position + Vector2(18, 31), "ENCHANT: PICK AN ELEMENT", 20, GOLD)
+	var centre := panel.position + Vector2(panel.size.x / 2.0, 170)
+	var entries := [["up", "Fire", "burns 1 turn", Color(1.0, 0.5, 0.25)], ["down", "Ice", "chills", Color(0.55, 0.85, 1.0)],
+			["left", "Lightning", "1.5x Stagger", Color(1.0, 0.9, 0.4)], ["right", "Energy", "1 m push", Color(0.75, 0.55, 1.0)]]
+	var offsets := {"up": Vector2(0, -78), "down": Vector2(0, 78), "left": Vector2(-120, 0), "right": Vector2(120, 0)}
+	draw_circle(centre, 6.0, Color(0.6, 0.6, 0.65))
+	for entry in entries:
+		var at: Vector2 = centre + offsets[entry[0]]
+		var dir: Vector2 = (offsets[entry[0]] as Vector2).normalized()
+		_code_arrow(centre + dir * 30.0, String(entry[0]), 11.0, entry[3])
+		var name_w := font.get_string_size(entry[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		var note_w := font.get_string_size(entry[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		_text(font, at + Vector2(-name_w / 2.0, 2), entry[1], 20, entry[3])
+		_text(font, at + Vector2(-note_w / 2.0, 20), entry[2], 14, Color(0.78, 0.78, 0.82))
+	_text(font, panel.position + Vector2(18, panel.size.y - 14), Keybinds.fill("{move} / arrows: pick     {cancel}: back"), 15, Color(0.7, 0.7, 0.76))
+
+
+## A spell-code arrow (up / down / left / right), filled when typed.
+func _code_arrow(centre: Vector2, dir: String, r: float, fill: Color) -> void:
+	var v: Vector2 = {"up": Vector2(0, -1), "down": Vector2(0, 1), "left": Vector2(-1, 0), "right": Vector2(1, 0)}.get(dir, Vector2.UP)
+	var side := Vector2(-v.y, v.x)
+	var points := PackedVector2Array([centre + v * r, centre - v * r * 0.6 + side * r * 0.85, centre - v * r * 0.6 - side * r * 0.85])
+	draw_colored_polygon(points, fill)
+	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), Color.WHITE, 1.2)
+
+
 ## A diamond (Tap timings).
 func _diamond(centre: Vector2, r: float, fill: Color, outline: Color) -> void:
 	var points := PackedVector2Array([centre + Vector2(0, -r), centre + Vector2(r, 0), centre + Vector2(0, r), centre + Vector2(-r, 0)])
@@ -948,6 +1044,9 @@ func _timing_badge(font: Font, move: Dictionary, right: Vector2, dim: bool) -> v
 	var timing: int = int(move.get("timing", 0))
 	if timing == 0:
 		return
+	if timing == 3:
+		_code_badge(font, move, right, dim)
+		return
 	var text := "HOLD" if timing == 1 else "TAP %d" % int(move.get("taps", 0))
 	var color := HOLD_COLOR if timing == 1 else TAP_COLOR
 	if dim:
@@ -962,6 +1061,18 @@ func _timing_badge(font: Font, move: Dictionary, right: Vector2, dim: bool) -> v
 		_dashed_rect(rect, color)
 		_diamond(rect.position + Vector2(12, 11), 5.0, color, Color.WHITE)
 		_text(font, rect.position + Vector2(22, 16), text, 15, Color.WHITE)
+
+
+## CODE badge: the spell's arrows in a light blue box.
+func _code_badge(font: Font, move: Dictionary, right: Vector2, dim: bool) -> void:
+	var code: Array = move.get("code", [])
+	var color := CODE_COLOR.darkened(0.45) if dim else CODE_COLOR
+	var width := 16.0 + 16.0 * code.size()
+	var rect := Rect2(right.x - width, right.y - 11, width, 22)
+	draw_rect(rect, Color(color, 0.25))
+	draw_rect(rect, color, false, 1.5)
+	for k in code.size():
+		_code_arrow(rect.position + Vector2(16.0 + 16.0 * k, 11), String(code[k]), 6.0, Color.WHITE if not dim else Color(0.6, 0.6, 0.65))
 
 
 func _text(font: Font, pos: Vector2, text: String, font_size: int, color: Color) -> void:

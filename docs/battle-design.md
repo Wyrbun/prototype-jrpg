@@ -91,7 +91,8 @@ decision earlier, Grandia-style:
   reach; after that, if **another enemy is in reach**, the attack goes to
   the nearest one instead ("SWITCHES TARGET": "Knight can't reach Ogre
   Warrior: attacks Orc Shaman instead"; never one in Counter stance, and an
-  AI ally skips tough Gust Sprites without a push; `_windup_fallback`).
+  AI ally skips tough enemies without a push, though Lightweight Gust
+  Sprites are fair game since any hit pushes them; `_windup_fallback`).
   Nobody in reach: the turn **becomes a Wait** ("TOO FAR"). If the target
   went down, the menu opens again.
 - **Waits in cover:** while any enemy prepares a lethal skill (Doom Gaze),
@@ -149,9 +150,9 @@ decision earlier, Grandia-style:
      the damage is split. That area isn't treated as danger.
   2. **Stay out of danger:** leave any enemy area that could hit, never step
      into one. Danger = an Attack/Smash revealed at least
-     `ally_react_seconds` (0.4 s) ago, or `ally_react_unanswerable_seconds`
-     (0.2 s) for strikes that can't be Parried or Defended (Golem Smash:
-     dodging is the only answer) (a human-like reaction: the grey "..."
+     `ally_react_seconds` (0.1 s) ago, or `ally_react_unanswerable_seconds`
+     (0.05 s) for strikes that can't be Parried (Golem Smash: dodging is
+     the real answer, Defend only softens it) (a human-like reaction: the grey "..."
      area alone no longer sends them away, since that made them almost
      never get hit), mechanic skills and overlap-punishing circles from the
      start (spreading out takes time), fire trails, rock spikes, falling
@@ -180,10 +181,14 @@ the timeline never stops (`_ai_turn`, called where `_start_turn` would be).
 Tab / hold Tab takes one over. The party list tags them **AUTO**.
 
 - **Turn:** turn upkeep and the turn's AP, as usual; maybe one Ability
-  (`_ai_ability`: heals, Brace / Arcane Barrier when an attack is aimed at it, the Mage's Concentrate whenever affordable and not running, the Cleric's Haste on your fighter when nobody needs healing,
+  (`_ai_ability`: heals (the Cleric: Healing on the most hurt ally under `ai_heal_below` 70%, Full Cure under `ai_full_cure_below` 35%, or Healing when Full Cure is unaffordable; heals ignore the AP held for your turn), Brace / Arcane Barrier when an attack is aimed at it, the Mage's Enchant when none is running, the Cleric's Haste on your fighter when nobody needs healing,
   Agility only if it still has half its bar to attack with after paying); then a target (`_ai_pick_target`: the allies'
-  focus or the nearest; never in Counter stance; a tough Gust Sprite only
-  with a push). Windup: chosen at COM, it walks into reach, plays at ACT
+  focus or the nearest; never in Counter stance; a tough enemy only
+  with a push, except Lightweight Gust Sprites, which any hit pushes). A
+  Lightweight enemy comes first (`_ally_focus`), and the AI lines up its hit
+  first: it walks round to the far side of it from the nearest drop
+  (`_line_up_push`, `_drop_direction`: lethal edges and holes), so the push
+  sends it over. Windup: chosen at COM, it walks into reach, plays at ACT
   (out of reach after the grace: the nearest enemy in reach, else TOO FAR;
   the grace waits while it's escaping a danger area: "DODGING"). Classic: attacks
   whoever is in reach, else Waits. With a target but no clear shot (a rock
@@ -206,7 +211,16 @@ Tab / hold Tab takes one over. The party list tags them **AUTO**.
   per timed hit. A flash line sums it up ("Cleric: Judgment on Stone Golem
   (36 damage)").
 - Strikes aimed at AI allies still ask you to Parry / Defend.
-- They dodge like a player would: only after a skill is revealed (+0.4 s),
+- They dodge like a player would: only after a skill is revealed (+0.1 s;
+  a skill lands about 0.45 s of battle time after its reveal),
+  and they don't walk into a grey area while positioning (Shadowflare and
+  healing rituals excepted: those they go into). They keep away from a
+  lethal edge or hole: `ally_ledge_min` (1.5 m), or while an enemy prepares
+  a push, the push plus `ally_ledge_margin` (1 m). Against a boss, the Mage
+  and Cleric stand at the edge of their reach, `fragile_flank_degrees`
+  (70°) off its front (not wall bosses, not when it's locked on to them).
+  In a Shadowflare each AI ally goes for a different sprite, and one that
+  chose the Armor before the sprites appeared switches to one.
   and the Knight and Monk hold their ground in short melee attacks (see
   Ally AI above).
 
@@ -255,7 +269,7 @@ end-of-fight screen to open the folder.
   - **Walking**: AI allies and enemies steer around drops and never step
     in. The steered fighter can walk to the very edge; when its middle goes
     over, the fight pauses on a **save ring** (like a Parry, `edge_save_seconds`
-    1.0, window = `parry_window`): Parry as it turns gold to be put back on
+    1.0, window = `edge_save_window`, 0.25 s): Parry as it turns gold to be put back on
     solid ground, otherwise it falls. The same save applies when a party
     member is **pushed or pulled** over (several at once queue up, one save
     at a time). A caught save leaves the fighter **Off-Balance** for
@@ -394,7 +408,7 @@ pieces should use these rather than their own StyleBoxes.
   reach before ACT, build the combo there), timed hits, Wait and Arts (find Double Slash, then add an Art from the list), 4 Reading the enemy (dodge a revealed Attack), 5 Parry and
   Defend, 6 The skill triangle (Thrust/Lunge through Defense, Wait out
   Counter, interrupt Smash), 7 The classes, one at a time and alone
-  (Archer: Hold moves and Abilities; Mage: Tap spells; Cleric: heals), 8 Max AP
+  (Archer: Hold moves and Abilities; Mage: spell codes; Cleric: heals), 8 Max AP
   (the Knight alone again), 9 Rocks (the Golem waits with Long Strike revealed and
   strikes once you're hidden behind the rock), 10 Special skills (notes),
   11 The Assassin (with only the Knight; the Golem is Taunted by the Knight so its back
@@ -468,6 +482,9 @@ the triangle):
   instead of a full block (Goblin's Defend lets 40% through).
 - **push_out + follow_up:** pushes everyone inside out past the edge. The
   follow-up is revealed at once and strikes `follow_up_delay` seconds later
+  (real seconds: when a fast boss's bar can't fit that before the end, the
+  follow-up starts at the casting zone's edge and its bar runs slower,
+  `follow_up_slow`, so the delay still holds)
   (2 s: the enemy waits near the end of the bar). Everyone pushed gets an
   orange sphere and is hit wherever they go; anyone else can still dodge it
   (Shout, then Sword Spin: run into its safe middle).
@@ -570,17 +587,28 @@ party turns, so the gap is pure moving time.
 The Golem no longer uses Defense/Counter stances (not in its roster entry).
 Stances still work for any enemy that lists them.
 
+## Timing ring on your target
+
+- Every timed press hit of a party attack or Art also shows on the floor
+  round its target: a white ring closes in at a steady rate from
+  `timing_ring_lead` (0.9 s) before the hit, and a gold ring with a faint
+  band marks the timing box. Press when the white ring is inside the band.
+  A Perfect flashes it gold, a miss red. Same in the Command List.
+
 ## Strikes and reactions (milestone 5, built)
 
 - An Attack/Smash that catches someone becomes a **strike**. It plays in
   **real time** (no slow-motion; a slowdown could be an item later). The
   world is paused while it plays.
 - Until there are real attack animations, a **ring shrinks onto each target**.
-  It turns gold for the last `parry_window` (0.25 s). Windup: Attack 1.0 s,
+  It turns gold for the last `parry_window` (0.15 s real time; was 0.25). A press before that is a committed miss: no second try (Expedition 33-style: read the swing, press once). Windup: Attack 1.0 s,
   Smash 1.4 s (heavier, slower to land). Only targets who can **Parry
   this strike** (their class, or a guarding Knight nearby, and a parryable
   skill) get the timing ring; the others get a plain mark: **blue** if
-  Defend works for them, **red** if neither does.
+  Defend works for them, **red** if neither does. **The Parry key Defends
+  for blue-marked fighters** (the Cleric): alone, it's a plain Defend (same
+  AP); next to a Knight, one press parries for the Knight and Defends for
+  the Cleric (one Defend's AP, once per multi-hit chain).
 - **Parry (E)**: pressed while the ring is gold, no damage, the enemy is
   **knocked back** (pushed back 25 on the timeline), and the party's **max AP
   rises by 10** for the rest of the fight. Pressed too early: full damage,
@@ -618,9 +646,9 @@ Stances still work for any enemy that lists them.
   drops AP to 0 and resets max AP to 100**.
 - **AP gain scales with max AP:** the recharge is multiplied by current max AP / 100 (1.5x at 150, 2x at 200), capped at 2x (`ap_regen_max_multiplier`) even when max AP goes higher. A big bank
   refills fast, but one missed timing drops it all back to 100.
-- **Concentrate on the meter:** while the Mage's Concentrate is active,
-  bright chevrons race along the AP fill, the frame pulses violet, and an
-  "x2 AP" tag above the bar counts down the seconds left.
+- **Focus on the meter:** while the Mage stands still (Focus, AP +50%),
+  bright chevrons race along the AP fill, the frame pulses violet, and a
+  "FOCUS +50% AP" tag sits above the bar.
 - **Combo counter** (`scripts/battle/combo_counter.gd`): on the right while
   a combo plays: hits, total damage, Perfects, and each hit's damage popping
   in; the total stays up for 1.6 s afterwards.
@@ -729,7 +757,7 @@ down, which can:
 - **Attack opens the combo bar** (inspired by Legend of Legaia) with the
   class's own attacks. J adds the selected move, K removes the last one,
   **Space begins**. The bar is as long as the **class's AP** (Knight 60,
-  Archer 70, Mage 90, Cleric 60); moves are **paid from party AP**, and the
+  Archer 70, Mage 50 + Focus, Cleric 60); moves are **paid from party AP**, and the
   part you can't afford right now is shown locked (red hatching).
 - **Target:** if more than one enemy is in reach, Attack first asks which
   one (W / S cycles, a gold ring marks it, J confirms, K goes back); the
@@ -750,7 +778,11 @@ down, which can:
     let go in the box at the hit = Perfect. Let go early, still holding at
     the hit, or a late start = **partial**: no Perfect, no penalty, normal
     damage. Pressing before the first box is a normal miss.
-  - **Tap** (Mage: Fire 4, Frost 3, and the Tap Arts: Steam Burst 5, Fireball and Blizzard 6, Meteor Strike 8): tap J
+  - **Code** (the Mage's spells: WASD arrows, see the Mage).
+  - **Fast-forward:** once nothing is left to press anywhere in the combo
+    (every box done or past, no Hold, code or useful taps left), the rest
+    plays 5x faster (`exec_fast_forward`).
+  - **Tap** (the Monk's Tap Arts, Tortoise Special's open Tap): tap J
     `taps` times between `tap_start` and the hit. All taps = Perfect; some
     = partial with +50% x taps/needed damage (no max AP); none = a normal
     skipped hit. Taps before the stretch are ignored; **one tap past the
@@ -908,35 +940,100 @@ moves, not only against their plain parts.
 | Skill | AP | Effect |
 |---|---|---|
 | Jump | 30 | move a marker with WASD (up to 8 m) and leap there |
-| Riposte | 25 | counter stance for 4 s: a strike on the Archer is countered (2x attack power), the enemy is pushed 3 m away and she hops 3 m back (`riposte_hop`; walls and edges stop her) |
+| Siphon Shot | 30 | (replaced Riposte) one enemy within 6 m is **Siphoned** for 3 of her turns: each of **her** hits on it heals her 3% of her max HP, 6% on a Perfect (`_siphon`). Her answer to damage she can't dodge: she has no Block or Parry. AI Archer: casts it when under 70% HP |
 | True Sight | 40 | every ally's reach +25% (moves with their own reach too), and enemy attacks are revealed as soon as they start preparing (at the casting zone, not at `reveal_at`), 3 Archer turns |
 | Agility | 60 | the Archer's attacks get one extra hit at half the first hit's strength (`agility_hit_share`), 5 Archer turns |
 
-### Mage (100 HP, 90 AP, can Parry, cannot Block)
+### Mage (100 HP, 50 AP + Focus, can Parry, cannot Block)
+
+The elemental caster (design in the "Mage Rework" doc). Four elements; any two
+to four of them on the bar, **in any order** (`any_order`), make an Art. Every
+spell reaches **5 m** (her own reach too; the Archer keeps the longest, 6).
+
+**Focus** (`focus_max` 5 and `focus_bar_per` 10 on the Mage; `focus_*` on
+BattleArena; `_tick_focus`): her bar starts at **50 AP**. From the start of
+every fight, standing still builds a charge every 2 s of battle time (up to
+5), each +10 AP of bar for her next combo (up to 100). Walking 2 m loses one
+(no Windup exemption); teleports and pushes don't count as walking.
+Attacking (her combo, or the AI's) spends them all (`_spend_focus`: the bar
+played keeps its size), and they rebuild. **While she stands still, the
+party's AP refills 50% faster** (`focus_ap_bonus`; the AP meter shows violet
+chevrons and "FOCUS +50% AP"). Her HUD tag reads "FOCUS 3  BAR 80".
+
+**Spell codes** (CODE timing, Helldivers-style; `_judge_code`): each element
+is a WASD direction: **Fire W (up), Ice S (down), Lightning A (left), Energy
+D (right)**. While a spell casts, type its code (arrows on its block) before
+the hit = **Perfect**. The code is the spell's elements in **bar order** (Ice
+then Fire = S W; `_parse_combo` sets it). A wrong direction **starts the code
+over**; an unfinished code is a normal hit with **no penalty** (no miss, no
+max AP lost); the confirm key does nothing. Multi-hit Arts (Thunder) have one
+code, due before the last hit (earlier hits land by themselves). The window
+is the block, so its length comes from the cost. **Energy** (Energy Blast,
+Arcane Barrage, Arcane Overload): type the code, then tap J freely: every tap
+adds its share (`surge`) up to the cap; the code is the Perfect. Reports
+count `perfects_code` and `code_restarts`.
+
 | Attack | AP | Hits | Notes |
 |---|---|---|---|
-| Fire | 20 | 1.2 | **burns** every enemy hit: 35% of the Mage's attack (5) each time it acts, for its next 2 actions (refreshed, not stacked; `burn`, `burn_turns`; ticks in `_enemy_unleash`). Reach 4.5 m (the Mage's own is 3; the Archer keeps the longest, 6); a line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it (Tap 4; 1.1 s) |
-| Frost | 20 | 1.0 | everyone within 1.8 m of the target; **chills** them: half walking speed until their own next turn (status `chilled`) (Tap 3; 1.0 s) |
-| Gust | 15 | 0.8 | everyone within 3 m of the Mage, pushed 3 m away (Press; 0.6 s) |
-| Arcane Surge | 25 | 0.9, +10% per tap | single target, reach 4.5 m. An **open Tap**: every tap adds 10% (`surge`), up to 10 taps (the cap is a Perfect, so a full Surge is 0.9 x 2.0 x 1.5 = 2.7); taps past the cap are ignored, never a miss. Not part of any Art (Tap; 1.7 s) |
+| Fire | 20 | 1.2 | Code W. **Burns** every enemy hit: 35% of the Mage's attack (5) each time it acts, for its next 2 actions (refreshed, not stacked; `burn`, `burn_turns`; ticks in `_enemy_unleash`). A line from the Mage through the target and 6 m beyond: 100% on the first enemy, 75% behind it; rocks block it |
+| Ice | 20 | 1.0 | Code S. Everyone within 1.8 m of the target; **chills** them: half walking speed until their own next turn (status `chilled`). **Makes Fire cheaper** (below) |
+| Lightning | 20 | 1.0 | Code A. Single target; **interrupts** the attack it's preparing (`stun`) |
+| Energy Blast | 25 | 0.9, +10% per tap | Code D, then free taps: every tap adds 10% (`surge`), up to 10; taps past the cap are ignored. Single target, **pushed 3 m** |
 
-**Arts:**
+**Ice discount** (`ice_discount_*` on BattleArena): every Ice on the bar takes
+20% off each Fire after it (and the Fire in the same Art: Steam Burst's Ice
+discounts its own Fire), up to 40%. A combo with any Ice also takes 20% off her
+Fire on her next turn (`ice_carry`). Never more than 50% in all. The bar, the
+AP cost and the move list's prices all show the discounted cost.
 
-| Recipe | Art | AP | Hits (parts) | Effect |
+**Arts** (19, the most in the party; any order):
+
+| Recipe | Art | AP | Hits | Effect |
 |---|---|---|---|---|
-| Fire + Fire | Fireball | 40 | 3.3 (2.4) | Tap 6; reach 4.5 m; everyone within 2.2 m of the target |
-| Frost + Frost | Blizzard | 40 | 2.6 (2.0) | Tap 6; everyone within 3 m of the target, all chilled |
-| Fire + Frost | Steam Burst | 40 | 3.4 (2.2) | Tap 5; within 1.2 m of the target (her focused spell), breaks Defense |
-| Gust + Fire | Firestorm | 35 | 2.6 (1.9) | everyone within 3.5 m of the Mage, pushed 4 m |
-| Gust + Gust | Tempest | 30 | 2.0 (1.6) | everyone within 4.5 m of the Mage, pushed 5 m |
-| Fire + Frost + Fire + Gust | Meteor Strike (finisher) | 75 | 6.0 (best other reading: Steam Burst + Fire + Gust = 5.4) | Tap 8; every enemy anywhere, breaks Defense, Smash type |
+| Fire x2 | Fireball | 40 | 3.3 | everyone within 2.2 m of the target; **Burn x2** (`burn_stacks`: each tick hits twice over) |
+| Fire x3 | Inferno | 60 | 0.6 now, 6.0 later | marks a 3 m circle at the target that **explodes 3 s later** (running time; `delayed_blast`, `_blasts`): everyone still inside takes 6.0 and Burn x3; enemies can walk out |
+| Ice x2 | Blizzard | 40 | 2.6 | everyone within 3 m of the target, all chilled |
+| Ice x3 | Ice Spear | 60 | 3.6 | **Freeze** (`deep_freeze`): a regular enemy can't move and its timeline stops for 3 s, and its turn is pushed back 15. **Bosses** only lose turn time: 15, then half as much each time (`freeze_resist`) |
+| Lightning x2 | Chain Lightning | 40 | 2.4 | jumps to the 2 nearest other enemies within 5 m of the target at 75% (`chain`); interrupts each |
+| Lightning x3 | Thunder | 60 | 0.9 + 0.9 + 2.0 | the last strike stuns a regular enemy (`stun_not_bosses`) and fills Stagger 3x (`stagger_mult`) |
+| Energy x2 | Arcane Barrage | 50 | 1.5, +12% per tap | code, then free taps (up to 12); pushes 4 m |
+| Energy x3 | Arcane Overload | 75 | 2.8, +12% per tap | code, then free taps (up to 15): her biggest single hit; pushes 8 m; **20 AP back** (`ap_refund`) |
+| Fire + Energy | Flare | 45 | 1.8 | **detonates every burning enemy**: all its Burn left (damage x stacks x turns) at once, Burn ends (`detonate_burns`). No push |
+| Ice + Energy | Shatter | 45 | 2.0 | **Frozen: 2.5x** and the Freeze ends; **Chilled: 1.6x**; otherwise 0.6x (`shatter`). No push |
+| Lightning + Energy | Overcharge | 45 | 2.0 | interrupts even a boss immune to cancels right now (not UNSTOPPABLE moves; `ignore_cancel_lock`); 3x Stagger fill. No push |
+| Fire + Ice | Steam Burst | 36 | 2.8 | within 1.2 m of the target (her focused spell), breaks Defense; burns and chills |
+| Fire + Lightning | Plasma | 40 | 2.6 | burns it and interrupts its attack |
+| Ice + Lightning | Static Frost | 40 | 2.2 | chills and interrupts; a target **already Chilled freezes** (2 s, turn pushed 10; bosses only lose turn time, as Ice Spear; `freeze_if_chilled`) |
+| Fire + Ice + Lightning | Tri-Disaster | 56 | 3.6 | Burn, Chill and an interrupt on everyone within 2.5 m of the target |
+| Fire + Ice + Energy | Thermal Shock | 61 | 5.0 | breaks Defense: the heavy Defense-breaker. No push |
+| Fire + Lightning + Energy | Nova | 65 | 3.4 | everything within 4 m of the Mage: burns and interrupts it all, her escape. No push |
+| Ice + Lightning + Energy | Stasis | 65 | 1.0 | every enemy: a regular one's timeline stops 3 s; a boss only loses 8 turn time, halved each time (`stasis`, `stasis_resist`). No interrupt, no push |
+| Fire + Ice + Lightning + Energy Blast | Meteor (finisher) | 81 | 6.0 | every enemy anywhere, breaks Defense, Smash type; doesn't take the push or the interrupt from its parts (`no_inherit`) |
 
-Order matters: Frost + Fire and Fire + Gust are just two spells.
+Energy mixes and Meteor drop the push their Energy Blast would give
+(`no_inherit`). Costs above already count the Ice discount on their own Fire (Steam Burst,
+Tri-Disaster, Thermal Shock, Meteor); an Ice earlier in the combo takes more off.
+
+**Arts list:** recipes read "Fire x3" when they repeat one element, and the
+header says "moves in any order merge". When the Arts don't all fit (the
+Mage's 19), the list splits into **pages turned with A/D** (page number top
+right; W/S in the focused list moves through pages too, and the list jumps to
+the page of the Art the bar is heading for). More than 6 hidden Arts are
+summed up by length.
+
+**Party AI Mage** stands still in reach to build Focus (she walks only when the
+enemy is out of her reach or right on top of her), and casts Enchant when none
+is running (`_ai_enchant_pick`: Lightning while a Stagger bar is up, Ice
+against 3+ enemies, Fire otherwise). `_ai_mage_value`: her Arts are valued by how many enemies
+they'd hit (areas, Chain Lightning, Inferno's circle), Flare by the Burn it
+would detonate, Shatter by Frozen / Chilled, Overcharge double on a boss cast
+that's immune to cancels, Ice Spear and Stasis higher on an enemy preparing
+an attack.
 
 | Skill | AP | Effect |
 |---|---|---|
 | Arcane Barrier | 30 | the next hit on the Mage does nothing |
-| Concentrate | 40 | AP recharges twice as fast for 10 s |
+| Enchant | 30 | choosing it opens a small **element menu** (only then): a direction picks the element, as in her spell codes: Fire up (W), Ice down (S), Lightning left (A), Energy right (D); back closes it. Every ally **but her** carries the element for 2 of her turns (statuses `enchant_*`, tag "ENCHANT FIRE"); one at a time, a new one replaces it (`_enchant`, `_enchanted`). Their hits add a light effect: Fire a 1-turn Burn (20% of their attack; `enchant_burn`), Ice a Chill, Lightning 1.5x Stagger fill (`enchant_stagger_mult`), Energy a 1 m push (`enchant_push`). Replaced Concentrate |
 | Teleport | 30 | blink to a spot within 8 m (marker, like Jump), or press Tab to snap the marker to an ally at any distance and appear next to them |
 
 ### Cleric (130 HP, 60 AP, can Block, cannot Parry)
@@ -963,6 +1060,7 @@ each one rallying; support effects come with the Art's last hit):
 | Shielding | 40 | every ally gets a shield of 15% of their max HP |
 | Haste | 40 | an ally moves along the timeline 25% faster (`haste_timeline_bonus`: their turns come sooner) and runs 20% faster, for 2 of **their** turns |
 | Full Cure | 60 | an ally is fully healed |
+| Lifeline | 30 | dash beside another ally within 8 m (out of whatever she stood in); she and that ally each heal 15% of their max HP. AI: when she stands in a revealed area and an ally in reach stands clear, or both are under 60% HP |
 
 ### Assassin (170 HP, 50 AP, cannot Block or Parry: auto-parries with Marks)
 Fast (speed 14), melee reach, timeline icon "As". **Behind** = within 60°
@@ -1112,12 +1210,12 @@ party AP) ~420. Tunable in moves.gd (hits, `cashout`) and
 | Skill | AP | Effect |
 |---|---|---|
 | Provoke | 20 | one enemy within 6 m targets the Monk until his next turn; each Parry meanwhile gives +1 Rush |
-| Suplex | 20 | counter stance for 4 s (like Riposte): the attacker takes 2x attack and is thrown 3 m; +1 Mountain |
+| Suplex | 20 | counter stance for 4 s: the attacker takes 2x attack and is thrown 3 m; +1 Mountain |
 | Deep Breath | 30 | heal 20% of max HP; gives back the last step he lost |
 
 ### Shared rules
 - **Durations count the caster's turns**: "3 turns" runs out when the
-  caster's third turn after using it begins. Riposte and Concentrate run on
+  caster's third turn after using it begins. Riposte runs on
   seconds instead, counted while the timeline runs.
 - **Barriers and shields** soak up damage before HP and stack, up to half
   of max HP. Shown as a light-blue strip on the HP bar. **Each one is its

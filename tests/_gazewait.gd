@@ -1,6 +1,6 @@
 extends SceneTree
 # Doom Gaze: an out-of-reach windup waits in cover instead of becoming a Wait.
-# Also: the Living Armor's sure Shadowflare at 70% HP, and boss round speeds.
+# Also: the Living Armor's Shadowflare phase at 50% HP, and boss round speeds.
 var a
 var t := 0.0
 var step := 0
@@ -30,9 +30,9 @@ func _process(d):
 			var rush = load("res://data/boss_rush.tres")
 			check(is_equal_approx(rush.rounds[7].enemy_speed_mult, 1.7) and is_equal_approx(rush.rounds[8].enemy_speed_mult, 1.5) and is_equal_approx(rush.rounds[9].enemy_speed_mult, 1.5) and is_equal_approx(rush.rounds[10].enemy_speed_mult, 1.5), "boss rounds: Golem x1.7, others x1.5")
 			check(a._sure_hp_skill(g, g.skills) == null, "full HP: no forced pick")
-			g.hp = int(g.max_hp * 0.69)
+			g.hp = int(g.max_hp * 0.49)
 			var sure = a._sure_hp_skill(g, g.skills)
-			check(sure != null and sure.skill_name == "Shadowflare", "at 69%%: Shadowflare for sure (%s)" % [sure.skill_name if sure else "none"])
+			check(sure != null and sure.skill_name == "Shadowflare", "at 49%%: the Shadowflare phase (%s)" % [sure.skill_name if sure else "none"])
 			g.hp = g.max_hp
 			# Doom Gaze being prepared; the Knight's windup ends far away.
 			for c in a.combatants: c.hold = true

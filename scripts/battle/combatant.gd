@@ -33,6 +33,14 @@ enum Team { PARTY, ENEMY }
 @export_range(0.0, 1.0) var damage_taken_share: float = 1.0
 ## How far pushes send it, as a multiple (Gust Sprites: light, pushed far).
 @export var knockback_taken: float = 1.0
+## Lightweight (Gust Sprites): every hit it takes knocks it back; walls
+## and corners bounce it off, and touching a hole or a drop drops it.
+@export var lightweight := false
+## Seconds of battle time after it appears before it casts its
+## self_destruct skill (0 = no fuse). Gust Sprites: push it off in time.
+@export var fuse_seconds := 0.0
+## Never beaten down: damage stops at 1 HP (only a fall removes it).
+@export var unkillable := false
 var rock_bursts := 0
 ## Actions left before its skills can be cancelled again, and how many
 ## cancels it has taken this fight.
@@ -73,6 +81,14 @@ var cancels_taken := 0
 ## Party AI: stays put inside a short melee attack aimed at it (one that
 ## can be Parried or Defended): your Parry / Defend press covers it (Knight, Monk).
 @export var holds_ground := false
+## Mage Focus: charges she builds standing still (0 = none), each adding
+## focus_bar_per AP to her bar for her next combo (see battle_arena).
+@export var focus_max := 0
+@export var focus_bar_per := 10.0
+var focus := 0
+var focus_clock := 0.0
+var focus_walked := 0.0
+var _focus_base := -1.0
 ## Enemies: no positionals. Every hit counts as "from behind", from anywhere
 ## (its ring is a plain full circle). Small enemies (Goblin, Kobold).
 @export var no_positionals := false
@@ -198,6 +214,8 @@ var freeze_left := 0.0
 ## Mage's Fire: damage taken each time this enemy acts, and how many more times.
 var burn_damage := 0
 var burn_turns := 0
+## Fireball / Inferno: each Burn tick hits this many times over.
+var burn_stacks := 1
 ## Turn control (halts, stuns) works once per action of this enemy's own,
 ## so no class can lock it forever. Cleared when it acts.
 var control_used := false
@@ -363,7 +381,7 @@ func take_damage(amount: int, recoverable_hit: bool) -> int:
 		return 0
 	recoverable = 0
 	var lost := mini(amount, hp)
-	if cannot_fall:
+	if cannot_fall or unkillable:
 		lost = mini(lost, hp - 1)
 	hp -= lost
 	if team == Team.ENEMY and loaded_def != null:
@@ -529,11 +547,13 @@ func is_behind(point: Vector3) -> bool:
 
 ## Called at the start of every turn: effects cast by that fighter count
 ## down by one, and run out at zero. Returns the names that ran out.
+## An effect whose caster is down (or gone) counts down on its holder's own
+## turns instead, so it still runs out (a downed Mage's Enchant did not).
 func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
 	var ended: PackedStringArray = []
 	for status_name in statuses.keys():
 		var entry: Dictionary = statuses[status_name]
-		if entry.get("caster") != turn_owner or int(entry.get("turns", 0)) <= 0:
+		if _ticker(entry.get("caster")) != turn_owner or int(entry.get("turns", 0)) <= 0:
 			continue
 		entry["turns"] = int(entry["turns"]) - 1
 		if entry["turns"] <= 0:
@@ -542,7 +562,7 @@ func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
 	# Shield stacks given by this turn's fighter count down too.
 	var shield_ended := false
 	for stack in shield_stacks.duplicate():
-		if stack["caster"] != turn_owner:
+		if _ticker(stack["caster"]) != turn_owner:
 			continue
 		stack["turns"] = int(stack["turns"]) - 1
 		if int(stack["turns"]) <= 0:
@@ -551,6 +571,16 @@ func tick_statuses(turn_owner: Combatant) -> PackedStringArray:
 	if shield_ended:
 		ended.append("shield")
 	return ended
+
+
+## Whose turns an effect counts down on: its caster's, or this fighter's
+## own once the caster is down or gone. (No caster: it never counts down.)
+func _ticker(caster) -> Variant:
+	if caster == null:
+		return null
+	if not is_instance_valid(caster) or caster.is_down:
+		return self
+	return caster
 
 
 ## Attack reach right now (True Sight adds 25%).
@@ -589,8 +619,23 @@ func stagger_view() -> Dictionary:
 	return {}
 
 
+## Sets the Mage's Focus charges; her bar is her base plus focus_bar_per each.
+func set_focus(charges: int) -> void:
+	if _focus_base < 0.0:
+		_focus_base = combo_limit
+	focus = clampi(charges, 0, focus_max)
+	combo_limit = _focus_base + focus * focus_bar_per
+
+
 func status_text() -> String:
 	var tags: PackedStringArray = []
+	if lightweight and not is_down:
+		tags.append("LIGHTWEIGHT")
+	if has_meta("fuse_left") and not is_down:
+		var left := float(get_meta("fuse_left"))
+		tags.append("DETONATING" if left <= 0.0 else "FUSE %ds" % ceili(left))
+	if focus_max > 0 and not is_down:
+		tags.append("FOCUS %d  BAR %d" % [focus, int(combo_limit)])
 	if climbs():
 		# The Monk's climb first, so a long line never cuts it off.
 		tags.append("BAR %d" % int(combo_limit))
@@ -598,7 +643,8 @@ func status_text() -> String:
 			var short := "CHEER" if token == "Crowd Cheer" else String(token).to_upper()
 			tags.append(short + (" x%d" % tokens[token] if int(tokens[token]) > 1 else ""))
 	var labels := {"brace": "BRACE", "true_sight": "SIGHT", "haste": "HASTE", "agility": "AGILITY",
-			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED", "off_balance": "OFF-BALANCE", "staggered": "STAGGERED"}
+			"taunt": "TAUNTED", "provoking": "PROVOKE", "guarding": "GUARD", "arcane_barrier": "BARRIER", "arcane_cost": "2x COST", "pinned": "PINNED", "chilled": "CHILLED", "exposed": "EXPOSED", "off_balance": "OFF-BALANCE", "staggered": "STAGGERED", "siphoned": "SIPHONED",
+			"enchant_fire": "ENCHANT FIRE", "enchant_ice": "ENCHANT ICE", "enchant_lightning": "ENCHANT BOLT", "enchant_energy": "ENCHANT ENERGY"}
 	for status_name in statuses:
 		var turns := int(statuses[status_name].get("turns", 0))
 		var label: String = labels.get(status_name, String(status_name).to_upper())

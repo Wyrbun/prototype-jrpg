@@ -62,7 +62,7 @@ kind = 1
 weight = 2
 shape = 0
 radius = 8.0
-angle = 100.0
+angle = 180.0
 damage = 80
 windup = 1.4
 
@@ -83,10 +83,12 @@ cast_speed = 0.8
 fills_arena = true
 follow_up = SubResource("Skill_3")
 follow_up_delay = 1.5
+stagger_bar = 70
 
 [sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
 skill_name = "Gale Lanes"
+cannot_be_parried = true
 kind = 0
 weight = 2
 shape = 4
@@ -97,10 +99,52 @@ lanes = 3
 damage = 40
 windup = 1.2
 launch = 5.0
+only_above_hp = 0.5
+
+[sub_resource type="Resource" id="Skill_11"]
+script = ExtResource("2_skill")
+skill_name = "Double Gale Lanes"
+cannot_be_parried = true
+kind = 0
+weight = 2
+shape = 4
+radius = 14.0
+width = 22.0
+inner_radius = 0.0
+lanes = 3
+lanes_in_gaps = true
+damage = 40
+windup = 1.2
+launch = 5.0
+follow_up = SubResource("Skill_5")
+follow_up_delay = 2.5
+only_below_hp = 0.5
+
+[sub_resource type="Resource" id="Skill_12"]
+script = ExtResource("2_skill")
+skill_name = "Gale Draw"
+uncancellable = true
+kind = 4
+weight = 2
+shape = 0
+radius = 40.0
+angle = 180.0
+damage = 8
+windup = 1.2
+cannot_be_parried = true
+cannot_be_blocked = true
+pull = 4.0
+cast_speed = 0.8
+fills_arena = true
+follow_up = SubResource("Skill_11")
+follow_up_delay = 1.0
+stagger_bar = 120
+only_below_hp = 0.5
 
 [sub_resource type="Resource" id="Skill_6"]
 script = ExtResource("2_skill")
 skill_name = "Breaker"
+cannot_be_parried = true
 kind = 1
 weight = 2
 shape = 4
@@ -115,6 +159,7 @@ breaks_rocks = true
 [sub_resource type="Resource" id="Skill_7"]
 script = ExtResource("2_skill")
 skill_name = "Wall Sweep"
+cannot_be_parried = true
 kind = 0
 weight = 2
 shape = 4
@@ -128,6 +173,7 @@ launch = 4.0
 [sub_resource type="Resource" id="Skill_8"]
 script = ExtResource("2_skill")
 skill_name = "Undertow"
+cannot_be_parried = true
 kind = 4
 weight = 1
 shape = 2
@@ -159,10 +205,11 @@ cannot_be_blocked = true
 launch = 7.0
 cast_speed = 0.8
 fills_arena = true
-follow_up = SubResource("Skill_5")
+follow_up = SubResource("Skill_11")
 follow_up_delay = 1.0
 breaks_rocks = true
 stagger_bar = 120
+only_below_hp = 0.5
 
 [sub_resource type="CylinderMesh" id="Mesh_body"]
 top_radius = 4.0
@@ -192,7 +239,7 @@ summon_scene = ExtResource("3_sprite")
 summon_every = 4
 summon_count = 1
 body_radius = 4.0
-skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9")])
+skills = Array[ExtResource("2_skill")]([SubResource("Skill_1"), SubResource("Skill_2"), SubResource("Skill_3"), SubResource("Skill_4"), SubResource("Skill_5"), SubResource("Skill_6"), SubResource("Skill_7"), SubResource("Skill_8"), SubResource("Skill_9"), SubResource("Skill_11"), SubResource("Skill_12")])
 
 [node name="Body" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)

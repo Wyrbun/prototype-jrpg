@@ -41,7 +41,7 @@ func _process(d):
 			g.forced_skill = skill(g, "Crush")
 			a._begin_cast(g)
 			g.cast_target = k
-			check(is_equal_approx(g.loaded_def.final_turn_speed, 80.0), "Crush: final_turn_speed 80")
+			check(is_equal_approx(g.loaded_def.final_turn_speed, 160.0), "Crush: final_turn_speed 160")
 			# Far targeting: Knight close, Archer and Mage far.
 			var ar = a.party[1]; var mg = a.party[2]
 			k.global_position = g.global_position + Vector3(2.5, 0, 0)
@@ -77,8 +77,8 @@ func _process(d):
 		1:
 			if t < 0.5: return false
 			var turned = start_off - off()
-			var expect = 80.0 * 0.5 * a.battle_speed
-			check(abs(turned - expect) < 6.0, "  turned %.0f° in 0.5 s (80°/s at battle speed %.1f: %.0f°; 40°/s would be %.0f°)" % [turned, a.battle_speed, expect, expect / 2])
+			var expect = 160.0 * 0.5 * a.battle_speed
+			check(abs(turned - expect) < 6.0, "  turned %.0f° in 0.5 s (160°/s at battle speed %.1f: %.0f°; 40°/s would be %.0f°)" % [turned, a.battle_speed, expect, expect / 4])
 			a._finish_enemy_skill(g, false)
 			g.forced_skill = skill(g, "Rock Stomp")
 			a._begin_cast(g)

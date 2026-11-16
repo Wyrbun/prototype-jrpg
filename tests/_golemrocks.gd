@@ -86,6 +86,7 @@ func _process(d):
 		a._update_strike(0.05)
 	check(g.loaded_def.skill_name == "Left Golem Smash" and g.skill_revealed, "then the Left Smash is revealed (%s)" % g.loaded_def.skill_name)
 	check(is_equal_approx(g.attack_range.rotation.y, deg_to_rad(90.0)), "aimed at the other side")
+	check(absf(a._follow_up_seconds(g) - 2.0) < 0.05, "  and it really strikes 2 s later (%.2f s; the fast Golem used to cut it to ~1.3)" % a._follow_up_seconds(g))
 	var after_first: int = a._debris.size()
 	check(after_first < before and g.get_meta("rock_blasts", []).size() == after_first, "first Smash cleared its half (%d -> %d); the rest are marked" % [before, after_first])
 	a._enemy_unleash(g, true)

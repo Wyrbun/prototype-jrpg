@@ -14,8 +14,8 @@ const MAX_PARTY := 4
 ## [scene path, one-line role] for every class, in menu order.
 const CLASSES := [
 	["res://scenes/characters/knight.tscn", "The tank: Taunt guards allies near them, Brace, most HP"],
-	["res://scenes/characters/archer.tscn", "Ranged: Power Draw (Hold), Exposing Shot, Riposte"],
-	["res://scenes/characters/mage.tscn", "Fire, Frost, Gust area spells (Tap), Concentrate"],
+	["res://scenes/characters/archer.tscn", "Ranged: Power Draw (Hold), Exposing Shot, Siphon Shot"],
+	["res://scenes/characters/mage.tscn", "Element spells typed as WASD codes; Focus, Enchant"],
 	["res://scenes/characters/cleric.tscn", "Healer: Healing, Shielding, Full Cure, Bash"],
 	["res://scenes/characters/assassin.tscn", "Strikes from behind, Marks, auto-parry with Marks"],
 	["res://scenes/characters/monk.tscn", "Climbs his bar with Arts, then cashes out; tanks with Provoke"],
