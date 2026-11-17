@@ -12,24 +12,30 @@ battle systems:
 
 Placeholder art throughout (capsules and boxes): this stage is about a fun core loop.
 
-![The Stone Golem's Ceiling Burst: falling rocks to dodge, with the timeline at the top](docs/screenshots/battle.png)
+![A party of four against the Stone Golem: everyone moves at once while the Golem's attacks are revealed late on the floor](docs/screenshots/golem.gif)
 
 | | |
 |---|---|
-| ![Building a combo: moves, Arts list and the AP bar](docs/screenshots/combo.png) | ![Living Armor's Shadowflare: hit the Shadow Sprites to stop the circle](docs/screenshots/shadowflare.png) |
-| **Combos and Arts:** fill the bar with moves; the right order merges them into secret Arts | **Living Armor:** hit each Shadow Sprite once to stop the growing circle |
-| ![Gale Maw: Gale Lanes and a Gust Sprite to push off the ledge](docs/screenshots/gale-maw.png) | ![Title screen](docs/screenshots/title.png) |
-| **Gale Maw:** dodge the Gale Lanes and push the tough Gust Sprite off the ledge | **Title screen:** Boss Rush, Tutorial, Round Select and more |
+| ![A Knight combo: timed presses, Perfects and a secret Art revealed mid-combo](docs/screenshots/combo.gif) | ![Living Armor's Shadowflare: the party splits up to hit the Shadow Sprites](docs/screenshots/shadowflare.gif) |
+| **Combos and Arts:** fill the bar, hit each timing as the ring closes in, and find secret Arts mid-combo | **Living Armor:** hit each Shadow Sprite before the circle fills the room |
+| ![Gale Maw: Gale Lanes, Gust Sprites and a cliff edge](docs/screenshots/gale-maw.gif) | ![A knocked-out Knight thrown across the arena by a Golem Smash](docs/screenshots/ragdoll.gif) |
+| **Gale Maw:** dodge the Gale Lanes and push the Gust Sprites off the ledge | **Strong blows throw you:** a Smash sends a downed fighter flying |
+| ![The Victory panel with an S rank, then the Fight summary](docs/screenshots/victory.gif) | ![Title screen](docs/screenshots/title.png) |
+| **Every fight is ranked:** Health, Timing, Reading and Pace, with a summary of where the rank came from | **Title screen:** Boss Rush, Tutorial, Round Select and more |
 
 ## What's in it
 
 - **A boss rush of 13 rounds plus a Special Match**, with auto-save, Round Select, and a party picker for the boss rounds (1 to 4 fighters, solo allowed)
 - **Four bosses with their own mechanics:** the Stone Golem's rocks that stay and explode, the Living Armor's Shadow Sprites, the Dragon Hatchling, and the Gale Maw, which pushes you toward a cliff edge
-- **Six classes**: Knight, Archer, Mage, Cleric, Assassin and Monk, each with its own attacks, Abilities, reactions and secret **Arts**
+- **Six classes**: Knight, Archer, Mage, Cleric, Assassin and Monk, each with its own attacks, Abilities, reactions and secret **Arts** (the Mage types her spells as element codes while they cast, and mixes them into 19 Arts)
+- **Items**: a shared pouch per fight (3 Potions, 2 Ethers, 1 Revive), used in the turn's Ability slot
 - **Enemies with readable skills**: cones, lines, donuts, half-room cleaves, falling rocks, instant-death gazes you hide from, and more
 - **Arenas with drops**: holes and lethal edges you can knock enemies into, or be thrown into yourself
-- **A guided tutorial** that teaches every mechanic, step by step
-- **Play-test reports** written after every fight (press O on the end screen)
+- **Party AI** that dodges revealed attacks, keeps off ledges, heals, revives, and splits up to answer boss mechanics
+- **Victory and Defeat screens**: a rank from S to C with a Fight summary after a win, and a *What went wrong* page with a tip after a loss
+- **Ragdolls**: strong blows throw a downed fighter across the arena; anything else and they flop over
+- **A guided tutorial** that teaches every mechanic, step by step, and a **Command List** in the pause menu to preview and practise every move
+- **Play-test reports** written after every fight (*Open play-test report* on the end screen, or O)
 
 ## How a fight works
 
@@ -48,7 +54,9 @@ Wait. Prefer the old way? *Command timing: Classic* in the pause menu opens
 the menu right at the end of the bar.
 
 **Attacking** opens a combo bar: fill it with moves, then hit each timing as
-the playhead passes (Press, Hold or Tap) for a **Perfect**. Moves in the right
+the playhead passes (Press, Hold or Tap) for a **Perfect**; a ring closing in
+on the target shows the same timing, so you can watch the fight instead of the
+bar. Moves in the right
 order merge into **Arts**, secret until you find them mid-combo. Each move
 shows tags for how it answers what the enemy is doing right now (breaks
 Defense, interrupts, pushes, and so on). Hit an enemy in **Counter** stance and
@@ -61,6 +69,15 @@ for the rest of the fight; a missed Perfect or Parry drops it back to 100.
 **Bosses push back:** cancel one of their skills and they shrug off the next
 few cancels, and their biggest moves can't be stopped at all. Unavoidable
 skills fill a **Stagger** bar instead: fill it with hits to break the cast.
+
+**Items** come from a pouch the whole party shares: 3 Potions, 2 Ethers and
+1 Revive per fight. Using one takes the turn's Ability slot, and you can still
+attack after it.
+
+**When the fight ends,** a small panel over the battle gives a **rank** (S to
+C: Health, Timing, Reading and Pace) and the way on: Next round, Retry, Change
+party, the play-test report or back to the menu. After a defeat, *What went
+wrong* shows what hurt most, who went down to what, and a tip.
 
 **Rather steer just one?** Turn on *Party AI* in the pause menu: everyone you
 aren't steering plays their own turns instantly (with the Arts you've found),
@@ -96,7 +113,7 @@ click **Import**, pick this folder's `project.godot`, and press **F5**.
 3. Stuck on a round? **Round Select** jumps to any of them.
 
 **Feedback is very welcome!** After every fight the game writes a short
-report; press **O** on the end screen to open the folder (on Windows,
+report; choose *Open play-test report* (or press **O**) on the end screen to open the folder (on Windows,
 `%APPDATA%\Godot\app_userdata\Prototype JRPG\playtests`). Attach a few to an
 [issue](../../issues) along with what felt fun, confusing or unfair.
 
@@ -117,7 +134,7 @@ get new releases as they come out, and ask the game's bot anything with
 | E / Q | Parry / Defend an enemy strike |
 | Z / C, right-drag, wheel | Camera (V resets it) |
 | Esc | Pause (settings: Command timing, Party AI) |
-| R / O (end screen) | Fight again / open the play-test reports |
+| W / S, J (end screen) | Choose and pick: Next round, Retry, Change party, and more (O opens the play-test reports) |
 
 **Change Keys** on the title screen rebinds them.
 
