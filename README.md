@@ -68,18 +68,18 @@ leaving AP for yours. Tab still takes any of them over.
 
 ## How to play
 
-**Current build: [0.8.0](../../releases/tag/v0.8.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [0.9.0](../../releases/tag/v0.9.0)** (pre-release; all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.8.0-windows.zip`](../../releases/download/v0.8.0/PrototypeJRPG-0.8.0-windows.zip),
+[`PrototypeJRPG-0.9.0-windows.zip`](../../releases/download/v0.9.0/PrototypeJRPG-0.9.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.8.0-linux.tar.gz`](../../releases/download/v0.8.0/PrototypeJRPG-0.8.0-linux.tar.gz), then:
+[`PrototypeJRPG-0.9.0-linux.tar.gz`](../../releases/download/v0.9.0/PrototypeJRPG-0.9.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.8.0-linux.tar.gz
+tar -xzf PrototypeJRPG-0.9.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -150,6 +150,6 @@ get new releases as they come out, and ask the game's bot anything with
 - [x] Windup turns (Grandia-style), counter-parry, boss cancel resistance
 - [x] HUD restyle; move tags that show how each move answers the enemy
 - [x] Bosses with set-piece mechanics: Golem rocks, Shadow Sprites, Gust Sprites
-- [ ] Knockdown (push away, disable or reshape enemy areas)
-- [ ] Complete fight: proper victory and defeat screens, balance pass
-- [ ] Items (the menu entry is there, marked "coming later")
+- [x] Knockdown (push away, disable or reshape enemy areas): Stagger bars, pushes and pulls, interrupts
+- [x] Complete fight: victory and defeat screens with a rank, balance pass
+- [x] Items: a pouch per fight (Potion, Ether, Revive), one per turn in the Ability slot

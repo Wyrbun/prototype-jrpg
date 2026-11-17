@@ -23,6 +23,7 @@ stagger_bar = 90
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
 skill_name = "Fire Wave"
+tip = "Step out of the line once it's revealed, and don't walk through the fire it leaves."
 kind = 1
 weight = 3
 shape = 2
@@ -39,6 +40,7 @@ trail_group = "wave"
 [sub_resource type="Resource" id="Skill_3"]
 script = ExtResource("2_skill")
 skill_name = "Burning Spike"
+tip = "It can't be dodged: hit the Dragon to break its Stagger bar first."
 kind = 4
 weight = 1
 shape = 1
@@ -56,6 +58,7 @@ stagger_bar = 100
 [sub_resource type="Resource" id="Skill_4"]
 script = ExtResource("2_skill")
 skill_name = "Scorch and Breathe"
+tip = "Get out of the line, then stack with the others for the Breath."
 kind = 1
 weight = 2
 shape = 2
@@ -74,6 +77,7 @@ follow_up_delay = 1.5
 [sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
 skill_name = "Wings of Fire"
+tip = "Stand in the gaps between the lines of fire."
 uncancellable = true
 kind = 4
 weight = 0

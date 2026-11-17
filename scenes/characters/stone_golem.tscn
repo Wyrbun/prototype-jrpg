@@ -17,6 +17,7 @@ windup = 1.4
 [sub_resource type="Resource" id="Skill_2"]
 script = ExtResource("2_skill")
 skill_name = "Crush"
+tip = "Crush goes for someone far away: stand behind a rock, or Parry it."
 kind = 1
 weight = 2
 shape = 2
@@ -57,6 +58,7 @@ spike_damage = 16
 [sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
 skill_name = "Right Golem Smash"
+tip = "The reveal shows which half: cross to the other side, or Defend."
 uncancellable = true
 smash_blasts_rocks = true
 kind = 1
@@ -76,6 +78,7 @@ hides_side = true
 [sub_resource type="Resource" id="Skill_6"]
 script = ExtResource("2_skill")
 skill_name = "Left Golem Smash"
+tip = "The reveal shows which half: cross to the other side, or Defend."
 uncancellable = true
 smash_blasts_rocks = true
 kind = 1
@@ -172,6 +175,7 @@ albedo_color = Color(0.55, 0.5, 0.45, 1)
 [sub_resource type="Resource" id="Skill_12"]
 script = ExtResource("2_skill")
 skill_name = "Left Golem Smash"
+tip = "The reveal shows which half: cross to the other side, or Defend."
 uncancellable = true
 smash_blasts_rocks = true
 kind = 1
@@ -190,6 +194,7 @@ fills_arena = true
 [sub_resource type="Resource" id="Skill_11"]
 script = ExtResource("2_skill")
 skill_name = "Right + Left Golem Smash"
+tip = "Both halves get hit, 2 s apart: cross over as soon as the first half lands."
 uncancellable = true
 rock_clear_weight = 0.3
 rock_settle_seconds = 12.0
@@ -212,6 +217,7 @@ follow_up_delay = 2.0
 [sub_resource type="Resource" id="Skill_14"]
 script = ExtResource("2_skill")
 skill_name = "Right Golem Smash"
+tip = "The reveal shows which half: cross to the other side, or Defend."
 uncancellable = true
 smash_blasts_rocks = true
 kind = 1
@@ -230,6 +236,7 @@ fills_arena = true
 [sub_resource type="Resource" id="Skill_13"]
 script = ExtResource("2_skill")
 skill_name = "Left + Right Golem Smash"
+tip = "Both halves get hit, 2 s apart: cross over as soon as the first half lands."
 uncancellable = true
 rock_clear_weight = 0.3
 rock_settle_seconds = 12.0

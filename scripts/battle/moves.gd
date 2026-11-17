@@ -95,7 +95,7 @@ enum TimingType { PRESS, HOLD, TAP, CODE }
 ## elements in bar order; done before the hit = Perfect.
 const ELEMENT_DIRS := {"Fire": "up", "Ice": "down", "Lightning": "left", "Energy Blast": "right"}
 enum Area { SINGLE, TARGET_CIRCLE, LINE, SELF_CIRCLE, ALL }
-enum Target { SELF, ALLY, OTHER_ALLY, ENEMY, POINT, NONE }
+enum Target { SELF, ALLY, OTHER_ALLY, ENEMY, POINT, NONE, DOWNED_ALLY }
 
 const UNLIMITED := 1000.0
 

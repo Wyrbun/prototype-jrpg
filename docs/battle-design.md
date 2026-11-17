@@ -118,7 +118,7 @@ decision earlier, Grandia-style:
   steers the one picked. A tap still just switches to the next one.
 - **On a party turn**, time freezes and that fighter is **locked in place**.
   The command menu opens automatically: **Attack** (needs an enemy in reach),
-  **Wait**, Abilities, Items (placeholders).
+  **Wait**, Abilities, Items.
 - **Wait** ends the turn without spending AP; the fighter's bar restarts at
   `wait_head_start` (33) instead of 0, so the next turn comes sooner.
 - If several party members are ready at once, their turns come up back to back.
@@ -220,7 +220,12 @@ Tab / hold Tab takes one over. The party list tags them **AUTO**.
   and Cleric stand at the edge of their reach, `fragile_flank_degrees`
   (70°) off its front (not wall bosses, not when it's locked on to them).
   In a Shadowflare each AI ally goes for a different sprite, and one that
-  chose the Armor before the sprites appeared switches to one.
+  chose the Armor before the sprites appeared switches to one. An AI ally
+  whose Windup target raised a Counter stance since backs off (a Wait,
+  `ai_counter_backoffs`) instead of attacking into it. AI allies
+  don't push an enemy that is preparing a strike whose area moves with it
+  (`_carries_area`; not Lightweight sprites): a pushed Golem Smash landed
+  on the side the party had run to. Your own pushes still work.
   and the Knight and Monk hold their ground in short melee attacks (see
   Ally AI above).
 
@@ -741,18 +746,109 @@ can't dodge, Parry or Defend.
 - Parry's timeline push is now called **knocked back**, so "Stagger" only
   means the bar.
 
-## Knockdown (ideas)
+## Knockdown (done through other systems)
 
-Hits build a stagger gauge (Mabinogi-style). A full gauge knocks the enemy
-down, which can:
-- push it, and its area, away from the party,
-- disable its area for a while,
-- or change its area to a different shape.
+The original idea: hits build a stagger gauge (Mabinogi-style), and a full
+gauge knocks the enemy down, which can push it and its area away, disable
+its area for a while, or change its area's shape. All three now exist in
+other forms, so this milestone is closed:
+- **Push away:** knockback moves (Energy Blast, Enchant: Energy, the
+  Knight's and Monk's pushes), Lightweight enemies, edge falls.
+- **Disable:** interrupts and stuns (Attack beats Smash, Lightning,
+  Stunning Arrow, Crusader's Edge, Hook), Stagger bars that break
+  unavoidable casts, Shadowflare containment.
+- **Reshape:** a full Stagger bar turns a cast into a weaker one
+  (`stagger_into`: Exhale -> Broken Exhale).
+
+## Ragdolls (built)
+
+A party member who goes down goes limp: their body parts (not the name
+label) move under a pivot at their feet (`Combatant.make_limp`) and the
+arena animates it (`_tick_ragdolls`).
+
+- **Sent flying** by a strong blow (`_strong_blow`: a push, a Smash, 40+
+  damage, an instant kill): thrown away from the enemy
+  (`ragdoll_fly_speed` 7.5 m/s, `ragdoll_fly_up` 8 m/s; about 1.4 m high
+  and 6 m far), tumbling, one bounce, a short slide, then flat on its
+  back. Walls, rocks and edges stop the slide; it never goes over a drop.
+- **Flops** to anything else (small hits, burns, hazards): tips over where
+  it stands, away from the hit, with a small bounce.
+- A fall off the arena keeps its own drop. Revive stands the body back up
+  (`Combatant.unlimp`). Reports count `ragdolls_flying` / `ragdolls_flop`.
+  Test `tests/_ragdoll.gd`.
+
+## End screens (built)
+
+A fight ends with a short pause (`end_screen_delay`, 1.2 s), then a panel
+over the frozen, dimmed battle while the camera turns slowly round the
+arena (`scripts/battle/end_screen.gd`). W / S choose, J picks, K backs out
+of a page; the old keys (next / previous round, Retry, O, Esc) still work.
+
+- **Victory:** VICTORY, the round and its enemies, time and turns, and the
+  rank (S / A / B / C) with the best rank so far on that round (saved in
+  `settings.cfg`, section `ranks`). Choices: Next round (Back to the title
+  after the last), Fight summary, Retry, Change party (party-pick rounds),
+  Open play-test report, Back to the menu.
+- **Rank:** four scores of 25. Health: 25 x (1 - HP missing at the end /
+  the party's max HP), minus 10 per member who went down (heals count:
+  total damage taken ran past the whole party's HP in most boss fights).
+  Timing: 25 x Perfects / timed hits (a missed timing counts as a
+  chance). Reading: 25 minus 3 per mistake of yours (avoidable hits on
+  the fighter you steer, `avoidable_hits_you`; early Parries; missed
+  timings); AI allies' hits don't count. Pace: full at or under the
+  round's `Encounter.par_seconds` (Golem 150, Living Armor 180, Dragon
+  195, Gale Maw 195; 180 elsewhere), zero at twice it. S 85+, A 70+, B
+  50+, else C.
+- **Fight summary:** the four scores as bars with what set them, a row per
+  member (HP, damage dealt and taken, turns, went down / revived), then
+  time and turns, Perfects, Parries, highest max AP, Arts found, items used.
+- **Defeat:** DEFEAT, the enemies' HP left. Choices: Retry, What went
+  wrong, Change party, Open play-test report, Back to the menu. **What
+  went wrong:** each enemy's HP bar, the 3 sources that did the most
+  damage (AVOIDABLE where the report counted avoidable strikes; falls
+  count), who went down to what (the report's last hit before each
+  down), and one tip on the worst avoidable source: the skill's own
+  `EnemySkill.tip`, otherwise one from its rules (lethal, shared damage,
+  growing, pushes, can't be Parried, can be Parried).
+- **Change party** opens the party picker for this round (after a loss) or
+  the next (after a win). **Tutorial:** TUTORIAL COMPLETE with Back to the
+  title and Play again.
+- Reports count `timed_hits`, `timing_misses`, `arts_found`, `max_ap_peak`.
+  Tests `tests/_endscreen.gd` (DEFEAT=1 for the loss), screenshots
+  `tests/_shotend.gd`.
+
+## Items (built)
+
+Every fight starts with a pouch (`pouch_potions` 3, `pouch_ethers` 2,
+`pouch_revives` 1 on the BattleArena node), refilled each round; nothing
+carries over. The tutorial starts empty until its Items lesson. Items are
+shared by the whole party and shown under the AP bar.
+
+| Item | Target | Effect |
+|---|---|---|
+| Potion | an ally or yourself, any distance | heals 35% of the target's max HP |
+| Ether | the party | restores 40% of current max AP, never past it |
+| Revive | a downed ally | back up with 50% of max HP, timeline from 0; after a fall off the arena, at the party's start |
+
+- **One per turn, in the Ability slot:** Items opens a list like Abilities
+  (counts instead of AP; greyed out with none left or nothing to use it
+  on). Using one closes both Abilities and Items for the turn; Attack and
+  Wait stay open. No AP cost. Data: `scripts/battle/items.gd`.
+- **Revive is safe from the cast in progress:** enemies preparing a skill
+  when someone is revived can't hit them with it (`revive_safe`, cleared
+  when that enemy's skill ends). What was lost on going down (Marks, the
+  Monk's climb, Focus, statuses) stays lost.
+- **AI allies** (`_ai_item`, before their Ability; never Ethers): the Revive
+  on a downed ally; a Potion on themselves under `ai_potion_below` (35%) HP
+  when no Cleric is standing with 25 AP for Healing.
+- Command List: an Items group with the counts left. Reports count
+  `items`, `items_potion`, `items_ether`, `items_revive`, `revives`,
+  `ai_items`. Test `tests/_items.gd`.
 
 ## Party attacks (milestone 6, built; reworked)
 
 - **The command menu opens on each party turn**: Attack / Abilities / Wait /
-  Items (placeholder), with Defend: Q / Parry: E as reminders. W/S choose,
+  Items, with Defend: Q / Parry: E as reminders. W/S choose,
   J (or Enter) select, K back.
 - **Attack opens the combo bar** (inspired by Legend of Legaia) with the
   class's own attacks. J adds the selected move, K removes the last one,

@@ -416,6 +416,27 @@ func _build_steps() -> void:
 		func():
 			_soon("cleric")
 			_top_up_ap(80.0))
+	_note(7, "Items",
+		"Every fight starts with a pouch: 3 Potions, 2 Ethers and 1 Revive (shown under the AP bar). Nothing carries over: the next fight gets a full pouch again.\n- Potion: an ally (or you) heals 35% of their max HP, at any distance\n- Ether: the party gets back 40% of its max AP\n- Revive: a downed ally gets back up with half their HP; whatever an enemy is preparing right then can't hit them\n\nAn item takes the turn's Ability slot: one Ability or one item, and you can still Attack or Wait. AI allies use the Revive and Potions themselves, never Ethers.",
+		func():
+			_set_party(["knight", "archer"])
+			battle.refill_pouch()
+			knight.hp = int(knight.max_hp * 0.5))
+	_goal(7, "Potion",
+		"The Knight is hurt. At the Knight's COM, choose Items, then Potion.",
+		"Use a Potion",
+		func(): return _stat("items_potion") >= 1,
+		func(): _knight_soon())
+	_goal(7, "Revive",
+		"The Archer is down. Use the Revive on her at the Knight's next COM.",
+		"Revive the Archer",
+		func(): return _stat("items_revive") >= 1,
+		func():
+			var archer := id_member("archer")
+			if archer != null and not archer.is_down:
+				archer.hp = 0
+				archer._go_down()
+			_knight_soon())
 
 	# 8. Max AP
 	_note(8, "Max AP",
@@ -485,7 +506,8 @@ func _build_steps() -> void:
 		func():
 			_top_up_ap(100.0)
 			golem.add_status("taunt", 99, knight)
-			if assassin.timeline_pos < 55.0:
+			# (The Assassin joins once the turn in progress ends.)
+			if assassin != null and assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_goal(11, "Shadowstep",
 		"Walking round takes time, and ACT doesn't wait. Shadowstep teleports the Assassin behind its target, then strikes, and deals 1.5x if it started in FRONT. Moves after it on the combo bar land from behind. Its timings are random, but the first move of a combo always comes in the middle or late part of its box.",
@@ -493,7 +515,8 @@ func _build_steps() -> void:
 		func(): return _stat("shadowsteps") >= 1,
 		func():
 			_top_up_ap(100.0)
-			if assassin.timeline_pos < 55.0:
+			# (The Assassin joins once the turn in progress ends.)
+			if assassin != null and assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_note(11, "Assassin's Marks",
 		"Marks sit on enemies (up to 4): you see MARK x3 over the enemy and violet diamonds by its timeline icon. Ways to add them:\n- Backstab from behind: 2x damage and a Mark (from the front it always misses)\n- Death Sentence (Abilities): 3 Marks at once\n- Every 3rd Stab on a Marked enemy adds one")
@@ -503,7 +526,8 @@ func _build_steps() -> void:
 		func(): return golem.marks >= 4,
 		func():
 			_top_up_ap(100.0)
-			if assassin.timeline_pos < 55.0:
+			# (The Assassin joins once the turn in progress ends.)
+			if assassin != null and assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_note(11, "Spending Marks",
 		"Marks are what the Assassin spends:\n- Execute: 4x from behind, +15% per Mark it spends, and 15 AP cheaper per Mark on its target (it fits the Assassin's bar from 4 Marks). It uses them all up\n- Auto-parry: while any Mark is out, the Assassin parries strikes by himself, spending one\n- Hook stops an enemy's move (and uses its Marks); Shadow Cloak turns them into a shield\n\nVanish makes enemies lose track of the Assassin until he attacks.")
@@ -514,7 +538,8 @@ func _build_steps() -> void:
 		func():
 			_top_up_ap(100.0)
 			golem.set_marks(maxi(golem.marks, 4))
-			if assassin.timeline_pos < 55.0:
+			# (The Assassin joins once the turn in progress ends.)
+			if assassin != null and assassin.timeline_pos < 55.0:
 				assassin.timeline_pos = 55.0)
 	_goal(11, "Auto-parry",
 		"The Golem has 2 Marks again and is coming for the Assassin. Stand in FRONT of it (its Attack is a short line ahead of it) and don't press anything: when the strike lands, the Assassin parries it by itself.",

@@ -296,7 +296,7 @@ func _draw_move_list(font: Font) -> void:
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
 		draw_rect(Rect2(row.position + Vector2(24, 10), Vector2(14, 14)), move["color"] if fits else Color(0.35, 0.35, 0.4))
 		_text(font, row.position + Vector2(46, 25), move["name"], 20, color)
-		_text(font, row.position + Vector2(232, 25), "%d AP" % shown_cost, 20, GOLD if fits else color)
+		_text(font, row.position + Vector2(232, 25), String(move.get("cost_text", "%d AP" % shown_cost)), 20, GOLD if fits else color)
 		var desc: String = move["desc"]
 		if not usable and i < move_notes.size() and move_notes[i] != "":
 			desc = move_notes[i]

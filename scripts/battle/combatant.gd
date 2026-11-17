@@ -678,6 +678,8 @@ func _go_down() -> void:
 	if _lunge_tween:
 		_lunge_tween.kill()
 	if body:
+		if not has_meta("body_y"):
+			set_meta("body_y", body.position.y)  # for getting back up (Revive)
 		body.rotation_degrees.x = 90.0
 		body.position.y = 0.4
 	set_highlighted(false)
@@ -687,6 +689,57 @@ func _go_down() -> void:
 		fade.tween_interval(2.0)
 		fade.tween_property(self, "scale", Vector3(0.01, 0.01, 0.01), 0.5)
 		fade.tween_callback(func(): visible = false)
+
+
+## Revive: back up with this much HP, a fresh timeline and the body
+## standing again.
+func revive(health: int) -> void:
+	is_down = false
+	hp = clampi(health, 1, max_hp)
+	recoverable = 0
+	timeline_pos = 0.0
+	visible = true
+	remove_meta("fell")
+	unlimp()
+	var body := get_node_or_null("Body") as Node3D
+	if body:
+		body.rotation_degrees.x = 0.0
+		body.position.y = float(get_meta("body_y", 0.9))
+
+
+## Ragdoll: the body parts (not the name label) move under one pivot at the
+## fighter's feet, so the whole figure can tumble and lie down. Returns it.
+func make_limp() -> Node3D:
+	var pivot := get_node_or_null("Limp") as Node3D
+	if pivot != null:
+		return pivot
+	var body := get_node_or_null("Body") as Node3D
+	if body:
+		body.rotation_degrees.x = 0.0  # undo the plain knocked-out pose
+		body.position.y = float(get_meta("body_y", body.position.y))
+	pivot = Node3D.new()
+	pivot.name = "Limp"
+	add_child(pivot)
+	for child in get_children():
+		if child is MeshInstance3D and child != pivot:
+			var keep: Transform3D = child.transform
+			remove_child(child)
+			pivot.add_child(child)
+			child.transform = keep
+	return pivot
+
+
+## Back on its feet: the body parts return from the ragdoll pivot.
+func unlimp() -> void:
+	var pivot := get_node_or_null("Limp") as Node3D
+	if pivot == null:
+		return
+	for child in pivot.get_children():
+		var keep: Transform3D = child.transform
+		pivot.remove_child(child)
+		add_child(child)
+		child.transform = keep
+	pivot.free()
 
 
 ## Distance between this fighter's edge and another's (0 = touching).

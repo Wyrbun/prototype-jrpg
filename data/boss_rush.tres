@@ -79,6 +79,7 @@ tip = "The Monk joins! Knee Smash climbs his bar a step: 30, 50, 80, then 100.\n
 
 [sub_resource type="Resource" id="Round_8"]
 script = ExtResource("2_encounter")
+par_seconds = 150.0
 title = "Round 8"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
@@ -88,6 +89,7 @@ enemy_speed_mult = 1.7
 
 [sub_resource type="Resource" id="Round_9"]
 script = ExtResource("2_encounter")
+par_seconds = 180.0
 title = "Round 9"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
@@ -97,6 +99,7 @@ enemy_speed_mult = 1.5
 
 [sub_resource type="Resource" id="Round_10"]
 script = ExtResource("2_encounter")
+par_seconds = 195.0
 title = "Round 10"
 arena = ExtResource("a_grand")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])
@@ -106,6 +109,7 @@ enemy_speed_mult = 1.5
 
 [sub_resource type="Resource" id="Round_11"]
 script = ExtResource("2_encounter")
+par_seconds = 195.0
 title = "Round 11"
 arena = ExtResource("a_cliff")
 party = Array[PackedScene]([ExtResource("c_knight"), ExtResource("c_archer"), ExtResource("c_mage"), ExtResource("c_cleric")])

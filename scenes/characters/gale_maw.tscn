@@ -88,6 +88,7 @@ stagger_bar = 70
 [sub_resource type="Resource" id="Skill_5"]
 script = ExtResource("2_skill")
 skill_name = "Gale Lanes"
+tip = "Stand in the gaps between the lanes."
 cannot_be_parried = true
 kind = 0
 weight = 2
@@ -104,6 +105,7 @@ only_above_hp = 0.5
 [sub_resource type="Resource" id="Skill_11"]
 script = ExtResource("2_skill")
 skill_name = "Double Gale Lanes"
+tip = "First the gaps, then the lanes: stand in a lane, then move to a gap."
 cannot_be_parried = true
 kind = 0
 weight = 2
@@ -144,6 +146,7 @@ only_below_hp = 0.5
 [sub_resource type="Resource" id="Skill_6"]
 script = ExtResource("2_skill")
 skill_name = "Breaker"
+tip = "It hits everything far from the wall: come closer, or hide behind a rock."
 cannot_be_parried = true
 kind = 1
 weight = 2
@@ -159,6 +162,7 @@ breaks_rocks = true
 [sub_resource type="Resource" id="Skill_7"]
 script = ExtResource("2_skill")
 skill_name = "Wall Sweep"
+tip = "It sweeps along the wall: stay out of the strip next to it."
 cannot_be_parried = true
 kind = 0
 weight = 2
@@ -173,6 +177,7 @@ launch = 4.0
 [sub_resource type="Resource" id="Skill_8"]
 script = ExtResource("2_skill")
 skill_name = "Undertow"
+tip = "Spread out so your lines don't cross, and keep away from the edge."
 cannot_be_parried = true
 kind = 4
 weight = 1

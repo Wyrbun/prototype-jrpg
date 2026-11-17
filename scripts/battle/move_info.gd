@@ -30,6 +30,12 @@ const SKILL_TEXT := {
 			"Each shield lasts 2 of your turns; a new one doesn't refresh older ones."],
 	"Haste": ["An ally's turns come 25% sooner and they run 20% faster.", "Lasts 2 of their own turns."],
 	"Full Cure": ["Fully heals an ally (or you)."],
+	"Potion": ["Item. Heals an ally (or you) for 35% of their max HP, at any distance.",
+			"Uses the turn's Ability slot; you can still Attack or Wait."],
+	"Ether": ["Item. Restores 40% of the party's max AP (never past the max).",
+			"Uses the turn's Ability slot; you can still Attack or Wait."],
+	"Revive": ["Item. A downed ally gets back up with 50% of their max HP (at the party's start if they fell off).",
+			"The cast an enemy is preparing right then can't hit them.", "Uses the turn's Ability slot."],
 	"Lifeline": ["Dash to an ally up to 8 m away and land beside them, out of whatever you stood in.",
 			"You and that ally each heal 15% of your own max HP."],
 	"Hook": ["An enemy up to 6 m away loses what it was preparing (or its stance) and is pulled 2 m towards you.",
@@ -56,6 +62,8 @@ static func lines(move: Dictionary) -> PackedStringArray:
 
 ## "20 AP · Hold" style summary for the box's second line.
 static func summary(move: Dictionary) -> String:
+	if move.get("item", false):
+		return "Item  ·  " + String(move.get("cost_text", "")) + " left" if move.has("cost_text") else "Item"
 	var parts: PackedStringArray = ["%d AP" % int(move.get("shown_cost", move.get("cost", 0)))]
 	if move.has("target"):
 		return parts[0]

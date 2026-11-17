@@ -64,6 +64,26 @@ static func set_style_chosen(on: bool) -> void:
 	_save()
 
 
+## Best end-screen rank per round title ("S" / "A" / "B" / "C"; "" = none).
+static func best_rank(round_title: String) -> String:
+	var file := ConfigFile.new()
+	file.load(PATH)
+	return String(file.get_value("ranks", round_title, ""))
+
+
+## Stores a rank if it beats the best so far. Returns the best after it.
+static func record_rank(round_title: String, rank: String) -> String:
+	var order := "SABC"
+	var best := best_rank(round_title)
+	if best == "" or order.find(rank) < order.find(best):
+		var file := ConfigFile.new()
+		file.load(PATH)
+		file.set_value("ranks", round_title, rank)
+		file.save(PATH)
+		best = rank
+	return best
+
+
 static func _load() -> void:
 	if _loaded:
 		return

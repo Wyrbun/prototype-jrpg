@@ -78,6 +78,9 @@ enum Overlap { NORMAL, DOUBLE, ONE_HP }
 @export var pull: float = 0.0
 ## Damage shrinks when several are hit together: 100%, 67%, 50%, 40%...
 @export var shared_damage: bool = false
+## One line of advice for the Defeat screen's "What went wrong" page when
+## this skill hurt the party most ("" = worked out from the skill's rules).
+@export_multiline var tip: String = ""
 ## Leaves its area burning for this many of the enemy's turns (0 = none);
 ## anyone standing in it loses trail_damage_per_second.
 @export var trail_turns: int = 0

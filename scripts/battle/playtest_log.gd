@@ -95,6 +95,7 @@ func hurt(member: Combatant, amount: int, source: String, enemy: Combatant = nul
 	var entry: Dictionary = party[member.display_name]
 	entry["taken"] = int(entry["taken"]) + amount
 	entry["sources"][source] = int(entry["sources"].get(source, 0)) + amount
+	entry["last"] = source
 	if enemy != null:
 		var s := _skill(enemy, skill_name)
 		s["hits"] += 1
@@ -104,6 +105,9 @@ func hurt(member: Combatant, amount: int, source: String, enemy: Combatant = nul
 func down(member: Combatant) -> void:
 	add_member(member)
 	party[member.display_name]["downs"] += 1
+	if not party[member.display_name].has("downed_by"):
+		party[member.display_name]["downed_by"] = []
+	party[member.display_name]["downed_by"].append(String(party[member.display_name].get("last", "")))
 
 
 func deal(attacker: Combatant, amount: int) -> void:

@@ -15,4 +15,7 @@ extends Resource
 ## about four turns per boss action, so bosses get more HP and speed here
 ## without changing them in the mixed rounds).
 @export var enemy_hp_mult: float = 1.0
+## The end screen's Pace score: full points at or under this many seconds,
+## none at twice as long.
+@export var par_seconds: float = 180.0
 @export var enemy_speed_mult: float = 1.0

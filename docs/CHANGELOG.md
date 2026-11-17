@@ -4,6 +4,104 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Version 0.9.0
+
+- Project Settings, the Windows preset and the README links say 0.9.0;
+  the roadmap's last item (Complete fight) is ticked. `RELEASES.md` has
+  the notes.
+
+## Rank tuned from a full Boss Rush; AI backs off a Counter stance
+
+- A Boss Rush, Rounds 1-11, all won: the party took more than its whole
+  max HP in three of four boss fights (heals keep it going), so Health
+  scored 0 however well it went, and Reading counted the AI allies'
+  avoidable hits (10 in Round 11). Health now uses the HP still missing
+  at the end (minus 10 per member who went down); Reading counts only
+  hits on the fighter you steer (`avoidable_hits_you`), early Parries and
+  missed timings. Estimated ranks of that run: A / B / B / C.
+- Par times trimmed (every boss was beaten 55-92 s under par): Golem
+  2:30, Living Armor 3:00, Dragon 3:15, Gale Maw 3:15.
+- Windup: an AI ally whose target raised a Counter stance after it chose
+  now backs off (a Wait) instead of attacking into it (the Mage took 38
+  from the Living Armor's). Test `tests/_aicounter.gd`.
+- `ai_ledge_steps` counts each time an ally backs away from a drop, not
+  every frame of it (750 and 1,326 in the logs).
+- Tutorial: the Assassin lessons no longer error if a turn is still in
+  progress when they start (the Assassin joins after it).
+
+## Fix: end-panel choices froze the game
+
+- Next round (and Retry, Change party, Back to the menu) on the new end
+  panel stopped on "Cannot call method 'set_input_as_handled' on a null
+  value": the choice loaded the next scene while the key press was still
+  being handled, and the old battle was no longer in the tree to mark it
+  as used. The key is now marked first (`EndScreen.wants`), and the
+  choice runs after the press (deferred signal). Test `tests/_endnext.gd`.
+
+## Ragdolls for downed allies
+
+- A downed party member goes limp instead of the old stiff tip-over (the
+  nose used to float in the air). Strong blows (pushes, Smashes, 40+
+  damage, instant kills) send the body flying away from the enemy: a
+  tumbling arc about 1.4 m high and 6 m long, a bounce, a slide, then
+  flat on its back. Anything else makes it flop over where it stands.
+  Bodies never fly over an edge. Revive stands them back up.
+- `Combatant.make_limp` / `unlimp`, `BattleArena._start_ragdoll` /
+  `_tick_ragdolls`, exports `ragdoll_fly_speed`, `ragdoll_fly_up`. Test
+  `tests/_ragdoll.gd` (FRAMES / SHOTS for pictures).
+
+## Victory and Defeat screens
+
+- Design: the Victory and Defeat Screens doc, settled in chat.
+- A panel over the frozen battle 1.2 s after the last blow, the camera
+  turning slowly behind it (`scripts/battle/end_screen.gd`). The old
+  placeholder text and key line are gone; the old keys still work.
+- **Victory:** banner, round and enemies, time, turns, and an S / A / B / C
+  rank (Health, Timing, Reading, Pace, 25 points each; S 85, A 70, B 50)
+  with the best rank per round saved. A Fight summary page shows where
+  the rank came from, the party and the fight's totals.
+- **Defeat:** banner and the enemies' HP left, Retry first. A What went
+  wrong page: enemy HP bars, the 3 sources that hurt most (AVOIDABLE
+  tagged), who went down to what, and a tip.
+- New: `Encounter.par_seconds` (rounds 8-11 set), `EnemySkill.tip` (set
+  on the bosses' trickier skills, worked out from the rules otherwise),
+  `Settings.best_rank` / `record_rank`, the report keeps the last hit
+  before each down, counts `timed_hits`, `timing_misses`, `arts_found`,
+  `max_ap_peak`. Choices include Change party and Back to the menu.
+- Tests `tests/_endscreen.gd`; screenshots `tests/_shotend.gd`.
+
+## AI allies don't push a casting enemy's area onto the party
+
+- A Round 8 log: an AI ally's push moved the Golem mid Right + Left Golem
+  Smash, and the second half landed on the side everyone had crossed to
+  (224 damage, all four hit). AI hits no longer push an enemy preparing a
+  strike whose area moves with it (`_carries_area`: not placed on the
+  party, not arena-aligned); Gust Sprites (Lightweight) still get pushed.
+  Your own pushes still work, so it stays a trick you can use. Counts
+  `ai_pushes_held`. Test `tests/_aipush.gd`.
+- `tests/_tut.gd` walks round an enemy only in the rock and Assassin
+  lessons (the detour put the Knight into the Golem's area in the dodge
+  lesson).
+
+## Items: Potion, Ether, Revive
+
+- Design: the Items Design doc (pouch, numbers, AI rules), settled in chat.
+- **A pouch per fight:** 3 Potions, 2 Ethers, 1 Revive (`pouch_potions`,
+  `pouch_ethers`, `pouch_revives`), refilled every round, shared by the
+  party, shown under the AP bar. The tutorial starts empty.
+- **Items** in the command menu (no longer "coming later"): a list like
+  Abilities with counts instead of AP. One Ability or one item per turn;
+  Attack and Wait stay open. Potion 35% HP to any ally; Ether 40% of max AP;
+  Revive brings a downed ally back at 50% HP (at the party's start after a
+  fall), safe from whatever enemies are casting right then.
+- **AI allies** use the Revive on a downed ally and a Potion on themselves
+  under 35% HP when no Cleric can heal them; never Ethers.
+- `Combatant.revive()`, `Moves.Target.DOWNED_ALLY`, `scripts/battle/items.gd`.
+- Command List: an Items group. Move details describe each item.
+- Tutorial, lesson 7: an Items note, then use a Potion on the hurt Knight
+  and Revive the Archer.
+- Test `tests/_items.gd`; screenshot `tests/_shotitems.gd`.
+
 ## Cleric: Lifeline; version 0.8.0
 
 - **Lifeline** (Cleric, 30 AP, another ally within 8 m): she dashes beside

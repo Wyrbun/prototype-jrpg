@@ -126,6 +126,12 @@ func _fill_rows() -> void:
 	rows.append({"header": "ABILITIES"})
 	for skill in Moves.skills(m.class_id):
 		rows.append({"move": skill, "kind": "ability"})
+	# Items: the same for everyone (one Ability or one item per turn).
+	rows.append({"header": "ITEMS  (one per turn, instead of an Ability)"})
+	for item_name in Items.ORDER:
+		var item := Items.info(item_name)
+		item["cost_text"] = "x%d" % int(arena.pouch.get(item_name, 0)) if arena != null else "item"
+		rows.append({"move": item, "kind": "ability"})
 	index = 0
 	_scroll = 0
 	_step(1)
@@ -259,7 +265,7 @@ func _draw() -> void:
 			HudStyle.draw_selection(self, line, GOLD)
 		draw_rect(Rect2(at + Vector2(10, 9), Vector2(10, 10)), move.get("color", Color.WHITE))
 		_text(font, move["name"], at + Vector2(28, 20), 17, Color.WHITE if k == index else Color(0.82, 0.83, 0.88))
-		var cost := "%d AP" % int(move.get("cost", 0))
+		var cost := String(move.get("cost_text", "%d AP" % int(move.get("cost", 0))))
 		_text(font, cost, Vector2(line.end.x - font.get_string_size(cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x - 10, at.y + 20), 15, Color(0.6, 0.85, 1.0))
 	if _scroll > 0:
 		_text(font, "^", list.position + Vector2(list.size.x / 2.0, -6), 16, GOLD)

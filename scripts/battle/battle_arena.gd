@@ -106,6 +106,14 @@ var max_ap_limit_bonus := 0.0
 @export var skipped_hit_max_ap_loss: float = 0.0  # off for now: a skip is just a normal hit
 ## AP the party starts the battle with.
 @export var starting_ap: float = 50.0
+## Items: every fight starts with this pouch (refilled each round). The
+## tutorial starts empty until its Items lesson.
+@export var pouch_potions: int = 3
+@export var pouch_ethers: int = 2
+@export var pouch_revives: int = 1
+## AI allies drink a Potion under this share of their HP when no Cleric can
+## heal them.
+@export var ai_potion_below: float = 0.35
 ## AP gained per second while the timeline is running (between turns).
 ## Moving is free and earns nothing, so this is the main AP source.
 @export var ap_regen_per_second: float = 6.0
@@ -293,6 +301,11 @@ var tutorial_pause := false
 ## Counts of things the player has done this fight ("parries", "perfects",
 ## "combos_mage"...). The tutorial checks its goals against these.
 var stats := {}
+## The end-of-fight panel (null until the fight is over and it shows).
+var end_screen: EndScreen = null
+## Seconds after the fight ends before the panel shows (see the last blow).
+@export var end_screen_delay: float = 1.2
+var _end_wait := -1.0
 
 var arena: Arena = null
 var encounter: Encounter = null
@@ -319,6 +332,10 @@ var _menu_mode: int = BattleMenu.Mode.HIDDEN
 ## The controlled fighter's attacks (combo bar) or skills (Abilities).
 var _moves: Array[Dictionary] = []
 var _skills: Array[Dictionary] = []
+## True while an AI ally's combo plays (_ai_play_plan).
+var _ai_playing := false
+## Items left this fight: {"Potion": n, "Ether": n, "Revive": n}.
+var pouch := {}
 ## What each combo slot will do (see BattleMenu.plan); also holds "move",
 ## "hits" and "duration" for playback.
 var _plan: Array[Dictionary] = []
@@ -635,9 +652,10 @@ func _ready() -> void:
 	enemy_status.party = enemies
 	enemy_status.tags_on_left = true  # keeps the right edge tidy
 	battle_menu.commands = PackedStringArray(["Attack", "Abilities", "Wait", "Items"])
-	var enabled: Array[bool] = [true, true, true, false]
+	var enabled: Array[bool] = [true, true, true, true]
 	battle_menu.command_enabled = enabled
-	battle_menu.command_notes = PackedStringArray(["", "", "", "coming later"])
+	battle_menu.command_notes = PackedStringArray(["", "", "", ""])
+	refill_pouch(not tutorial_mode)
 	controlled = party[0]
 	controlled.set_highlighted(true)
 	ap = starting_ap
@@ -868,6 +886,7 @@ func _change_round(step: int) -> void:
 
 func _process(delta: float) -> void:
 	_world_moved = false
+	_tick_ragdolls(delta)
 	if not _game_over and not tutorial_pause:
 		if not _edge_save.is_empty():
 			_update_edge_save(delta)  # teetering on the edge: everything waits
@@ -910,8 +929,250 @@ func _process(delta: float) -> void:
 	# Checked again: the strike above may have just knocked out the last fighter.
 	if not _game_over:
 		_update_attack_ranges()
+	if _game_over:
+		_tick_end_screen(delta)
 	_update_camera(delta)
 	_update_ui(delta)
+
+
+# --- End of the fight -------------------------------------------------------
+
+## Once the fight is over: a short pause, then the end panel; the camera
+## turns slowly round the arena behind it.
+func _tick_end_screen(delta: float) -> void:
+	if end_screen == null:
+		if _end_wait < 0.0:
+			_end_wait = end_screen_delay
+		_end_wait -= delta
+		if _end_wait <= 0.0:
+			_show_end_screen()
+		return
+	_cam_yaw += delta * 6.0
+
+
+func _show_end_screen() -> void:
+	end_screen = EndScreen.new()
+	$UI.add_child(end_screen)
+	end_screen.setup(_end_screen_data())
+	end_screen.chosen.connect(_end_choice, CONNECT_DEFERRED)  # after the key press is done
+
+
+func _won() -> bool:
+	return _standing(enemies).is_empty()
+
+
+## What the end panel shows. Victory: banner, rank, the fight summary;
+## Defeat: banner, the enemy's HP left, what went wrong; tutorial: plain.
+func _end_screen_data() -> Dictionary:
+	var info := {}
+	var seconds := 0.0
+	if playtest != null:
+		seconds = (Time.get_ticks_msec() - playtest.start_msec) / 1000.0
+	var clock := "%d:%02d" % [int(seconds) / 60, int(seconds) % 60]
+	info["title"] = encounter.title if encounter != null else ""
+	var bosses := enemies.filter(func(e): return not e.has_meta("summoner")).map(func(e): return e.display_name)
+	var round_title := String(info["title"])
+	if not bosses.is_empty():
+		info["title"] = "%s: %s" % [info["title"], ", ".join(bosses)]
+	if tutorial_mode:
+		info["result"] = "tutorial"
+		info["title"] = "Training Golem"
+		info["choices"] = [["title", "Back to the title"], ["retry", "Play again"]]
+		return info
+	var last_round := boss_rush == null or _round_index + 1 >= boss_rush.rounds.size()
+	var picks := not tutorial_mode and _round_index >= PICK_PARTY_FROM
+	if _won():
+		info["result"] = "victory"
+		var rank := _fight_rank(seconds)
+		info["rank_letter"] = rank["letter"]
+		info["rank_total"] = rank["total"]
+		info["best_rank"] = Settings.record_rank(round_title, rank["letter"])
+		info["subtitle"] = "%s  ·  %d turns" % [clock, _total_turns()]
+		var list := [["title", "Back to the title"] if last_round else ["next", "Next round"], ["summary", "Fight summary"], ["retry", "Retry"]]
+		if picks or (not last_round and _round_index + 1 >= PICK_PARTY_FROM):
+			list.append(["party", "Change party"])
+		list.append_array([["report", "Open play-test report"], ["menu", "Back to the menu"]])
+		info["choices"] = list
+		info["summary"] = _summary_data(rank, seconds)
+	else:
+		info["result"] = "defeat"
+		var foes := _standing(enemies)
+		info["subtitle"] = ", ".join(foes.map(func(e): return "%s: %d / %d" % [e.display_name, e.hp, e.max_hp])) + "  ·  " + clock
+		var list := [["retry", "Retry"], ["wrong", "What went wrong"]]
+		if picks:
+			list.append(["party", "Change party"])
+		list.append_array([["report", "Open play-test report"], ["menu", "Back to the menu"]])
+		info["choices"] = list
+		info["wrong"] = _wrong_data()
+	info["keys"] = Keybinds.fill("{up} / {down}: choose     {confirm}: select     O: reports     Esc: menu")
+	return info
+
+
+func _total_turns() -> int:
+	var n := 0
+	if playtest != null:
+		for name in playtest.turns:
+			n += int(playtest.turns[name])
+	return n
+
+
+## The rank: Health, Timing, Reading and Pace, 25 points each.
+## S 85+, A 70+, B 50+, else C.
+func _fight_rank(seconds: float) -> Dictionary:
+	# Health: the HP still missing at the end (heals count: total damage
+	# taken ran past the party's whole max HP in most boss fights).
+	var max_total := 0
+	var missing := 0
+	var taken := 0
+	var downs := 0
+	for member in party:
+		max_total += member.max_hp
+		missing += member.max_hp - member.hp
+	if playtest != null:
+		for name in playtest.party:
+			taken += int(playtest.party[name]["taken"])
+			downs += int(playtest.party[name]["downs"])
+	var health := clampf(25.0 * (1.0 - float(missing) / maxf(max_total, 1.0)) - 10.0 * downs, 0.0, 25.0)
+	var perfects := int(stats.get("perfects", 0))
+	var chances := int(stats.get("timed_hits", 0)) + int(stats.get("timing_misses", 0))
+	var timing := 25.0 if chances == 0 else clampf(25.0 * perfects / float(chances), 0.0, 25.0)
+	# Reading: your own mistakes (AI allies standing in things don't count).
+	var mistakes := int(stats.get("avoidable_hits_you", 0)) + int(stats.get("parries_too_early", 0)) + int(stats.get("timing_misses", 0))
+	var reading := clampf(25.0 - 3.0 * mistakes, 0.0, 25.0)
+	var par := encounter.par_seconds if encounter != null else 180.0
+	var pace := clampf(25.0 * (2.0 - seconds / maxf(par, 1.0)), 0.0, 25.0)
+	var total := health + timing + reading + pace
+	var letter := "S" if total >= 85.0 else ("A" if total >= 70.0 else ("B" if total >= 50.0 else "C"))
+	return {"letter": letter, "total": roundi(total), "health": health, "timing": timing, "reading": reading, "pace": pace,
+			"taken": taken, "missing": missing, "max_hp": max_total, "downs": downs, "perfects": perfects, "chances": chances,
+			"mistakes": mistakes, "seconds": seconds, "par": par}
+
+
+func _summary_data(rank: Dictionary, seconds: float) -> Dictionary:
+	var parts := [
+		["Health", rank["health"], "%d of %d HP missing%s" % [rank["missing"], rank["max_hp"], (", %d down" % rank["downs"]) if int(rank["downs"]) > 0 else ""]],
+		["Timing", rank["timing"], "Perfects %d / %d" % [rank["perfects"], rank["chances"]]],
+		["Reading", rank["reading"], "Your mistakes %d" % rank["mistakes"]],
+		["Pace", rank["pace"], "%d:%02d (par %d:%02d)" % [int(seconds) / 60, int(seconds) % 60, int(rank["par"]) / 60, int(rank["par"]) % 60]],
+	]
+	var rows := []
+	for member in party:
+		var entry: Dictionary = playtest.party.get(member.display_name, {}) if playtest != null else {}
+		var downs := int(entry.get("downs", 0))
+		var mark := ""
+		if downs > 0:
+			mark = "went down" if member.is_down else "revived"
+		rows.append([member.display_name, "%d / %d" % [member.hp, member.max_hp],
+				int(playtest.dealt.get(member.display_name, 0)) if playtest != null else 0,
+				int(entry.get("taken", 0)), int(playtest.turns.get(member.display_name, 0)) if playtest != null else 0, mark])
+	var items: PackedStringArray = []
+	for item_name in Items.ORDER:
+		var used := int(stats.get("items_" + item_name.to_lower(), 0))
+		if used > 0:
+			items.append("%s %d" % [item_name, used])
+	var totals := [
+		"Time %d:%02d, %d turns" % [int(seconds) / 60, int(seconds) % 60, _total_turns()],
+		"Perfects %d" % int(stats.get("perfects", 0)),
+		"Parries %d" % int(stats.get("parries", 0)),
+		"Highest max AP %d" % maxi(int(stats.get("max_ap_peak", 0)), int(max_ap)),
+		"Arts found %d" % int(stats.get("arts_found", 0)),
+		"Items used: %s" % (", ".join(items) if not items.is_empty() else "none"),
+	]
+	return {"parts": parts, "party": rows, "totals": totals}
+
+
+## Defeat: the enemies' HP left, the 3 sources that hurt most (AVOIDABLE
+## where the report counted avoidable strikes), who went down to what, and
+## one tip about the worst avoidable one.
+func _wrong_data() -> Dictionary:
+	var foes := []
+	for enemy in enemies:
+		if enemy.has_meta("summoner") or enemy.is_down:
+			continue  # sprites and the fallen don't need a bar
+		foes.append([enemy.display_name, enemy.hp, enemy.max_hp])
+	var by_source := {}
+	var downs := []
+	if playtest != null:
+		for name in playtest.party:
+			var entry: Dictionary = playtest.party[name]
+			for source in entry["sources"]:
+				by_source[source] = int(by_source.get(source, 0)) + int(entry["sources"][source])
+			for by in entry.get("downed_by", []):
+				downs.append([name, String(by) if String(by) != "" else "?"])
+	var sources := by_source.keys()
+	sources.sort_custom(func(x, y): return by_source[x] > by_source[y])
+	var top := []
+	var tip := ""
+	for source in sources.slice(0, 3):
+		var avoidable := playtest != null and playtest.skills.has(source) and int(playtest.skills[source]["avoidable"]) > 0
+		avoidable = avoidable or String(source) == "Fell off the arena"
+		top.append([source, by_source[source], avoidable])
+		if tip == "" and avoidable:
+			tip = _tip_for(String(source))
+	if tip == "" and not sources.is_empty():
+		tip = _tip_for(String(sources[0]))
+	return {"enemies": foes, "top": top, "downs": downs, "tip": tip}
+
+
+## The tip for a damage source ("Enemy: Skill", or a fall): the skill's own
+## tip if it has one, otherwise one from its rules.
+func _tip_for(source: String) -> String:
+	if source == "Fell off the arena":
+		return "Keep away from the edge while a push is coming. Defend halves pushes and pulls."
+	var def := _skill_def_named(source.get_slice(": ", 1) if source.contains(": ") else source)
+	if def == null:
+		return ""
+	if def.tip != "":
+		return def.tip
+	if def.lethal:
+		return "%s strikes down anyone it can see: hide behind the rock it drops." % def.skill_name
+	if def.shared_damage:
+		return "%s splits its damage: stack on the one it aims at." % def.skill_name
+	if def.special == EnemySkill.Special.GROWING:
+		return "Stop %s growing (hit its sprites), then walk out before it lands." % def.skill_name
+	if def.launch > 0.0:
+		return "%s pushes: stand away from the edge, or Defend to halve it." % def.skill_name
+	if not def.parryable():
+		return "%s can't be Parried: get out of its area once it's revealed, or Defend." % def.skill_name
+	return "%s can be Parried: press Parry as the ring turns gold, or step out of its area." % def.skill_name
+
+
+func _skill_def_named(skill_name: String) -> EnemySkill:
+	for enemy in enemies:
+		var todo: Array = enemy.skills.duplicate()
+		while not todo.is_empty():
+			var def: EnemySkill = todo.pop_back()
+			if def == null:
+				continue
+			if def.skill_name == skill_name:
+				return def
+			if def.follow_up != null:
+				todo.append(def.follow_up)
+			if def.stagger_into != null:
+				todo.append(def.stagger_into)
+	return null
+
+
+## A choice on the end panel.
+func _end_choice(id: String) -> void:
+	match id:
+		"next":
+			_change_round(1)
+		"retry":
+			get_tree().reload_current_scene()
+		"party":
+			# The party picker opens for the round: this one after a loss,
+			# the next one after a win.
+			if _won() and not tutorial_mode:
+				_round_index += 1
+				continued = false
+			chosen_for_round = -1
+			get_tree().reload_current_scene()
+		"report":
+			DirAccess.make_dir_recursive_absolute(PlaytestLog.FOLDER)
+			OS.shell_open(ProjectSettings.globalize_path(PlaytestLog.FOLDER))
+		"menu", "title":
+			get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -937,6 +1198,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("next_round") or event.is_action_pressed("previous_round"):
 		get_viewport().set_input_as_handled()
 		_change_round(1 if event.is_action_pressed("next_round") else -1)
+		return
+	if _game_over and end_screen != null and end_screen.wants(event):
+		# Handled first: a choice may load another scene, and then this
+		# battle is no longer in the tree to mark the key as used.
+		get_viewport().set_input_as_handled()
+		end_screen.handle(event)
 		return
 	if _game_over:
 		if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_O \
@@ -1254,7 +1521,11 @@ func _ai_turn(fighter: Combatant) -> void:
 		var chosen: Combatant = fighter.get_meta("windup_target")
 		_clear_windup(fighter)
 		var attacked := false
-		if is_instance_valid(chosen) and not chosen.is_down and _windup_reaches(fighter, chosen):
+		if is_instance_valid(chosen) and not chosen.is_down and chosen.stance == Skills.Kind.COUNTER:
+			# It raised a Counter stance since: back off (a Wait), as you can.
+			_flash("%s backs off from the Counter stance" % fighter.display_name)
+			_count("ai_counter_backoffs")
+		elif is_instance_valid(chosen) and not chosen.is_down and _windup_reaches(fighter, chosen):
 			attacked = _ai_attack(fighter, chosen)
 		_ai_end(fighter, attacked)
 		return
@@ -1332,8 +1603,42 @@ func _ai_reserve(fighter: Combatant) -> float:
 	return maxf(need - ap_regen_per_second * _ap_gain_multiplier() * seconds, 0.0)
 
 
+## AI items (one per turn, in place of an Ability; never Ethers): the
+## Revive on a downed ally, or a Potion on itself under ai_potion_below HP
+## when no Cleric is standing or she can't afford Healing. Returns true if
+## one was used.
+func _ai_item(fighter: Combatant) -> bool:
+	var pick := ""
+	var target: Combatant = null
+	var downed := party.filter(func(m): return m.is_down)
+	if int(pouch.get(Items.REVIVE, 0)) > 0 and not downed.is_empty():
+		pick = Items.REVIVE
+		target = downed[0]
+	elif int(pouch.get(Items.POTION, 0)) > 0 and float(fighter.hp) / maxf(fighter.max_hp, 1.0) < ai_potion_below:
+		var healer := false
+		for member in _standing(party):
+			if member.class_id == "cleric" and ap >= 25.0:
+				healer = true
+		if not healer:
+			pick = Items.POTION
+			target = fighter
+	if pick == "":
+		return false
+	var saved_controlled := controlled
+	var saved_used := _skill_used
+	controlled = fighter
+	_use_skill(Items.info(pick), target, fighter.global_position)
+	controlled = saved_controlled
+	_skill_used = saved_used
+	_menu_mode = BattleMenu.Mode.HIDDEN
+	_count("ai_items")
+	return true
+
+
 ## One Ability, when it clearly helps. Returns true if one was used.
 func _ai_ability(fighter: Combatant) -> bool:
+	if _ai_item(fighter):
+		return true
 	var reserve := _ai_reserve(fighter)
 	var hurt := func(m: Combatant) -> float: return float(m.hp) / maxf(m.max_hp, 1.0)
 	var threatened := false  # a revealed attack is coming at this fighter
@@ -1576,6 +1881,7 @@ func _ai_play_plan(fighter: Combatant, target: Combatant) -> void:
 	for enemy in enemies:
 		hp_before += enemy.hp
 	_exec_attacker = fighter
+	_ai_playing = true
 	_pay(fighter, battle_menu.combo_cost())
 	_note_ice_carry(fighter)
 	fighter.statuses.erase("arcane_cost")
@@ -1638,6 +1944,7 @@ func _ai_play_plan(fighter: Combatant, target: Combatant) -> void:
 		_grow_max_ap(gain, fighter)
 	_flash("%s: %s on %s (%d damage)" % [fighter.display_name, " + ".join(names), target.display_name, dealt], 3.0)
 	_exec_attacker = null
+	_ai_playing = false
 
 
 # --- Free roam (between turns) ---------------------------------------------
@@ -2165,11 +2472,14 @@ func _ledge_buffer() -> float:
 func _keep_off_ledge(ally: Combatant, delta: float, dangers: Array[Dictionary]) -> bool:
 	var drop := _nearest_drop(ally.global_position)
 	if drop.is_empty() or float(drop[1]) - ally.body_radius >= _ledge_buffer():
+		ally.set_meta("ledge_stepping", false)
 		return false
 	var away: Vector3 = -drop[0]
 	if not _safe_step(ally, away, delta, dangers):
 		return false  # boxed in: the danger areas come first
-	_count("ai_ledge_steps")
+	if not ally.get_meta("ledge_stepping", false):
+		_count("ai_ledge_steps")  # once per time it backs off, not per frame
+	ally.set_meta("ledge_stepping", true)
 	return true
 
 
@@ -2511,6 +2821,15 @@ func _enemy_areas(enemy: Combatant) -> Array[AttackRange]:
 
 func _loaded_offensive(enemy: Combatant) -> bool:
 	return enemy.loaded_def != null and enemy.loaded_def.is_offensive()
+
+
+## Preparing a strike whose area is carried by the enemy's body (moves if it
+## is pushed): not placed on the party, not pinned to the arena.
+func _carries_area(enemy: Combatant) -> bool:
+	if not _loaded_offensive(enemy) or enemy.loaded_skill == Skills.NONE:
+		return false
+	var def := enemy.loaded_def
+	return not def.placed_on_party() and not def.arena_aligned
 
 
 ## Pushes apart any two fighters standing inside each other.
@@ -2881,6 +3200,12 @@ func _finish_enemy_skill(enemy: Combatant, reset_timeline: bool) -> void:
 	enemy.show_skill_text("")
 	enemy.cast_target = null
 	enemy.remove_meta("follow_up_slow")
+	for member in party:
+		if member.has_meta("revive_safe"):
+			var safe: Array = member.get_meta("revive_safe")
+			safe.erase(enemy)  # that cast is over: its next one can hit them
+			if safe.is_empty():
+				member.remove_meta("revive_safe")
 	enemy.remove_meta("settled_radius")
 	enemy.remove_meta("settle_speed")
 	enemy.set_meta("aim_locked", false)
@@ -3196,6 +3521,15 @@ func _clear_cast_extras(enemy: Combatant) -> void:
 ## Who a prepared skill hits, and how: {party member: {"mult", "unblockable", "one_hp"}}.
 ## preview: just looking (the warning pulse), so nothing is counted.
 func _strike_targets(enemy: Combatant, preview: bool = false) -> Dictionary:
+	var result := _strike_targets_all(enemy, preview)
+	# Someone revived during this cast can't be hit by it.
+	for member in result.keys():
+		if member.has_meta("revive_safe") and (member.get_meta("revive_safe") as Array).has(enemy):
+			result.erase(member)
+	return result
+
+
+func _strike_targets_all(enemy: Combatant, preview: bool = false) -> Dictionary:
 	var def := enemy.loaded_def
 	var result := {}
 	if def.placed_on_party():
@@ -3739,6 +4073,8 @@ func _blast_rocks(enemy: Combatant) -> void:
 		if playtest:
 			playtest.avoidable(enemy, blast_name)
 		_count("avoidable_hits")
+		if hit.has(controlled):
+			_count("avoidable_hits_you")
 	_flash("\n".join(lines))
 	_check_party()
 
@@ -4841,6 +5177,8 @@ func _avoidable_hit(enemy: Combatant, def: EnemySkill, mods: Dictionary, target:
 ## Returns a message ("" if there was no bonus to lose).
 func _lose_max_ap_for_hit(who: Array) -> String:
 	_count("avoidable_hits")
+	if who.has(controlled):
+		_count("avoidable_hits_you")  # the end screen's Reading score counts these
 	if current_max_ap <= max_ap or avoidable_hit_max_ap_loss <= 0.0:
 		return ""
 	var before := current_max_ap
@@ -4882,7 +5220,113 @@ func _hurt(member: Combatant, amount: int, recoverable: bool, source: String,
 		playtest.hurt(member, taken, source, enemy, skill_name)
 		if member.is_down and not was_down:
 			playtest.down(member)
+	if member.is_down and not was_down and not member.get_meta("fell", false):
+		_start_ragdoll(member, enemy)
 	return taken
+
+
+# --- Ragdolls ----------------------------------------------------------------
+
+## A downed party member goes limp. A strong blow (a push, a Smash, 40+
+## damage, an instant kill) sends the body flying away from the enemy,
+## tumbling, bouncing once and sliding to a stop; anything else (small
+## hits, burns, hazards) makes it flop over where it stands.
+@export var ragdoll_fly_speed: float = 7.5
+@export var ragdoll_fly_up: float = 8.0
+const RAGDOLL_GRAVITY := 22.0
+var _ragdolls: Array[Dictionary] = []
+
+
+func _strong_blow(enemy: Combatant) -> bool:
+	if enemy == null or enemy.loaded_def == null:
+		return false
+	var def := enemy.loaded_def
+	return def.launch > 0.0 or def.kind == Skills.Kind.SMASH or def.damage >= 40 or def.lethal
+
+
+func _start_ragdoll(member: Combatant, enemy: Combatant) -> void:
+	for rag in _ragdolls:
+		if rag["member"] == member:
+			return
+	var away := Vector3.ZERO
+	if enemy != null:
+		away = member.global_position - enemy.global_position
+	away.y = 0.0
+	if away.length() < 0.05:
+		away = -member.flat_forward()
+	away = away.normalized()
+	var fly := _strong_blow(enemy)
+	var pivot := member.make_limp()
+	# It tips over away from the blow: the axis lies across that direction.
+	var axis := Vector3.UP.cross(away).normalized()
+	_ragdolls.append({"member": member, "pivot": pivot, "fly": fly, "axis": axis, "dir": away,
+			"vel": away * (ragdoll_fly_speed if fly else 0.0), "height": 0.0, "vy": ragdoll_fly_up if fly else 0.0,
+			"angle": 0.0, "spin": randf_range(9.0, 13.0) if fly else 0.0, "bounces": 0, "t": 0.0, "done": false})
+	_count("ragdolls_flying" if fly else "ragdolls_flop")
+
+
+## Lying flat: tipped 90 degrees away from the blow, raised by the body's
+## radius so it rests on the floor.
+const RAGDOLL_LIE := PI / 2.0
+
+
+func _tick_ragdolls(delta: float) -> void:
+	for rag in _ragdolls.duplicate():
+		var member: Combatant = rag["member"]
+		var pivot: Node3D = rag["pivot"]
+		if not is_instance_valid(member) or not member.is_down or not is_instance_valid(pivot):
+			_ragdolls.erase(rag)  # revived (or gone)
+			continue
+		rag["t"] = float(rag["t"]) + delta
+		var t: float = rag["t"]
+		if rag["fly"] and int(rag["bounces"]) < 2:
+			# Airborne: slide along the floor plan, rise and fall, tumble.
+			var step: Vector3 = rag["vel"] * delta
+			var next := member.global_position + step
+			if arena.walkable(Vector3(next.x, 0.0, next.z), member.body_radius):
+				member.global_position = Vector3(next.x, member.global_position.y, next.z)
+			else:
+				rag["vel"] = Vector3.ZERO  # a wall or an edge stops it
+			rag["vy"] = float(rag["vy"]) - RAGDOLL_GRAVITY * delta
+			rag["height"] = float(rag["height"]) + float(rag["vy"]) * delta
+			rag["angle"] = float(rag["angle"]) + float(rag["spin"]) * delta
+			if float(rag["height"]) <= 0.0 and float(rag["vy"]) < 0.0:
+				rag["height"] = 0.0
+				rag["bounces"] = int(rag["bounces"]) + 1
+				rag["vy"] = -float(rag["vy"]) * 0.32
+				rag["vel"] = rag["vel"] * 0.45
+				rag["spin"] = float(rag["spin"]) * 0.3
+			var lie := 0.4 * clampf(float(rag["bounces"]), 0.0, 1.0)
+			pivot.transform = Transform3D(Basis(rag["axis"], rag["angle"]), Vector3(0.0, float(rag["height"]) + lie, 0.0))
+			if int(rag["bounces"]) >= 2:
+				rag["angle"] = fposmod(float(rag["angle"]), TAU)
+				rag["settle_from"] = rag["angle"]
+				rag["settle_t"] = 0.0
+		elif rag["fly"]:
+			# Landed: a short slide, then it settles flat on its back.
+			rag["vel"] = rag["vel"] * maxf(1.0 - 6.0 * delta, 0.0)
+			var next: Vector3 = member.global_position + rag["vel"] * delta
+			if arena.walkable(Vector3(next.x, 0.0, next.z), member.body_radius):
+				member.global_position = Vector3(next.x, member.global_position.y, next.z)
+			rag["settle_t"] = minf(float(rag["settle_t"]) + delta / 0.3, 1.0)
+			var from: float = rag["settle_from"]
+			var target := RAGDOLL_LIE if absf(from - RAGDOLL_LIE) < absf(from - (RAGDOLL_LIE + PI)) else RAGDOLL_LIE + PI
+			var k := float(rag["settle_t"])
+			var angle := lerpf(from, target, k * k * (3.0 - 2.0 * k))
+			pivot.transform = Transform3D(Basis(rag["axis"], angle), Vector3(0.0, 0.4, 0.0))
+			if k >= 1.0 and (rag["vel"] as Vector3).length() < 0.05:
+				_ragdolls.erase(rag)
+		else:
+			# A flop: tips over like falling (speeding up), a small bounce.
+			var k := clampf(t / 0.42, 0.0, 1.0)
+			var angle := RAGDOLL_LIE * k * k
+			if t > 0.42:
+				var b := clampf((t - 0.42) / 0.22, 0.0, 1.0)
+				angle = RAGDOLL_LIE - sin(b * PI) * 0.18
+			pivot.transform = Transform3D(Basis(rag["axis"], angle), Vector3(0.0, 0.4 * clampf(angle / RAGDOLL_LIE, 0.0, 1.0), 0.0))
+			if t > 0.7:
+				pivot.transform = Transform3D(Basis(rag["axis"], RAGDOLL_LIE), Vector3(0.0, 0.4, 0.0))
+				_ragdolls.erase(rag)
 
 
 ## Saves the play-test report once per fight (not in the tutorial).
@@ -5415,6 +5859,7 @@ func _open_commands() -> void:
 		battle_menu.command_notes[0] = "choose a target, then get in reach" if any else ""
 		battle_menu.command_enabled[1] = not _skill_used
 		battle_menu.command_notes[1] = "used this turn" if _skill_used else ""
+		_update_items_command()
 		_show_used_ability()
 		return
 	var can_attack := _attack_target() != null
@@ -5433,7 +5878,32 @@ func _open_commands() -> void:
 	battle_menu.command_notes[0] = note
 	battle_menu.command_enabled[1] = not _skill_used
 	battle_menu.command_notes[1] = "used this turn" if _skill_used else ""
+	_update_items_command()
 	_show_used_ability()
+
+
+## The Items command: open while the turn's Ability slot is free and the
+## pouch isn't empty.
+func _update_items_command() -> void:
+	var left := 0
+	for item_name in pouch:
+		left += int(pouch[item_name])
+	battle_menu.command_enabled[3] = not _skill_used and left > 0
+	battle_menu.command_notes[3] = "used this turn" if _skill_used else ("the pouch is empty" if left == 0 else "")
+
+
+## A fresh pouch for the fight (empty = nothing until the tutorial hands
+## items out).
+func refill_pouch(full: bool = true) -> void:
+	pouch = {Items.POTION: pouch_potions if full else 0, Items.ETHER: pouch_ethers if full else 0,
+			Items.REVIVE: pouch_revives if full else 0}
+
+
+func _pouch_text() -> String:
+	var parts: PackedStringArray = []
+	for item_name in Items.ORDER:
+		parts.append("%s x%d" % [item_name, int(pouch.get(item_name, 0))])
+	return "   ".join(parts)
 
 
 ## Keys while a menu is open. W/S move the cursor, J confirms, K goes back,
@@ -5493,6 +5963,8 @@ func _menu_input(event: InputEvent) -> void:
 					_open_skills()
 				elif index == 2:
 					_wait_command()
+				elif index == 3:
+					_open_items()
 		BattleMenu.Mode.SKILLS:
 			if up or down:
 				var n := _skills.size()
@@ -6770,6 +7242,8 @@ func _start_combo_slot(slot: int) -> void:
 		_count("art_" + String(art_move["name"]).to_lower().replace(" ", "_").replace("'", ""))
 		if not ArtsBook.discover(_exec_attacker.class_id, art_move["name"]):
 			_popup(_exec_attacker, String(art_move["name"]).to_upper(), art_move["color"])
+		else:
+			_count("arts_found")
 		if int(art_move.get("spend_marks", 0)) > 0 and _combo_target != null and _combo_target.marks > 0:
 			# Thousand Cuts pays its Marks up front, so its cuts (Stabs) can't
 			# grow them back on the way.
@@ -6857,6 +7331,7 @@ func _update_combo(delta: float) -> void:
 			hit_move.merge(hit_move["last_hit"], true)
 		if not untimed:
 			_last_landed_ms = Time.get_ticks_msec()  # late presses for it are forgiven
+			_count("timed_hits")
 		var keep_going := _land_hit(_exec_attacker, hit_move, multiplier, _exec_hits_done == 0, _exec_hits_done == hits.size() - 1)
 		_exec_hit_perfect = false
 		if _exec_hits_done == hits.size() - 1 and not _exec_attacker.is_down:
@@ -7467,6 +7942,7 @@ func _judge_timing() -> void:
 ## party loses all its AP and max AP resets.
 func _timing_miss(hit: int, why: String) -> void:
 	_mark_timing(hit, Timing.MISS)
+	_count("timing_misses")
 	_ring_result(_exec_slot, hit, false)
 	_popup(_exec_attacker, "MISS", Color(1.0, 0.35, 0.3))
 	var reset_note := _reset_max_ap()
@@ -7489,6 +7965,7 @@ func max_ap_ceiling() -> float:
 func _grow_max_ap(amount: float, at: Combatant) -> String:
 	var before := current_max_ap
 	current_max_ap = minf(current_max_ap + amount, max_ap_ceiling())
+	stats["max_ap_peak"] = maxi(int(stats.get("max_ap_peak", 0)), int(current_max_ap))
 	var gained := current_max_ap - before
 	if gained <= 0.0:
 		return "Max AP is already at its limit (%d)" % int(max_ap_ceiling())
@@ -8152,6 +8629,13 @@ func _resolve_combo_hit(attacker: Combatant, target: Combatant, move: Dictionary
 		# Lightweight (Gust Sprites): any hit knocks it back.
 		move = move.duplicate()
 		move["knockback"] = lightweight_push
+	if _ai_playing and float(move["knockback"]) > 0.0 and _carries_area(target) and not target.lightweight:
+		# An AI ally doesn't push an enemy whose area moves with it while it
+		# prepares: the area would land on the party (a Golem Smash pushed
+		# onto the side everyone had just run to). You still can.
+		move = move.duplicate()
+		move["knockback"] = 0.0
+		_count("ai_pushes_held")
 	# Smash: breaking a guard spends the blow, so no knock-back that hit.
 	if float(move["knockback"]) > 0.0 and not target.is_down \
 			and not (was_guarding and move.get("knockback_unguarded", false)):
@@ -8444,6 +8928,83 @@ func _open_skills() -> void:
 	battle_menu.move_index = 0
 
 
+## Items: the pouch as a list shaped like the Abilities list (count instead
+## of AP). Greyed out: none left, or nothing to use it on.
+func _open_items() -> void:
+	_skills = Items.list(pouch)
+	var usable: Array[bool] = []
+	var notes: PackedStringArray = []
+	for item in _skills:
+		var note := ""
+		if int(item["count"]) <= 0:
+			note = "None left"
+		elif item["name"] == Items.POTION and not _standing(party).any(func(m): return m.hp < m.max_hp):
+			note = "Everyone is at full HP"
+		elif item["name"] == Items.ETHER and ap >= current_max_ap - 0.5:
+			note = "AP is already full"
+		elif item["name"] == Items.REVIVE and _skill_choices(item).is_empty():
+			note = "Nobody is down"
+		usable.append(note == "")
+		notes.append(note)
+	_menu_mode = BattleMenu.Mode.SKILLS
+	battle_menu.element_pick = false
+	battle_menu.moves = _skills
+	battle_menu.move_usable = usable
+	battle_menu.move_notes = notes
+	battle_menu.move_index = 0
+
+
+## An item from the pouch takes effect (already counted down).
+func _use_item(item: Dictionary, user: Combatant, target: Combatant) -> String:
+	var item_name := String(item["name"])
+	_count("items_" + item_name.to_lower())
+	match item_name:
+		Items.POTION:
+			var who := target if target != null else user
+			var healed := who.heal(ceili(who.max_hp * float(item["heal"])))
+			if healed > 0:
+				SpellFx.heal(self, who)
+			_count_amount("hp_healed", healed)
+			_popup(who, "+%d" % healed, Color(0.45, 0.95, 0.5))
+			return "%s uses a Potion: %s recovers %d HP" % [user.display_name, who.display_name, healed]
+		Items.ETHER:
+			var before := ap
+			ap = minf(ap + current_max_ap * float(item["ap_share"]), current_max_ap)
+			var gained := roundi(ap - before)
+			SpellFx.burst(self, user.global_position + Vector3(0, 1.0, 0), item["color"], 0.7)
+			_popup(user, "+%d AP" % gained, item["color"])
+			return "%s uses an Ether: +%d AP" % [user.display_name, gained]
+		Items.REVIVE:
+			_revive(target, float(item["heal"]))
+			return "%s uses a Revive: %s is back up" % [user.display_name, target.display_name]
+	return "%s uses %s" % [user.display_name, item_name]
+
+
+## A downed party member gets back up with this share of their max HP,
+## where they fell (or at the party's start, after a fall off the arena).
+## Whatever enemies are casting right now can't hit them with that cast.
+func _revive(member: Combatant, share: float) -> void:
+	if member.has_meta("windup_target"):
+		_clear_windup(member)
+	var at := member.global_position
+	if member.get_meta("fell", false) or not arena.walkable(Vector3(at.x, 0.0, at.z), member.body_radius):
+		var spawn := arena.spawn_points(false, 1)[0].origin
+		at = spawn
+	member.revive(ceili(member.max_hp * share))
+	member.global_position = Vector3(at.x, 0.0, at.z)
+	_keep_in_arena(member)
+	var casting: Array = []
+	for enemy in _standing(enemies):
+		if enemy.loaded_def != null and enemy.loaded_skill != Skills.NONE:
+			casting.append(enemy)
+	if not casting.is_empty():
+		member.set_meta("revive_safe", casting)
+	SpellFx.heal(self, member)
+	SpellFx.ring(self, Vector3(member.global_position.x, 0.05, member.global_position.z), Items.GOLD, 1.6)
+	_popup(member, "REVIVED", Items.GOLD)
+	_count("revives")
+
+
 ## Enchant's element menu: a direction picks the element and casts it;
 ## back closes the menu (the skills list stays).
 func _element_input(event: InputEvent) -> void:
@@ -8477,6 +9038,8 @@ func _skill_choices(skill: Dictionary) -> Array[Combatant]:
 			choices = _standing(party)
 			choices.erase(controlled)
 			choices.push_front(controlled)
+		Moves.Target.DOWNED_ALLY:
+			choices = party.filter(func(m): return m.is_down)
 		Moves.Target.OTHER_ALLY:
 			choices = _standing(party)
 			choices.erase(controlled)
@@ -8517,7 +9080,7 @@ func _choose_skill(index: int) -> void:
 		_:
 			_target_choices = _skill_choices(skill)
 			_target_index = 0
-			var what := "an enemy" if skill["target"] == Moves.Target.ENEMY else "an ally"
+			var what := "an enemy" if skill["target"] == Moves.Target.ENEMY else ("a downed ally" if skill["target"] == Moves.Target.DOWNED_ALLY else "an ally")
 			_begin_targeting(skill, Keybinds.fill("%s: choose %s ({up} / {down})" % [skill["name"], what]))
 
 
@@ -8609,13 +9172,19 @@ func _clear_target_marker() -> void:
 func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 	var user := controlled
 	battle_menu.element_pick = false  # Enchant's menu only lives while she's picking
-	_pay(user, float(skill["cost"]))
-	_count("skills")
-	_count("skills_" + user.class_id)
-	var turns := int(skill["turns"])
-	var message := "%s uses %s" % [user.display_name, skill["name"]]
 	var head_start := 0.0
-	match skill["name"]:
+	var message := "%s uses %s" % [user.display_name, skill["name"]]
+	var turns := int(skill.get("turns", 0))
+	if skill.get("item", false):
+		# Items: no AP; one less in the pouch; same one-per-turn slot.
+		pouch[skill["name"]] = maxi(int(pouch.get(skill["name"], 0)) - 1, 0)
+		_count("items")
+		message = _use_item(skill, user, target)
+	else:
+		_pay(user, float(skill["cost"]))
+		_count("skills")
+		_count("skills_" + user.class_id)
+	match "" if skill.get("item", false) else String(skill["name"]):
 		"Light Heal", "Healing", "Full Cure":
 			var who := target if target != null else user
 			var healed := who.heal(ceili(who.max_hp * float(skill["heal"])))
@@ -9004,9 +9573,15 @@ func _update_ui(delta: float) -> void:
 			for length in controlled.bar_steps:
 				if length > controlled.combo_limit:
 					battle_menu.step_marks.append(length)
+	if _game_over and end_screen != null:
+		# The end panel has the stage.
+		turn_label.text = ""
+		warning_label.text = ""
+		controls_label.visible = false
+		battle_menu.visible = false
+		return
 	if _game_over:
-		# Placeholder end screen (a proper one is milestone 8).
-		# The last message stays on screen so you can see what happened.
+		# The last blow, before the end panel shows: the last message stays.
 		turn_label.text = _result_text
 		warning_label.text = _flash_message
 		controls_label.visible = true
@@ -9043,6 +9618,7 @@ func _update_ui(delta: float) -> void:
 	ap_bar.value = ap
 	ap_label.text = "Party AP  %d / %d" % [floori(ap), int(current_max_ap)]
 	if ap_meter:
+		ap_meter.pouch_text = _pouch_text() if pouch.values().any(func(n): return int(n) > 0) or not tutorial_mode else ""
 		ap_meter.value = ap
 		ap_meter.max_value = current_max_ap
 		ap_meter.ceiling = max_ap_ceiling()
@@ -9104,7 +9680,8 @@ func _controls_hint() -> String:
 			var arts_hint := Keybinds.fill("     {swap}: Arts list") if not Moves.arts(controlled.class_id).is_empty() else ""
 			return Keybinds.fill("{up} / {down}: choose move     {confirm} / Enter: add     {cancel} / Backspace: remove last     {begin}: begin") + arts_hint
 		BattleMenu.Mode.SKILLS:
-			return Keybinds.fill("{up} / {down}: choose skill     {confirm} / Enter: use (one per turn)     {cancel} / Backspace: back")
+			var what := "item" if not _skills.is_empty() and _skills[0].get("item", false) else "Ability"
+			return Keybinds.fill("{up} / {down}: choose %s     {confirm} / Enter: use (one Ability or item per turn)     {cancel} / Backspace: back" % what)
 		BattleMenu.Mode.TARGET:
 			return ""
 	var standing := _standing(party)

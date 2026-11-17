@@ -46,6 +46,8 @@ var boost_left := 0.0
 var boost_text := "FOCUS +50% AP"
 ## Shown when the next drop in max AP shatters segments.
 var loss_text := "MAX AP LOST"
+## Items left in the pouch, shown under the bar ("" = hidden).
+var pouch_text := ""
 
 var _time := 0.0
 var _shown_value := 0.0
@@ -358,6 +360,9 @@ func _draw() -> void:
 	var big := t >= 5
 	_text(label, Vector2(bar.get_center().x, bar.position.y + bar.size.y * 0.5 + (8.0 if big else 6.0)),
 			22 if big else 17, Color(1.0, 0.85, 0.35) if big else Color.WHITE, true)
+
+	if pouch_text != "":
+		_text(pouch_text, Vector2(bar.position.x + 2.0, bar.position.y - 7.0), 14, Color(0.85, 0.9, 0.8), false)
 
 	# "+5" / "+30" popups float up and fade.
 	for popup in _popups:

@@ -24,6 +24,21 @@ of every play-test report.
 
 ---
 
+## 0.9.0: Items, end screens, ragdolls
+
+- **Items:** every fight starts with a pouch of 3 Potions, 2 Ethers and 1 Revive, shared by the party and shown above the AP bar. Using one takes the turn's Ability slot: one Ability or one item, and you can still Attack or Wait
+    - Potion: an ally (or you) heals 35% of their max HP, at any distance
+    - Ether: the party gets back 40% of its max AP
+    - Revive: a downed ally gets back up with half their HP; whatever an enemy is preparing right then can't hit them
+- **AI allies use items too:** the Revive on a downed ally, and a Potion when they're low and no Cleric can heal them. Never Ethers
+- **Victory screen:** a rank from S to C (Health, Timing, Reading and Pace, 25 points each) with your best rank per round, and a Fight summary page showing where the rank came from
+- **Defeat screen:** Retry first, and a What went wrong page: the enemy's HP left, what hurt most (avoidable ones marked), who went down to what, and a tip
+- **Both screens:** Next round, Retry, Change party (from Round 8), Open play-test report and Back to the menu, over the frozen battle while the camera circles the arena
+- **Ragdolls:** a party member who goes down is thrown across the arena by a strong blow (a push, a Smash, a big hit, an instant kill), or flops over where they stand otherwise. Revive stands them back up
+- **Smarter allies:** AI allies no longer push an enemy while it prepares an attack whose area moves with it (no more Golem Smashes shoved onto the party), and they back off when their target raises a Counter stance instead of attacking into it
+- **Tutorial:** a new Items lesson (use a Potion, Revive the Archer)
+- **Fixes:** the Counter lesson no longer gets stuck if you attack into the stance; the Assassin lessons no longer error if a turn is still playing when they start; the old knocked-out pose no longer leaves the nose floating in the air
+
 ## 0.8.0: Mage rework, Command List, smarter allies
 
 - **Mage rework:** four elements you type as codes while the spell casts: Fire (W), Ice (S), Lightning (A), Energy (D). Any two or three on the bar, in any order, make one of 19 Arts. Ice makes Fire cheaper. Her spells reach 5 m

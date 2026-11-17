@@ -23,10 +23,21 @@ func press(action):
 	Input.parse_input_event(up)
 func release_moves():
 	for x in ["move_left", "move_right", "move_forward", "move_back"]: Input.action_release(x)
-func walk_to(c, target: Vector3, stop := 0.3):
+func walk_to(c, target: Vector3, stop := 0.3, around := false):
 	release_moves()
 	var to = target - c.global_position; to.y = 0
 	if to.length() < stop: return true
+	# around: an enemy body in the straight path, head round its side first
+	# (walking into it stalls; a player walks round). Only where the lesson's
+	# goal is past the enemy (rocks, getting behind).
+	for e in (a._standing(a.enemies) if around else []):
+		var to_e = e.global_position - c.global_position; to_e.y = 0
+		var along = to_e.dot(to.normalized())
+		if along > 0.0 and along < to.length() and (to_e - to.normalized() * along).length() < e.body_radius + c.body_radius + 0.25:
+			var side = to.normalized().cross(Vector3.UP)
+			if side.dot(-to_e) < 0: side = -side
+			to = (e.global_position + side * (e.body_radius + c.body_radius + 1.0)) - c.global_position; to.y = 0
+			break
 	to = a.arena.steer(c.global_position, to, c.body_radius)
 	if to.x < -0.3: Input.action_press("move_left")
 	if to.x > 0.3: Input.action_press("move_right")
@@ -93,6 +104,7 @@ func _process(d):
 				elif g.begins_with("Choose Wait") and OS.get_environment("COUNTER_ATTACK") == "1" and not counter_attacked and a.battle_menu.command_enabled[0]:
 					counter_attacked = true; print("  (Attack into the Counter stance)"); pick_command(0)
 				elif g.begins_with("Choose Wait") : pick_command(2)
+				elif (g.begins_with("Use a Potion") or g.begins_with("Revive the")) and a.battle_menu.command_enabled[3]: pick_command(3)
 				elif not a.battle_menu.command_enabled[1] and (g.begins_with("Use an Ability") or g.begins_with("Use one of the Cleric")): pick_command(2)
 				elif g.begins_with("Use an Ability") and who.class_id == "knight": pick_command(1)
 				elif g.begins_with("Use one of the Cleric") and who.class_id == "cleric": pick_command(1)
@@ -134,7 +146,9 @@ func _process(d):
 					var ht = e["duration"] * e["times"][h]
 					if a._exec_time >= ht - e["window"] * e["duration"] * 0.6 and a._exec_timings[h] == 0: press("confirm")
 			BattleMenu.Mode.SKILLS:
-				if who.class_id == "assassin": pick_skill("Death Sentence")
+				if g.begins_with("Use a Potion"): pick_skill("Potion")
+				elif g.begins_with("Revive the"): pick_skill("Revive")
+				elif who.class_id == "assassin": pick_skill("Death Sentence")
 				elif who.class_id == "cleric": pick_skill("Healing")
 				elif who.class_id == "knight": pick_skill("Brace")
 				else:
@@ -187,13 +201,13 @@ func _process(d):
 		if c != k: press("swap_character"); return false
 		var rock = a.arena.obstacles()[0].global_position
 		var away = (rock - golem.global_position); away.y = 0
-		walk_to(k, rock + away.normalized() * 2.2)
+		walk_to(k, rock + away.normalized() * 2.2, 0.3, true)
 	elif g.begins_with("Hit the Golem from behind") or g.begins_with("Use Execute") or g.begins_with("Use Shadowstep") or g.begins_with("Put 4") or g.begins_with("Auto-parry"):
 		var s2 = member("assassin")
 		if c != s2: press("swap_character"); return false
 		var spot = golem.global_position - golem.flat_forward() * (golem.body_radius + s2.body_radius + 0.4)
 		if g.begins_with("Use Shadowstep") or g.begins_with("Auto-parry"): spot = golem.global_position + golem.flat_forward() * (golem.body_radius + s2.body_radius + 0.4)
-		walk_to(s2, spot)
+		walk_to(s2, spot, 0.3, true)
 	elif g.begins_with("Climb") or g.begins_with("Cash out"):
 		var mo = member("monk")
 		if mo != null:
