@@ -13,16 +13,16 @@ battle systems:
 A PS1-style look with a furry cast: low-poly animal heroes and enemies, smooth
 animation, a retro screen filter (Normal, Light or Off), and a place for every arena.
 
-![A party of four against the Stone Golem: everyone moves at once while the Golem's attacks are revealed late on the floor](docs/screenshots/golem.gif)
+![A party of four against the Stone Golem: everyone moves at once while the Golem's attacks are revealed late on the floor](docs/screenshots/golem.webp)
 
 | | |
 |---|---|
-| ![A Knight combo: timed presses, Perfects and a secret Art revealed mid-combo](docs/screenshots/combo.gif) | ![Living Armor's Shadowflare: the party splits up to hit the Shadow Sprites](docs/screenshots/shadowflare.gif) |
+| ![A Knight combo: timed presses, Perfects and a secret Art revealed mid-combo](docs/screenshots/combo.webp) | ![Living Armor's Shadowflare: the party splits up to hit the Shadow Sprites](docs/screenshots/shadowflare.webp) |
 | **Combos and Arts:** fill the bar, hit each timing as the ring closes in, and find secret Arts mid-combo | **Living Armor:** hit each Shadow Sprite before the circle fills the room |
-| ![Gale Maw: Gale Lanes, Gust Sprites and a cliff edge](docs/screenshots/gale-maw.gif) | ![A knocked-out Knight thrown across the arena by a Golem Smash](docs/screenshots/ragdoll.gif) |
+| ![Gale Maw: Gale Lanes, Gust Sprites and a cliff edge](docs/screenshots/gale-maw.webp) | ![A knocked-out Knight thrown across the arena by a Golem Smash, as a physics ragdoll](docs/screenshots/ragdoll.webp) |
 | **Gale Maw:** dodge the Gale Lanes and push the Gust Sprites off the ledge | **Strong blows throw you:** a Smash sends a downed fighter flying |
-| ![The Victory panel with an S rank, then the Fight summary](docs/screenshots/victory.gif) | ![Title screen](docs/screenshots/title.png) |
-| **Every fight is ranked:** Health, Timing, Reading and Pace, with a summary of where the rank came from | **Title screen:** Boss Rush, Tutorial, Round Select and more |
+| ![The last enemy falls in slow motion, then the Victory panel with an S rank and the Fight summary](docs/screenshots/victory.webp) | ![Title screen](docs/screenshots/title.png) |
+| **Every fight is ranked:** the last enemy falls in slow motion, then a rank for Health, Timing, Reading and Pace, with a summary of where it came from | **Title screen:** an arena turns slowly behind Boss Rush, Tutorial, Round Select and more |
 
 ## What's in it
 
@@ -47,7 +47,7 @@ Everyone slides along the **timeline** at the top. While it runs you **steer**
 one party member in real time (Tab switches who), and the others move on
 their own. Enemies entering the **CAST** zone prepare a skill: first a grey
 area on the floor, then the real one, revealed late. Get out of it before it
-lands, or **Parry** (E) or **Defend** (Q) the strike.
+lands, or **Parry** (E / RB) or **Defend** (Q / LB) the strike.
 
 **Your turn comes in two steps (Windup).** When a fighter reaches the gold
 **command point**, time stops and you choose: **Attack** (any enemy, near or
@@ -129,18 +129,21 @@ get new releases as they come out, and ask the game's bot anything with
 
 ## Controls (defaults)
 
-| Key | Action |
-|---|---|
-| WASD | Move the fighter you steer / choose in menus |
-| Tab | Switch party member (hold: stop time and choose) / open the Arts list in the combo bar |
-| J / K (Enter / Backspace) | Confirm / back; J is also the timed-hit key (and parries a Counter) |
-| Space | Begin the combo |
-| E / Q | Parry / Defend an enemy strike |
-| Z / C, right-drag, wheel | Camera (V resets it) |
-| Esc | Pause (settings: Command timing, Party AI) |
-| W / S, J (end screen) | Choose and pick: Next round, Retry, Change party, and more (O opens the play-test reports) |
+| Keyboard | Controller (Xbox layout) | Action |
+|---|---|---|
+| WASD | Left stick / D-pad | Move the fighter you steer / choose in menus |
+| Tab | Y | Switch party member (hold: stop time and choose) / open the Arts list in the combo bar |
+| J / K (Enter / Backspace) | A / B | Confirm / back; J or A is also the timed-hit button (and parries a Counter) |
+| Space | X | Begin the combo |
+| E / Q | RB / LB | Parry / Defend an enemy strike |
+| Z / C, right-drag, wheel | Right stick | Turn the camera (the stick also tilts it) |
+| V | RS click | Reset the camera |
+| Esc | Menu | Pause: Command List, Options, Change Keys, Restart, Quit |
+| W / S, J (end screen) | Up / Down, A | Choose and pick: Next round, Retry, Change party, and more (O opens the play-test reports) |
 
-**Change Keys** on the title screen rebinds them.
+Keys and buttons can be rebound in **Change Keys** (title screen or Esc). On-screen
+hints switch to controller buttons as soon as you use the pad. Camera speed, mouse
+sensitivity and Invert camera (X, Y or both) are in **Options**.
 
 ## Learn more
 
