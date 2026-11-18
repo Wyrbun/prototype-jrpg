@@ -21,7 +21,7 @@ animation, a retro screen filter (Normal, Light or Off), and a place for every a
 | **Combos and Arts:** fill the bar, hit each timing as the ring closes in, and find secret Arts mid-combo | **Living Armor:** hit each Shadow Sprite before the circle fills the room |
 | ![Gale Maw: Gale Lanes, Gust Sprites and a cliff edge](docs/screenshots/gale-maw.webp) | ![A knocked-out Knight thrown across the arena by a Golem Smash, as a physics ragdoll](docs/screenshots/ragdoll.webp) |
 | **Gale Maw:** dodge the Gale Lanes and push the Gust Sprites off the ledge | **Strong blows throw you:** a Smash sends a downed fighter flying |
-| ![The last enemy falls in slow motion, then the Victory panel with an S rank and the Fight summary](docs/screenshots/victory.webp) | ![Title screen](docs/screenshots/title.png) |
+| ![The last enemy falls in slow motion, then the Victory panel with an S rank and the Fight summary](docs/screenshots/victory.webp) | ![Title screen](docs/screenshots/title-v1.png) |
 | **Every fight is ranked:** the last enemy falls in slow motion, then a rank for Health, Timing, Reading and Pace, with a summary of where it came from | **Title screen:** an arena turns slowly behind Boss Rush, Tutorial, Round Select and more |
 
 ## What's in it
