@@ -5,6 +5,7 @@
 
 [node name="ArenaPlatform" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "ruins"
 shape = 0
 size = Vector2(19, 16)
 floor_color = Color(0.36, 0.33, 0.3, 1)

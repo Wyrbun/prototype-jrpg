@@ -23,10 +23,10 @@ func _initialize():
 	a = load("res://scenes/battle/battle_arena.tscn").instantiate()
 	root.add_child(a)
 func lying(m) -> bool:
-	var pivot = m.get_node_or_null("Limp")
-	if pivot == null: return false
-	var up: Vector3 = pivot.global_basis.y
-	return absf(up.y) < 0.15 and absf(pivot.position.y - 0.4) < 0.05
+	var rig = m.get_node_or_null("Limp")
+	if rig == null: return false
+	var up: Vector3 = rig.torso.global_basis.y
+	return absf(up.y) < 0.5 and rig.torso.global_position.y < 0.5
 func shot(n):
 	if OS.get_environment("SHOTS") != "":
 		root.get_texture().get_image().save_png(OS.get_environment("SHOTS") + "/" + n + ".png")
@@ -57,21 +57,23 @@ func _process(d):
 			check(kn.get_node_or_null("Limp") != null and cl.get_node_or_null("Limp") != null, "both bodies go limp (body parts under a pivot)")
 			step = 1; t = 0
 		1:
-			if OS.get_environment("FRAMES") != "" and int(t / 0.05) != int((t - d) / 0.05) and t < 1.8:
+			if OS.get_environment("FRAMES") != "" and int(t / 0.05) != int((t - d) / 0.05) and t < 3.0:
 				root.get_texture().get_image().save_png(OS.get_environment("FRAMES") + "/f%03d.png" % int(t / 0.05))
 			if t > 0.25 and t - d <= 0.25:
 				shot("ragdoll_air")
-				check(kn.get_node("Limp").position.y > 0.5, "the Knight is in the air (%.1f m up)" % kn.get_node("Limp").position.y)
-			if t < 2.5: return false
+				check(kn.get_node("Limp").torso.global_position.y > 1.3, "the Knight is in the air (torso %.1f m up)" % kn.get_node("Limp").torso.global_position.y)
+			if t < 4.2: return false
 			shot("ragdoll_rest")
 			var moved = Vector2(kn.global_position.x - start_k.x, kn.global_position.z - start_k.z)
 			check(moved.length() > 2.0 and moved.y > 0.0, "the Knight was thrown %.1f m, away from the Golem" % moved.length())
 			check(lying(kn), "and ends lying on the floor")
-			check(cl.global_position.distance_to(start_c) < 0.01, "the Cleric flops where she stood")
+			check(cl.global_position.distance_to(start_c) < 1.0, "the Cleric crumples about where she stood (%.2f m)" % cl.global_position.distance_to(start_c))
+			var ct = cl.get_node("Limp").torso
+			print("cleric torso y=%.2f up=%s" % [ct.global_position.y, ct.global_basis.y])
 			check(lying(cl), "lying on the floor too")
 			check(a._ragdolls.is_empty(), "both settled")
 			a._revive(kn, 0.5)
-			check(kn.get_node_or_null("Limp") == null and kn.get_node("Body").global_position.y > 0.8, "Revive: standing again")
+			check(kn.get_node_or_null("Limp") == null and kn.get_node("Body").global_position.y > 0.65, "Revive: standing again (the Knight is short: 0.77 m to their middle)")
 			print("FAILS: %d" % fails)
 			quit()
 			return true

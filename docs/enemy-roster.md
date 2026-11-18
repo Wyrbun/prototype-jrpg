@@ -6,7 +6,7 @@ be built.
 
 ## Decisions
 
-- **Parries don't deal damage** (for now). The Goblin's "double damage from
+- **Parries don't deal damage** (for now). The Ratkin's "double damage from
   Parry" is set aside until that changes.
 - **Hazard durations count the caster's own turns**: "Rock Spikes last 2
   Stone Golem turns" means they vanish after the Golem has acted twice more.
@@ -29,7 +29,7 @@ the Golem took 10 minutes.) The HP column is the base, used in the mixed rounds.
 enemy with `boss` on): their skills, falling rocks, rock blasts and the Counter
 stance. Summoned sprites and leftover hazards (rock spikes, fire) don't count.
 **Melee tracking:** short cones and lines (Golem Heavy Attack, Living Armor
-Combo, Ogre Attack, Goblin Attack and Smash, Gust, the Training Golem's Attack
+Combo, Ogre Attack, Ratkin Attack and Smash, Gust, the Training Golem's Attack
 and Smash) keep turning fast to the end of the cast at a target in melee
 range, and the enemy steps after it (`BattleArena.melee_track_*`; details in
 `battle-design.md`).
@@ -38,19 +38,19 @@ against distance), not just the nearest (`BattleArena.threat_*`).
 
 | Enemy | HP | In game now | Waiting on |
 |---|---|---|---|
-| Goblin Fighter (no positionals) | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
+| Ratkin Fighter (no positionals) | 225 | Attack (short line, 2 hits), Smash (wide cone, can't be blocked), Defend (lets 40% of a hit through) | |
 | Kobold Archer (no positionals) | 175 | Ranged Attack (donut 2.5-12 m: safe only right next to it), Power Shot (unavoidable on its target unless a rock blocks, aims exactly; slow cast, 46 damage; long line, can't be parried, 2 s wind-up; rocks block it), Counter. **Team tactics** when there are two: they fan out (about 8 m apart), while one prepares a Power Shot the other leans toward Ranged Attack, two Power Shots at once are rare, and only the first one uses Counter. A Ranged Attack paired with a Power Shot waits to land 2.5 s after it (grey, tagged NEXT, until the Power Shot is done) | |
 | Bandit Arcanist | 188 | Ranged Attack (half-circle), Wind Slash (line; stops at the first one hit and throws them 3 m), Fireball (unavoidable, no Parry or Defend: circle on its target; hits everyone inside, so stand alone) | |
 | Ogre Warrior | 450 | Attack (short cone, 2 hits), Shield Bash (line; snaps to its target on reveal, then holds aim; stops at the first one hit; can't be parried), Shout (4 m circle; pushes everyone out), then Sword Spin 2 s later (donut 3.5-6 m; always hits everyone Shout pushed, others can dodge into the middle; can't be parried) | |
-| Orc Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle, at most 60 HP each; 3 hits from within 1.5 m interrupt it), Curse (unavoidable, no Parry or Defend: a line to each party member, rocks block; in 2+ lines: double damage) | |
+| Desert Shaman | 250 | Attack (long line), Healing Ritual (heals allies 15% in a 9 m circle, at most 60 HP each; 3 hits from within 1.5 m interrupt it), Curse (unavoidable, no Parry or Defend: a line to each party member, rocks block; in 2+ lines: double damage) | |
 | Stone Golem | 960 | Heavy Attack, Crush, Rock Stomp, Right/Left Golem Smash (half the room, it can't turn), Ceiling Burst (falling circles that leave rocks that stay; only its first 2 bursts leave rocks; if none has fallen yet, it always casts one when it first drops to 75% HP), Golem Smash blows up the rocks in its half (circles that hurt), Right + Left / Left + Right Golem Smash (one side, then the other 2 s later: every rock in the arena blows up), the two combined, Rock Spikes (unavoidable: circle on its target, then 4 spikes that hurt anyone walking into them for 2 Golem turns), Stone Guard (Defense stance, lets 30% through) | |
 | Living Armor | 900 | Doom Gaze (arena-wide instant death: hide behind the rock it drops), Combo (3 hits in a 4.5 m cone; the last throws you 5 m unless you Parry it; each hit can be Parried), Dark Bolt (a circle on each party member; always hits everyone for 18, overlaps take double), Shadowflare (hits everyone inside its circle; grows slowly from 2 m to the arena's corners (from the middle); 3 Shadow Sprites circle its edge: hit each once and it stops growing; or run to the far side when the Armor is off to one side; a phase at 50% and 20% HP: the first cast after each is a Shadowflare, with about 12 s to stop it), Parry Stance (Counter stance) | |
 | Dragon Hatchling | 960 | **Closes in** (`closes_in`): while none of its aimed skills reaches anyone it walks 2.5x faster, so keeping away doesn't leave it casting only Burning Spike. Breath (unavoidable on its target, tracks it exactly; massive cone; damage shrinks the more people it hits: stack up; slow cast, 60% speed), Fire Wave (huge line; leaves fire for 3 Dragon turns), Burning Spike (unavoidable: 20 damage, a circle on each party member; cast least often; anyone in an overlap drops to 1 HP; each circle keeps burning for 3 Dragon turns, 5 under half HP, 8 HP/s). Fire Wave (as often as Breath; fire 5 turns, 20 HP/s + 15 to step in, at most 3 lines), Scorch and Breathe (Fire Wave then Breath), and at half HP once Wings of Fire (four lasting fire lines along the arena, two on its edges: three lanes) | |
-| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, its whole front out to 8 m: back off or Parry / Defend), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). **Under half HP:** Gale Lanes becomes Double Gale Lanes (the 2 gaps first, leaving the 3 lanes safe, then those 3 lanes 2.5 s later), and only now does it combine push / pull with lanes: Gale Burst (Exhale, then Double Gale Lanes) and Gale Draw (Inhale, then Double Gale Lanes). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it spits out a Gust Sprite (if none is up; 60 HP, unkillable, takes 20% damage; Lightweight: every hit knocks it back, walls bounce it, a hole or the ledge drops it; explodes (Detonate, 4 m, 45) after a 25 s fuse; a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls. **Only Maw Bite can be Parried**: everything else must be dodged or Defended. **Stagger bars** (hit it head-on): Inhale 70, Deep Breath 70, Undertow 80, Exhale 90 (turns into Broken Exhale), Gale Draw and Gale Burst 120. **Feed it a sprite:** a Gust Sprite knocked into its body while it pulls (Inhale, Deep Breath, Gale Draw: its mouth is open) makes it choke: the sprite's Detonate goes off inside (3x: 135) and it is Staggered (`_check_choke`, `choke_damage_mult`). While its mouth is open, a **black mouth** shows on its front (`_update_mouths`). Otherwise its body bounces sprites off. **Telegraphs:** pulls are teal (pushes pink); a combo's follow-up shows faintly under its first part once revealed; during its whole-arena breaths the floor each rock shelters is drawn clear | |
+| Gale Maw (wall boss, no positionals) | 1,200 | Set into the north wall of the Cliff; never moves. Inhale (whole arena, pulls 4 m toward the wall), Exhale (whole arena, pushes 7 m toward the drop), Maw Bite (80, its whole front out to 8 m: back off or Parry / Defend), Deep Breath (Inhale, then Maw Bite 1.5 s later), Gale Lanes (3 lanes across the arena, gaps between are safe; push 5 m), Breaker (everything 7+ m from the wall; push 4 m), Wall Sweep (a strip along the wall; push 4 m), Undertow (a line to each party member, pulls 3 m, double where lines cross, lines run 3.5 m past you, two lines on an Off-Balance fighter), Gale Burst (Exhale, then Gale Lanes 1 s later). **Under half HP:** Gale Lanes becomes Double Gale Lanes (the 2 gaps first, leaving the 3 lanes safe, then those 3 lanes 2.5 s later), and only now does it combine push / pull with lanes: Gale Burst (Exhale, then Double Gale Lanes) and Gale Draw (Inhale, then Double Gale Lanes). Rocks between you and the wall shelter you, but its blasts crack them (2 cracks and a rock shatters, growing back after 3 of its actions). At half HP the cliff edge crumbles 2.5 m closer. Anyone it pushes or pulls is Winded (12 back on the timeline). Every 4th action it flings a Gust Sprite with one of its paws (if none is up; 60 HP, unkillable, takes 20% damage; Lightweight: every hit knocks it back, walls bounce it, a hole or the ledge drops it; explodes (Detonate, 4 m, 45) after a 25 s fuse; a small cone that knocks back 2 m) that go down with it. Defend halves pushes and pulls. **Only Maw Bite can be Parried**: everything else must be dodged or Defended. **Stagger bars** (hit it head-on): Inhale 70, Deep Breath 70, Undertow 80, Exhale 90 (turns into Broken Exhale), Gale Draw and Gale Burst 120. **Feed it a sprite:** a Gust Sprite knocked into its body while it pulls (Inhale, Deep Breath, Gale Draw: its mouth is open) makes it choke: the sprite's Detonate goes off inside (3x: 135) and it is Staggered (`_check_choke`, `choke_damage_mult`). While its mouth is open, a **black mouth** shows on its front (`_update_mouths`). Otherwise its body bounces sprites off. **Telegraphs:** pulls are teal (pushes pink); a combo's follow-up shows faintly under its first part once revealed; during its whole-arena breaths the floor each rock shelters is drawn clear | |
 
 ## Normal enemies
 
-### Goblin Fighter
+### Ratkin Fighter
 | Skill | Kind | Shape | Rules |
 |---|---|---|---|
 | Normal attack | Attack | Short line | 2 hits |
@@ -79,7 +79,7 @@ against distance), not just the nearest (`BattleArena.threat_*`).
 | Shout | Special | Large circle around itself | Pushes everyone inside out of it |
 | Sword Spin | Smash | Donut | Follows Shout immediately; anyone hit by Shout is guaranteed to be hit; cannot be Parried |
 
-### Orc Shaman
+### Desert Shaman
 | Skill | Kind | Shape | Rules |
 |---|---|---|---|
 | Normal attack | Attack | Long line | 1 hit |
@@ -98,8 +98,8 @@ Rules in `battle-design.md`.
 |---|---|---|---|
 | Kobold Archer | Power Shot | 30 | Breaks |
 | Bandit Arcanist | Fireball | 30 | Breaks |
-| Orc Shaman | Curse | 35 | Breaks |
-| Orc Shaman | Healing Ritual | 3 close hits (its own rule, shown as a bar) | Interrupted |
+| Desert Shaman | Curse | 35 | Breaks |
+| Desert Shaman | Healing Ritual | 3 close hits (its own rule, shown as a bar) | Interrupted |
 | Living Armor | Dark Bolt | 70 | Breaks |
 | Living Armor | Shadowflare | Hit each of its 3 Shadow Sprites once (shown as 3 pips) | Stops growing |
 | Dragon Hatchling | Breath | 90 | Breaks |
@@ -172,11 +172,11 @@ Also: Exhale, Gale Burst and Breaker **crack rocks** in their area (2 cracks sha
 | Cone, circle around self, half-circle (180° cone) | Golem, Arcanist, most enemies | have |
 | **Enemy template** (skills edited in the Inspector) | all | have |
 | Hidden intent, casting zone, Parry / Defend | all | have |
-| Defense / Counter stances | Goblin, Kobold | have (partial guard: let_through) |
-| **Line** (rectangle) shape | Goblin, Kobold, Arcanist, Ogre, Shaman, Golem, Dragon | have |
+| Defense / Counter stances | Ratkin, Kobold | have (partial guard: let_through) |
+| **Line** (rectangle) shape | Ratkin, Kobold, Arcanist, Ogre, Shaman, Golem, Dragon | have |
 | **Donut** shape | Kobold, Ogre | have |
-| **Multi-hit enemy attacks** (one ring per hit) | Goblin, Ogre, Living Armor | have (Living Armor uses it) |
-| **Cannot be parried / cannot be blocked** flags | Goblin, Kobold, Ogre, Shaman | have |
+| **Multi-hit enemy attacks** (one ring per hit) | Ratkin, Ogre, Living Armor | have (Living Armor uses it) |
+| **Cannot be parried / cannot be blocked** flags | Ratkin, Kobold, Ogre, Shaman | have |
 | **Shape placed on a character** (marked target) | Arcanist, Golem, Living Armor, Dragon | have (on one: Fireball, Rock Spikes; on every member: Dark Bolt, Burning Spike) |
 | **One shape per party member** + **overlap rules** | Shaman, Living Armor, Dragon | have |
 | **Stops at first hit** / **snaps to a target** | Arcanist, Ogre | have |

@@ -64,6 +64,7 @@ func _process(d):
 	cast(g, "Exhale"); strike(g)
 	check(is_equal_approx(k.global_position.x, -6.0) and absf(k.global_position.z - 5.0) < 0.05, "Exhale pushes the Knight 7 m straight back (%s)" % k.global_position)
 	check(ar.hp == ar.max_hp and absf(ar.global_position.z - 2.5) < 0.01, "behind a rock: sheltered (Archer %d)" % ar.hp)
+	check(not k.has_meta("knocked") and k.get_node_or_null("Limp") == null, "a 7 m Exhale push doesn't knock the Knight down")
 	# Defend halves it (Block class)
 	reset(); k.global_position = Vector3(-6, 0, -2); mg.global_position = Vector3(6, 0, -2)
 	a.ap = 100; cast(g, "Exhale"); a._enemy_unleash(g, false); a._try_defend()
@@ -76,6 +77,7 @@ func _process(d):
 	cast(g, "Inhale"); strike(g)
 	check(k.gap_to(g) <= 0.25 and k.gap_to(g) >= -0.05, "Inhale drags the Knight up to its face (gap %.2f)" % k.gap_to(g))
 	check(is_equal_approx(ar.global_position.x, -8.0) and absf(ar.global_position.z + 2.0) < 0.05, "Archer pulled 4 m straight in (%s)" % ar.global_position)
+	check(not k.has_meta("knocked") and not ar.has_meta("knocked"), "Inhale knocks nobody down")
 	# Deep Breath: Inhale, then the bite is loaded and shown
 	reset(); k.global_position = Vector3(0, 0, 2)
 	cast(g, "Deep Breath"); strike(g)

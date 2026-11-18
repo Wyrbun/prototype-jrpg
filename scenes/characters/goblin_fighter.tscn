@@ -42,8 +42,8 @@ size = Vector3(0.9, 1.0, 0.9)
 [sub_resource type="StandardMaterial3D" id="Mat_body"]
 albedo_color = Color(0.45, 0.6, 0.25, 1)
 
-[node name="GoblinFighter" instance=ExtResource("1_base")]
-display_name = "Goblin Fighter"
+[node name="RatkinFighter" instance=ExtResource("1_base")]
+display_name = "Ratkin Fighter"
 max_hp = 225
 speed = 11.0
 move_speed = 3.5

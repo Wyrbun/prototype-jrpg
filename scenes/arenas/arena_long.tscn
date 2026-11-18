@@ -5,6 +5,7 @@
 
 [node name="ArenaLong" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "pass"
 shape = 0
 size = Vector2(24, 8)
 floor_color = Color(0.3, 0.33, 0.36, 1)

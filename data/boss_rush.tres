@@ -67,7 +67,7 @@ title = "Round 6"
 arena = ExtResource("a_square")
 party = Array[PackedScene]([ExtResource("c_assassin"), ExtResource("c_knight")])
 enemies = Array[PackedScene]([ExtResource("c_ogre_warrior"), ExtResource("c_goblin_fighter")])
-tip = "The Assassin joins! Hit the Ogre from behind: the violet arc of its ring.\nThe Goblin's full ring means any side counts. Backstab from behind adds Marks.\nMarks auto-parry for the Assassin and make Execute cheaper."
+tip = "The Assassin joins! Hit the Ogre from behind: the violet arc of its ring.\nThe Ratkin's full ring means any side counts. Backstab from behind adds Marks.\nMarks auto-parry for the Assassin and make Execute cheaper."
 
 [sub_resource type="Resource" id="Round_7"]
 script = ExtResource("2_encounter")

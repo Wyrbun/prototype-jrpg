@@ -5,6 +5,7 @@
 
 [node name="ArenaPit" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "cave"
 shape = 1
 size = Vector2(22, 22)
 floor_color = Color(0.34, 0.3, 0.27, 1)

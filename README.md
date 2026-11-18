@@ -10,7 +10,8 @@ battle systems:
 - **Mabinogi**: a skill triangle (Attack, Smash, Defense, Counter) and reading the enemy
 - **Legend of Legaia**: combos built in an AP bar, timed button presses, and secret Arts
 
-Placeholder art throughout (capsules and boxes): this stage is about a fun core loop.
+A PS1-style look with a furry cast: low-poly animal heroes and enemies, smooth
+animation, a retro screen filter (Normal, Light or Off), and a place for every arena.
 
 ![A party of four against the Stone Golem: everyone moves at once while the Golem's attacks are revealed late on the floor](docs/screenshots/golem.gif)
 
@@ -33,8 +34,11 @@ Placeholder art throughout (capsules and boxes): this stage is about a fun core 
 - **Arenas with drops**: holes and lethal edges you can knock enemies into, or be thrown into yourself
 - **Party AI** that dodges revealed attacks, keeps off ledges, heals, revives, and splits up to answer boss mechanics
 - **Victory and Defeat screens**: a rank from S to C with a Fight summary after a win, and a *What went wrong* page with a tip after a loss
-- **Ragdolls**: strong blows throw a downed fighter across the arena; anything else and they flop over
-- **A guided tutorial** that teaches every mechanic, step by step, and a **Command List** in the pause menu to preview and practise every move
+- **Ragdolls**: strong blows knock fighters down and throw them across the arena, and the last enemy of a fight falls in slow motion
+- **Sound and music**: hits, spells, Parries and menus all have sounds, with music for every fight, the bosses and the menus (all CC0)
+- **Controller support** (Xbox layout): play the whole game on a gamepad, with on-screen prompts that switch to its buttons and rebindable buttons
+- **Options**: screen filter, master, music and sound volume, camera speed, mouse sensitivity and invert, Party AI and more
+- **A guided tutorial** that teaches every mechanic, step by step, and a **Command List** in the pause menu (Esc) to preview and practise every move
 - **Play-test reports** written after every fight (*Open play-test report* on the end screen, or O)
 
 ## How a fight works
@@ -50,7 +54,7 @@ lands, or **Parry** (E) or **Defend** (Q) the strike.
 far), one **Ability** (and you can still attack after it), or **Wait**. Then
 time runs again while that fighter winds up toward **ACT**; get them in reach
 of their target before they get there. Out of reach, the turn turns into a
-Wait. Prefer the old way? *Command timing: Classic* in the pause menu opens
+Wait. Prefer the old way? *Command timing: Classic* in Options opens
 the menu right at the end of the bar.
 
 **Attacking** opens a combo bar: fill it with moves, then hit each timing as
@@ -79,24 +83,24 @@ C: Health, Timing, Reading and Pace) and the way on: Next round, Retry, Change
 party, the play-test report or back to the menu. After a defeat, *What went
 wrong* shows what hurt most, who went down to what, and a tip.
 
-**Rather steer just one?** Turn on *Party AI* in the pause menu: everyone you
+**Rather steer just one?** Turn on *Party AI* in Options (title screen or Esc): everyone you
 aren't steering plays their own turns instantly (with the Arts you've found),
 leaving AP for yours. Tab still takes any of them over.
 
 ## How to play
 
-**Current build: [0.9.0](../../releases/tag/v0.9.0)** (pre-release; all builds are on the [Releases](../../releases) page)
+**Current build: [1.0.0](../../releases/tag/v1.0.0)** (all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-0.9.0-windows.zip`](../../releases/download/v0.9.0/PrototypeJRPG-0.9.0-windows.zip),
+[`PrototypeJRPG-1.0.0-windows.zip`](../../releases/download/v1.0.0/PrototypeJRPG-1.0.0-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-0.9.0-linux.tar.gz`](../../releases/download/v0.9.0/PrototypeJRPG-0.9.0-linux.tar.gz), then:
+[`PrototypeJRPG-1.0.0-linux.tar.gz`](../../releases/download/v1.0.0/PrototypeJRPG-1.0.0-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-0.9.0-linux.tar.gz
+tar -xzf PrototypeJRPG-1.0.0-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -170,3 +174,5 @@ get new releases as they come out, and ask the game's bot anything with
 - [x] Knockdown (push away, disable or reshape enemy areas): Stagger bars, pushes and pulls, interrupts
 - [x] Complete fight: victory and defeat screens with a rank, balance pass
 - [x] Items: a pouch per fight (Potion, Ether, Revive), one per turn in the Ability slot
+- [x] PS1 look: furry low-poly figures, animations for every move, physics ragdolls, arenas that are places
+- [x] Sound and music, controller support, Options (volume, camera, screen filter)

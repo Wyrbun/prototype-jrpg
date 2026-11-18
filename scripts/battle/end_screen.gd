@@ -54,6 +54,7 @@ func wants(event: InputEvent) -> bool:
 
 ## Keys from the arena. Returns true if the event was used.
 func handle(event: InputEvent) -> bool:
+	Sfx.menu_keys(event)
 	if page != "":
 		if event.is_action_pressed("cancel") or event.is_action_pressed("confirm"):
 			page = ""
@@ -105,6 +106,17 @@ func _text(pos: Vector2, text: String, font_size: int, color: Color, centered :=
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
+## Text no wider than `width`: a smaller size (down to 13), then cut with "…".
+func _text_fit(pos: Vector2, text: String, font_size: int, color: Color, width: float) -> void:
+	var font := _font()
+	var fs := font_size
+	while fs > 13 and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > width:
+		fs -= 1
+	while text.length() > 1 and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > width:
+		text = text.substr(0, text.length() - 2) + "…"
+	_text(pos, text, fs, color)
+
+
 func _draw_panel() -> void:
 	var result := String(data.get("result", "victory"))
 	var width := 460.0
@@ -118,8 +130,10 @@ func _draw_panel() -> void:
 	var banner_size := 44 if result != "tutorial" else 34
 	var bx := panel.position.x + 28.0
 	HudStyle.draw_header(self, Vector2(bx, panel.position.y + 62.0), banner, banner_size, color)
-	_text(Vector2(bx, panel.position.y + 96.0), String(data.get("title", "")), 19, Color.WHITE)
-	_text(Vector2(bx, panel.position.y + 122.0), String(data.get("subtitle", "")), 17, DIM)
+	# Title and subtitle stop short of the rank box (long names shrink).
+	var room := (panel.end.x - 130.0 if rank != "" else panel.end.x - 20.0) - bx
+	_text_fit(Vector2(bx, panel.position.y + 96.0), String(data.get("title", "")), 19, Color.WHITE, room)
+	_text_fit(Vector2(bx, panel.position.y + 122.0), String(data.get("subtitle", "")), 17, DIM, room)
 	if rank != "":
 		# The rank: one big letter on the right, the best so far under it.
 		var box := Rect2(panel.end.x - 118.0, panel.position.y + 20.0, 92.0, 92.0)

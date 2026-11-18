@@ -5,6 +5,7 @@
 
 [node name="ArenaCliff" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "cliff"
 shape = 0
 size = Vector2(22, 14)
 floor_color = Color(0.4, 0.42, 0.4, 1)

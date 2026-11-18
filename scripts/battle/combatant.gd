@@ -90,7 +90,7 @@ var focus_clock := 0.0
 var focus_walked := 0.0
 var _focus_base := -1.0
 ## Enemies: no positionals. Every hit counts as "from behind", from anywhere
-## (its ring is a plain full circle). Small enemies (Goblin, Kobold).
+## (its ring is a plain full circle). Small enemies (Ratkin Fighter, Kobold).
 @export var no_positionals := false
 ## Enemies only: a boss can't be knocked off the arena or into a hole.
 @export var boss := false
@@ -263,6 +263,8 @@ var _reach_ring: MeshInstance3D = null
 var hide_reach := false
 var _reach_material: StandardMaterial3D = null
 var _body_rest_position := Vector3.ZERO
+## Party: the figure's animator (FigureAnim), or null.
+var anim: FigureAnim = null
 var _lunge_tween: Tween = null
 
 @onready var _name_label: Label3D = $NameLabel
@@ -284,6 +286,9 @@ func _ready() -> void:
 		_body_rest_position = body.position
 
 	if team == Team.ENEMY:
+		if EnemyFigure.build(self) and body:
+			_body_rest_position = body.position
+			anim = FigureAnim.attach(self)
 		# A second floating label, above the name, for the loaded skill.
 		_skill_label = Label3D.new()
 		_skill_label.position = _name_label.position + Vector3(0.0, 0.55, 0.0)
@@ -293,6 +298,9 @@ func _ready() -> void:
 		add_child(_skill_label)
 
 	if team == Team.PARTY:
+		if Figure.build(self) and body:
+			_body_rest_position = body.position  # the figure's height moves it
+			anim = FigureAnim.attach(self)
 		_build_reach_ring()
 
 	# Groups are Godot's way of tagging nodes so other scripts can find them.
@@ -386,10 +394,14 @@ func take_damage(amount: int, recoverable_hit: bool) -> int:
 	hp -= lost
 	if team == Team.ENEMY and loaded_def != null:
 		cast_damage_taken += lost
+	if team == Team.ENEMY and lost > 0:
+		BattleSounds.enemy_hurt(self, hp <= 0)
 	if hp <= 0:
 		_go_down()
 	elif recoverable_hit:
 		recoverable = lost
+	if lost > 0:
+		animate("hit")  # the arena may swap in a heavier stagger (party)
 	return lost
 
 
@@ -590,6 +602,8 @@ func reach() -> float:
 
 ## Walking speed right now (Haste adds 20%).
 func current_move_speed() -> float:
+	if has_meta("knocked"):
+		return 0.0  # knocked down: can't walk until back up
 	return move_speed * (1.2 if statuses.has("haste") else 1.0)
 
 
@@ -667,6 +681,7 @@ func recover_hp() -> int:
 
 func _go_down() -> void:
 	is_down = true
+	set_meta("down_ms", Time.get_ticks_msec())  # who fell last (the finale's camera)
 	recoverable = 0
 	if climbs():
 		reset_climb()
@@ -683,12 +698,49 @@ func _go_down() -> void:
 		body.rotation_degrees.x = 90.0
 		body.position.y = 0.4
 	set_highlighted(false)
+	if team == Team.ENEMY and _ragdoll_on_defeat():
+		return
 	if team == Team.ENEMY:
 		# Defeated enemies sink away after a moment (they no longer block anyone).
 		var fade := create_tween()
 		fade.tween_interval(2.0)
 		fade.tween_property(self, "scale", Vector3(0.01, 0.01, 0.01), 0.5)
 		fade.tween_callback(func(): visible = false)
+
+
+## An enemy (not part of a wall) beaten: its figure goes limp. A small one
+## is thrown away from the last blow (meta "hit_from", how hard:
+## "hit_power"); a boss crumples where it stands. It lies still a moment,
+## then sinks through the floor.
+## Returns false if it doesn't ragdoll (it fades the old way).
+func _ragdoll_on_defeat() -> bool:
+	if anchored or get_meta("fell", false):
+		return false
+	var rig := make_limp() as Ragdoll
+	if rig == null:
+		return false
+	var from: Vector3 = get_meta("hit_from", global_position + flat_forward())
+	var away := global_position - from
+	away.y = 0.0
+	away = away.normalized() if away.length() > 0.05 else -flat_forward()
+	var power := float(get_meta("hit_power", 1.0))
+	rig.land_sound = "enemy_land"
+	if boss:
+		# A boss isn't thrown: it crumples where it stands.
+		rig.launch(away * 1.4 + Vector3.UP * 3.2, Vector3.UP.cross(away) * randf_range(6.0, 7.0))
+	else:
+		rig.launch(away * (1.5 + power) + Vector3.UP * (2.5 + power * 0.7),
+				Vector3.UP.cross(away) * randf_range(5.0, 9.0))
+	var fade := create_tween()
+	fade.tween_interval(3.0)
+	fade.tween_callback(func():
+		if is_instance_valid(rig) and rig.get_parent() == self:
+			if not get_meta("quiet_vanish", false):  # not over the results (see BattleArena)
+				Sfx.play("enemy_vanish", -3.0)
+			rig.sink(0.7))
+	fade.tween_interval(0.75)
+	fade.tween_callback(func(): visible = false)
+	return true
 
 
 ## Revive: back up with this much HP, a fresh timeline and the body
@@ -705,41 +757,30 @@ func revive(health: int) -> void:
 	if body:
 		body.rotation_degrees.x = 0.0
 		body.position.y = float(get_meta("body_y", 0.9))
+	if anim != null:
+		anim.reset()
 
 
-## Ragdoll: the body parts (not the name label) move under one pivot at the
-## fighter's feet, so the whole figure can tumble and lie down. Returns it.
+## Ragdoll: the figure's torso, head and limbs become physics bodies (see
+## Ragdoll), under a "Limp" node. Returns it.
 func make_limp() -> Node3D:
-	var pivot := get_node_or_null("Limp") as Node3D
-	if pivot != null:
-		return pivot
+	var rig := get_node_or_null("Limp") as Node3D
+	if rig != null:
+		return rig
 	var body := get_node_or_null("Body") as Node3D
 	if body:
 		body.rotation_degrees.x = 0.0  # undo the plain knocked-out pose
 		body.position.y = float(get_meta("body_y", body.position.y))
-	pivot = Node3D.new()
-	pivot.name = "Limp"
-	add_child(pivot)
-	for child in get_children():
-		if child is MeshInstance3D and child != pivot:
-			var keep: Transform3D = child.transform
-			remove_child(child)
-			pivot.add_child(child)
-			child.transform = keep
-	return pivot
+	return Ragdoll.build(self, Vector3(_body_rest_position.x, float(get_meta("body_y", _body_rest_position.y)), _body_rest_position.z))
 
 
-## Back on its feet: the body parts return from the ragdoll pivot.
+## Back on its feet: the body parts return from the ragdoll.
 func unlimp() -> void:
-	var pivot := get_node_or_null("Limp") as Node3D
-	if pivot == null:
-		return
-	for child in pivot.get_children():
-		var keep: Transform3D = child.transform
-		pivot.remove_child(child)
-		add_child(child)
-		child.transform = keep
-	pivot.free()
+	var rig := get_node_or_null("Limp")
+	if rig is Ragdoll:
+		(rig as Ragdoll).restore()
+	elif rig != null:
+		rig.free()
 
 
 ## Distance between this fighter's edge and another's (0 = touching).
@@ -749,8 +790,27 @@ func gap_to(other: Combatant) -> float:
 	return offset.length() - body_radius - other.body_radius
 
 
-## Placeholder attack animation: the body jabs forward and back.
-func play_lunge() -> void:
+## The wind-up of a hit landing in `lead` seconds (combo bar timing).
+func anticipate(move: Dictionary, hit: int, target: Node3D, lead: float) -> void:
+	if anim != null and not is_down:
+		anim.anticipate(move, hit, target, lead)
+
+
+## Plays one of the figure's animations (see FigureAnim.play); nothing for
+## fighters without a figure (enemies).
+func animate(action: String, move: Dictionary = {}) -> void:
+	if anim != null and not is_down:
+		anim.play(action, move)
+
+
+## Attack animation for one hit: the move's own sequence (MoveAnims) or the
+## class's basic swing, or (no figure) the body jabbing forward and back.
+## queued: after the hit playing now (AI turns land every hit at once).
+func play_lunge(move: Dictionary = {}, hit := 0, target: Node3D = null, queued := false) -> void:
+	if anim != null:
+		if not is_down and not anim.play_move(move, hit, target, queued):
+			animate("attack", move)
+		return
 	var body := get_node_or_null("Body") as Node3D
 	if body == null or is_down:
 		return

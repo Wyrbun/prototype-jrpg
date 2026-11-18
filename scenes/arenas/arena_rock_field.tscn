@@ -5,6 +5,7 @@
 
 [node name="ArenaRockField" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "canyon"
 shape = 0
 size = Vector2(21, 14)
 floor_color = Color(0.3, 0.35, 0.3, 1)

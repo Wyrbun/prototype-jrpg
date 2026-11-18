@@ -5,6 +5,7 @@
 
 [node name="ArenaRockCircle" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "forest"
 shape = 1
 size = Vector2(20, 20)
 floor_color = Color(0.36, 0.34, 0.28, 1)

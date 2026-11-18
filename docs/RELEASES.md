@@ -3,8 +3,9 @@
 Player-facing notes for each public build (Windows and Linux). The full development history is
 in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Versions:** `0.MINOR.PATCH` while the game is a prototype. MINOR goes up
-for new content or design changes, PATCH for fixes and tuning only. The
+**Versions:** `MAJOR.MINOR.PATCH` (`0.x` was the prototype, 1.0.0 the first
+full release). MINOR goes up for new content or design changes, PATCH for
+fixes and tuning only. The
 version shows in the bottom-right corner of the title screen and at the top
 of every play-test report.
 
@@ -23,6 +24,21 @@ of every play-test report.
    the new version.
 
 ---
+
+## 1.0.0: The PS1 look, sound and music, controller support
+
+- **A new look:** every hero and enemy is a low-poly furry figure in a PS1 style. The Knight is a rabbit, the Archer a bear, the Mage a goat, the Cleric a squirrel, the Assassin a wolf and the Monk a snapping turtle; enemies are rats, lizards, boars, hyenas and raccoons, and the bosses got proper bodies (the Gale Maw is a great wind-spirit ram in the cliff)
+- **Animations for every move:** each attack, Art and Ability has its own animation timed to the combo bar, with weapon trails, hit-stop on a Perfect, and effects for every class
+- **Knockdowns and physics ragdolls:** a Smash, a 40+ hit or a big push knocks you down and throws you; a Parry avoids it and Defend keeps you standing. Beaten enemies ragdoll too
+- **The last enemy's fall:** the camera locks on it and the game slows while it falls, then pans back to the party for the Victory screen
+- **Every arena is a place:** a town plaza, a forest clearing, a mountain pass, a crystal cave, sky ruins, a grand colosseum with a cheering crowd, a windswept cliff above a gorge and a red canyon, with muted colours that are easy on the eyes
+- **A living title screen:** one of the arenas turns slowly behind the menu
+- **Sound and music:** hits, spells, Parries, Perfects, knockdowns, items and menus all have sounds; music for regular fights, bosses (the Living Armor and the Gale Maw have their own), the tutorial, the menus, Round Select and victory, with victory and defeat jingles. All CC0, credited in `audio/CREDITS.md`
+- **Controller support (Xbox layout):** the whole game plays on a gamepad. Left stick or D-pad to move and choose, A to confirm and hit timings, B to go back, X to begin the combo, Y to switch, RB Parry, LB Defend, right stick for the camera, Menu to pause. Hints switch to controller buttons as soon as you use it, and the buttons can be rebound
+- **Options** (title screen and Esc): the screen filter (Normal, Light or Off), Move details, Command timing, Party AI, master, music and sound volume, camera speed, mouse sensitivity and Invert camera (X, Y or both)
+- **Change Keys in the Esc menu**, for keys and controller buttons
+- **Smarter allies:** the AI Mage keeps enough AP to cast a spell after an Enchant instead of spending her turn on it
+- **Fixes:** distant floor lines no longer flicker
 
 ## 0.9.0: Items, end screens, ragdolls
 

@@ -5,6 +5,7 @@
 
 [node name="ArenaGrand" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "colosseum"
 shape = 0
 size = Vector2(24, 24)
 floor_color = Color(0.28, 0.3, 0.36, 1)

@@ -47,7 +47,7 @@ threat ranges, and chained attacks.
     `melee_chase_share` (75%) of its length the enemy **steps after it**
     (not when pinned or frozen). In melee, Parry or Defend; dodging means
     leaving early. Covers Golem Heavy Attack, Living Armor Combo, Ogre
-    Attack, Goblin Attack and Smash, Gust Sprite Gust and the Training
+    Attack, Ratkin Attack and Smash, Gust Sprite Gust and the Training
     Golem's Attack and Smash; not half-room Smashes, placed circles, long
     lines, skills that snap and hold their aim (Shield Bash) or Breath
     (which already aims exactly). A short circle round the enemy itself
@@ -90,7 +90,7 @@ decision earlier, Grandia-style:
   (`windup_grace_seconds`, 1.5 s, was 1) where it still acts the moment it gets in
   reach; after that, if **another enemy is in reach**, the attack goes to
   the nearest one instead ("SWITCHES TARGET": "Knight can't reach Ogre
-  Warrior: attacks Orc Shaman instead"; never one in Counter stance, and an
+  Warrior: attacks Desert Shaman instead"; never one in Counter stance, and an
   AI ally skips tough enemies without a push, though Lightweight Gust
   Sprites are fair game since any hit pushes them; `_windup_fallback`).
   Nobody in reach: the turn **becomes a Wait** ("TOO FAR"). If the target
@@ -429,7 +429,7 @@ pieces should use these rather than their own StyleBoxes.
   with it): shown while a `flanks` fighter (the Assassin) is steered. Front
   arrow, thin white front/side arc, thick violet rear arc (±60° off the
   back), glowing while the Assassin is in it. Enemies with
-  `no_positionals` (Goblin Fighter, Kobold Archer) get a full violet ring:
+  `no_positionals` (Ratkin Fighter, Kobold Archer) get a full violet ring:
   `is_behind()` is always true for them, and Shadowstep's front bonus
   applies too.
 - **Can't be lost:** every fighter has `cannot_fall` (HP stops at 1), party
@@ -484,7 +484,7 @@ the triangle):
   then holds that aim until it strikes, so you can step out of the line
   (Shield Bash).
 - **let_through** (Defense stances): share of a hit that still gets through
-  instead of a full block (Goblin's Defend lets 40% through).
+  instead of a full block (Ratkin's Defend lets 40% through).
 - **push_out + follow_up:** pushes everyone inside out past the edge. The
   follow-up is revealed at once and strikes `follow_up_delay` seconds later
   (real seconds: when a fast boss's bar can't fit that before the end, the
@@ -625,7 +625,7 @@ Stances still work for any enemy that lists them.
   hit again first (a new hit locks the old damage in). Defending at low HP
   can still knock you out.
 - **No reaction**: full damage (Attack 20, Smash 35).
-- **Multi-hit strikes** (Goblin and Ogre Attack: 2 hits, Living Armor
+- **Multi-hit strikes** (Ratkin and Ogre Attack: 2 hits, Living Armor
   Combo: 3): every hit still to come shows its own fainter ring, closing in
   so it reaches the marker exactly when that hit lands (later hits come
   every 0.55 x the wind-up). Each hit can be Parried in its own window and

@@ -49,8 +49,8 @@ func _process(d):
 	done = true
 	a.set_process(false)
 	if OS.get_environment("R") == "8":
-		var sh = en("Orc Shaman"); var k = m("knight"); var ar = m("archer"); var mg = m("mage"); var cl = m("cleric")
-		var gob = en("Goblin Fighter A")
+		var sh = en("Desert Shaman"); var k = m("knight"); var ar = m("archer"); var mg = m("mage"); var cl = m("cleric")
+		var gob = en("Ratkin Fighter A")
 		reset(); sh.global_position = Vector3(0, 0, 0); gob.global_position = Vector3(3, 0, 0)
 		for x in 200: sh.last_skill = null; var pick = a._choose_enemy_skill(sh); check(pick.skill_name != "Healing Ritual", "") if x == 0 else null
 		var heals := 0
@@ -64,7 +64,7 @@ func _process(d):
 			if a._choose_enemy_skill(sh).skill_name == "Healing Ritual": heals += 1
 		check(heals > 150, "two allies hurt: Healing Ritual is favored (%d / 300)" % heals)
 		cast(sh, "Healing Ritual"); strike(sh)
-		check(gob.hp == 145 and sh.hp == 170, "Healing Ritual heals 20%% (Goblin %d, Shaman %d)" % [gob.hp, sh.hp])
+		check(gob.hp == 145 and sh.hp == 170, "Healing Ritual heals 20%% (Ratkin %d, Shaman %d)" % [gob.hp, sh.hp])
 		# interrupt with 3 close hits (Knight double slash + slash)
 		reset(); sh.global_position = Vector3(0, 0, 0); gob.hp = 100; k.global_position = Vector3(0, 0, 1.4)
 		cast(sh, "Healing Ritual")

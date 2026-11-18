@@ -4,6 +4,368 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## Version 1.0.0
+
+- Project Settings, the Windows preset and the README say 1.0.0 (the
+  README's download links too). The README describes the new look, sound
+  and music, controller support and Options, and points Party AI and
+  Command timing at Options. `RELEASES.md` has the 1.0.0 notes, and its
+  version rule now reads MAJOR.MINOR.PATCH.
+
+## AI Mage: no Enchant that leaves her nothing to cast
+
+- Play-test (Round 5, steering the Knight): the AI Mage spent two turns on
+  Enchant (30 AP) and Waited the other two, dealing no damage of her own;
+  the Knight's spending left too little in the shared AP for a spell at
+  her act. She now Enchants only if what's left after it, less what's kept
+  for you, still covers her cheapest spell (20 AP); otherwise she casts.
+- New play-test counts: "ai no ap" (an AI ally would have attacked but the
+  party's AP was spent), per class. Test: `_aimageap.gd`.
+
+## A controller notice at start-up
+
+- Once per launch, before the title menu: "Controller support: this game
+  also has controller support" over the screen, with a small gamepad
+  drawing. It fades after 4 seconds, or at any key, button or click (which
+  does nothing else). `title_menu.gd` NOTICE_SECONDS.
+
+## Camera options
+
+- Options (title and Esc): Camera speed (the right stick and the camera
+  keys) and Mouse sensitivity (right-drag), each 50% to 200% (100% by
+  default), and Invert camera: Off, X (left / right), Y (up / down) or
+  both, for the stick, keys and mouse alike. The right stick also tilts
+  the camera. Saved under `[camera]` in settings.cfg. Test: `_camspeed.gd`.
+- Master volume (Options, above Music and Sounds): scales both.
+
+## Controller support (Xbox layout)
+
+- Every action has pad buttons (added at start-up, `Keybinds.PAD_DEFAULTS`):
+  left stick / D-pad move and choose, A confirm and timed hits, B back,
+  X begin the combo, Y switch party member (hold: choose), RB Parry,
+  LB Defend, right stick turns and tilts the camera (tilt: up looks up,
+  as with the mouse; camera_tilt_degrees_per_second), a right-stick click resets it, Menu
+  pauses, View retries after a fight. The Mage's spell codes: D-pad or
+  left-stick flicks.
+- `Pad` (scripts/pad.gd), one node under the root: notes whether the pad
+  or the keyboard was used last (`Pad.active`) and keeps raw stick motion
+  away from the menus: each push of the left stick past 0.6 (let back
+  under 0.35) is one press, so menus step once per push while the stick
+  still walks and turns the camera smoothly.
+- Hints switch to pad buttons while the pad is in use (`Keybinds.label` /
+  `fill`; "Esc" reads "Menu", Enter/Backspace/right-drag mentions drop).
+- Change Keys (title and pause) shows each action's pad button beside its
+  key; pressing a pad button on a row rebinds it (swapping with whoever
+  had it), Menu keeps the old one, Reset restores the pad too. Saved with
+  the keys (`[pad]` in keybinds.cfg). Test: `_pad.gd`.
+
+## Change Keys in the pause menu
+
+- Esc > Change Keys: the same rebinding as on the title screen (a row
+  waits for a key, Esc keeps the old one, Reset puts every key back), so
+  keys can be changed mid-fight. Test: `_pausekeys.gd`.
+
+## The last enemy's fall, and a victory theme
+
+- When the last enemy of a fight goes down: the camera locks on it and
+  comes in a little, the game slows to about a third for 2 seconds while it
+  falls (a regular enemy is thrown, a boss now crumples as a ragdoll too),
+  the camera stays on the body until it lies still (1.2 s at most), pans
+  back to the party, then the Victory panel shows. Exports on the battle
+  scene: victory_slowmo_scale / _seconds, finale_zoom,
+  finale_settle_seconds, finale_pause. Skipped when the game runs faster
+  (sims).
+- After a win, a second after the victory jingle, the victory theme plays
+  (Town3 - Sunshine Coast) until you leave the results (victory_theme_gap).
+
+
+- Past the Gale Maw arena's drop there's now a gorge: a jagged rock face
+  going down from the floor's edge into the dark, another rising on the
+  far side, where the land carries on (`"chasm"` in the cliff's scenery,
+  `ArenaScenery._chasm()`). The walls and the gorge's floor ignore the fog
+  so the depths stay dark, and a few wisps of mist hang down in it. It
+  follows the edge when it crumbles at half HP.
+
+## A living title screen
+
+- The title screen shows one of the arenas, empty, the camera slowly
+  circling it (about two and a half minutes a lap) through the screen
+  filter, under a dim veil so the menu reads (`TitleBackdrop`,
+  `title_menu.gd` BACKDROP_VEIL). Which arena is picked at random once per
+  launch.
+
+## Sound and music
+
+- All CC0 (public domain): Kenney's Impact, Interface, RPG Audio and Music
+  Jingles packs, rubberduck's 80 CC0 RPG SFX, artisticdude's RPG Sound
+  Pack, Juhani Junkala's JRPG music, cynicmusic and Wolfgang_. Thiago picked
+  every sound from a listening folder (`audio_picks/`, ignored by Godot);
+  only the picks are in `audio/sfx` and `audio/music`, each file's source
+  in `audio/CREDITS.md`.
+- `Sfx` (scripts/sfx.gd): `Sfx.play("name")` picks one of `name_1`,
+  `name_2`... at random with a slight pitch wobble; the same sound isn't
+  started twice within 45 ms. `Sfx.music("track")` loops and crossfades.
+  It keeps playing while the game is paused. `BattleSounds` decides which
+  sound goes with what in a fight.
+- Fights: swings just before a melee hit lands (the Knight and Assassin
+  sometimes draw the blade instead), sword/dagger, blunt and heavy (Smash)
+  hits, the bow, the Mage's spells per element (Fire whooshes on the cast,
+  burns on landing), fire on burning enemy skills, a chime on every timing
+  hit, a bigger one when a whole bar is played with no misses, Parry
+  clangs (two notes taking turns along a multi-hit chain, a Perfect Parry
+  for the last of a fully parried chain, a dull clunk for a Parry too
+  early), knockdown landings (light, or heavier when thrown far: the
+  ragdoll's torso hitting the floor), enemies hurt (normal enemies), dying
+  (their own cries for the Ogre, Dragon Hatchling, Stone Golem, Gale Maw)
+  and landing and vanishing, healing spells and the HP number popping up,
+  items, Revive, Teleport, Focus switching on.
+- A guard's clank when an enemy's Defense blocks (or softens) a hit, and a
+  blade drawn when an enemy readies a Counter.
+- A whiff when the very first timing of an attack is missed (the attack
+  misses entirely).
+- Menus: cursor, confirm (half volume), back; taking a move off the timeline has its own.
+- Music: the battle theme; the boss theme; the Living Armor and the Gale
+  Maw have their own when they're the only boss; title and Round Select
+  themes; the tutorial's own theme; victory and defeat jingles on the
+  results screen (a victory theme after a win, quiet after a loss). The pause menu lowers the music, and a track's menu
+  version (`<track>_8bit`, none yet) would play instead, at the same point.
+- Options: Music and Sounds volume (100/80/60/40/20/Off), both 20% by
+  default. Test: `_sfx.gd`.
+
+## AI allies near drops
+
+- Play-test (Round 5, Sky Ruins): AI allies backed off the holes 306 times
+  in under two minutes: a jittery shuffle on the safety line. Now an ally
+  backing off goes 0.6 m past the line before it stops
+  (`ledge_hysteresis`), and an ally walking in to attack, with no push
+  coming, may go right up to a drop (`ally_ledge_close`, 0.4 m: walking
+  steers round holes anyway) instead of walking in and backing off over and
+  over when its target stands by one. Sim: `tests/_ledgesim.gd`.
+
+## Options: the screen filter, and a home for the settings
+
+- An Options page, on the title screen (new "Options" row) and in the pause
+  menu (Esc > Options): the same rows in both, saved in
+  `user://settings.cfg` (`Settings.option_rows()` / `change_option()`).
+- Screen filter: Normal (the PS1 look as it was: 360 lines, 48 colour
+  levels, dither, full vertex wobble), Light (540 lines, smooth pixels, 96
+  levels, light dither, a gentle wobble) or Off (no filter, no wobble).
+  It applies at once, mid-fight too.
+- The pause menu is shorter: Resume, Command List, Options, Restart fight,
+  Quit to title. Move details, Command timing and Party AI moved to
+  Options. The panel is wider, so the notes fit. Test: `_options.gd`.
+- Ground textures: the mortar and grout lines are softer and the ground
+  uses anisotropic mipmaps, so lines far away and at low angles don't
+  flicker (the Town Plaza's cobbles were the worst).
+
+## Arenas: a place for every fight
+
+- Every arena is a place now (`Arena.setting`, built by
+  `scripts/battle/arena_scenery.gd`): Town Plaza (rounds 1, 6, 7), Forest
+  Clearing (2), Mountain Pass (3), Crystal Cave (4), Sky Ruins (5), Grand
+  Colosseum (8-10, 13, Special), Windswept Cliff (11), Red Canyon (12),
+  Training Yard (tutorial). Each has a textured floor (chunky 64-pixel
+  textures made in code, no image files), the ground running out to the
+  horizon (none past a drop: the land far below and clouds instead), props
+  past the edges (houses, stalls, trees, crags, crystals and torches,
+  pillars and arches, mesas and cacti, fences and dummies), mountains on
+  the horizon, its own sky, fog and light. Short props sit near the edges,
+  tall ones further out; tall ones hide when the camera gets up close.
+  Looks only: nothing out there can be reached or blocks sight.
+- Muted: every colour out there goes 30% toward grey and 18% darker (the
+  sky 15% more), and the sun and ambient light are at 85%
+  (`ArenaScenery.MUTE_GREY`, `MUTE_DIM`, `MUTE_LIGHT`), so it's easy on the
+  eyes and the fighters and effects stand out against it.
+- The colosseum's stands are full: a furry crowd (one multimesh, cheap)
+  that bobs, and jumps when someone earns a Crowd Cheer.
+- Rocks, pits and holes look natural: rocks are lumpy faceted boulders
+  (their shape comes from where they stand) with smaller stones at their
+  feet; pits are dark hollows with a broken stone rim; holes are black
+  drops glowing deep red far down, embers rising, bones on the rim (no
+  more skull rings). Lethal edges: a broken stone lip and a thin, dimmer
+  red glow (no more drifting skulls). All recoloured to fit the place.
+
+## Move animations, knockdowns
+
+- Every party move and Art has its own animation (`scripts/battle/move_anims.gd`):
+  a keyed sequence per hit, timed to its block on the combo bar (the
+  build-up fills the block, the follow-through is squeezed into what's
+  left). All six classes, with their Abilities.
+    - Knight: Thrust is a straight forward stab; Smash drives the sword in
+      deep, kicks off the enemy to pull it free and stumbles from the recoil.
+    - Weapons turn on a wrist joint (WeapR / WeapL) so blades and staffs
+      point where the move needs.
+- Anticipation: the next move's coil starts as its block comes up on the
+  bar and holds until it's played. Hit-stop: a Perfect freezes the action
+  for a moment. Weapon trails (`scripts/battle/weapon_trail.gd`) and
+  afterimages on dashing moves.
+- A melee attacker with hits still queued follows a target that was pushed
+  away, so the rest of the combo connects (it stops at a drop). The timing
+  rings follow the target too.
+- Tap moves grow a charge orb as you tap, up to the Perfect count, and
+  their hit effect grows with it (up to 1.8x).
+- Cleric: her staff turns at the wrist too. Bash is an overhead bonk, Holy
+  Light a prayer and then a beam from the staff's sun disc, Divine Barrier
+  the staff planted and a dome; Smite a hop into a crushing blow with a
+  cross of light, Judgment a pillar of light from the sky onto the circle,
+  Blessed Strike an upswing ringed in green, Sanctuary a kneeling prayer
+  and a big dome, Divine Judgment a forehand, a backhand and a leaping slam
+  that calls the pillar. Abilities: Healing (a green beam to the ally),
+  Shielding (a dome), Haste (the staff twirled, teal rings rising round the
+  ally), Full Cure (kneeling, then a pillar of light), Lifeline (a sprint
+  and a streak of light along the dash).
+- Assassin: each dagger turns at the wrist, with its own trail. Stab a
+  quick thrust, Backstab a point-down plunge (red), Shadowstep and its Arts
+  sink into a crouch and come out behind the target in a puff of shadow
+  smoke (where he leaves and where he lands), Execute a leap and both
+  daggers plunged in with a red X. Arts: Twin Fangs (right, then left),
+  Ambush (a slash, then a kick that sends it flying), Phantom Rush (a slash,
+  then a full spin), Cutthroat (a low stab, then a cut across the throat),
+  Thousand Cuts (alternating cuts with afterimages, then a crossed slash
+  down through it). Abilities: Hook (a chain thrown and yanked), Death
+  Sentence (three Marks flare over the target), Shadow Cloak (arms
+  wrapped, then thrown open; violet rings), Vanish (a step back into the
+  smoke).
+- Monk: fists, feet, head and shell, his guard up between blows; orange
+  shockwaves, bigger the heavier the blow. Punch (jab, cross, jab), Kick (a
+  front kick, a roundhouse), Heavy Punch (drawn back to the hip, driven
+  through), Heavy Kick (an axe kick), Headbutt (stars round its head).
+  Arts: Palm Strike (both palms), Flash Kick (a backflip kick), Knee Smash
+  (grabbed and pulled onto a knee), Triple Rush (jab, cross, a flying
+  kick), Mountain Crusher (a punch, two kicks, then a leap and both fists
+  into the ground: rock and dust all round), Tortoise Special (a heavy
+  punch, an axe kick, then a punch for every tap for as long as you keep
+  tapping, arms taking turns, a small shockwave on each; then the right
+  fist drawn slowly back while the left keeps going, a last big punch, a
+  gold burst, and he rolls back in his shell). Abilities:
+  Provoke (a beckoning hand; a red flare over the enemy), Suplex (a low
+  wrestler's stance), Deep Breath (arms raised and lowered; rings rise).
+- Enchant: light motes on each party member's weapon for as long as it lasts.
+- The Mage's biggest Arts mix their elements into one effect, with an
+  earlier lead-up: Meteor (lightning strikes, then a frost-crusted rock
+  falls from the sky trailing fire), Tri-Disaster, Thermal Shock, Nova,
+  Stasis (a cage of rings).
+- Knockdowns: a living party member hit by a crushing blow (a Smash or 40+
+  damage) or pushed 2.5 m or more is knocked down for 1.4 s
+  (`knockdown_seconds`), then sits up and gets up. Pushed, it flies to
+  where the push put it in an arc (higher the further it goes) instead of
+  sliding there, and lies down for the full time after landing. It can't walk meanwhile, but its timeline runs on: a turn that comes
+  up waits until it's up, and an attack it was winding up gets 1.5 s
+  (`knockdown_grace`) extra grace to walk back in. A wall boss's breath
+  (Inhale, Exhale) never knocks down. A Parry avoids both the blow and the
+  throw, and a Defend keeps you on your feet (the push is still braced to
+  half), so knockdowns punish a mistimed or missing reaction and bad
+  positioning.
+- Physics ragdolls (`scripts/battle/ragdoll.gd`): knocked down or knocked
+  out, a figure's torso, head, arms and legs become rigid bodies joined at
+  the neck, shoulders and hips (cone-twist joints, Jolt), thrown by the
+  blow. They flail, tumble and land in a heap; ragdolls bump into each
+  other. Visual only: the fight goes by the fighter's own position (a
+  knocked-out member's follows its torso, for Revive). Knocked down, the
+  body flies to where the push put it and, for the last 0.4 s
+  (`knockdown_rise`), eases back onto its feet. Replaces the scripted
+  tumble.
+- Small enemies (not bosses) ragdoll when beaten: thrown away from the
+  blow that beat them, harder for pushes and finishers (a burn or a stray
+  hit just crumples them); after 3 s they sink through the floor. Bosses
+  keep the old fade. Test: `_enemyrag.gd`. Tests: `_knockdown.gd`, `_knocklaunch.gd`, `_maw.gd`.
+
+## PS1 look: furry figures for party and enemies, animations, a retro screen
+
+- The look aims at a PS1 game with a furry cast. Party members are
+  low-poly animal figures instead of capsules (`scripts/battle/figure.gd`),
+  built from boxes, 4-8 sided cylinders, spheres and ovals under the Body
+  node, so lunges, the knocked-out pose and ragdolls move the whole
+  figure. The Body is the torso and keeps its class-colour material (the
+  HUD reads it); the Nose is hidden, since faces and weapons show where a
+  fighter looks.
+    - Knight: a rabbit, beige fur, lop ears out from under an open-faced
+      helm with a plume, tabard, kite shield with a gold cross, sword, a
+      cotton tail.
+    - Archer: a tall brown bear, tan muzzle, round ears, hood down, short
+      cape, quiver, long bow.
+    - Mage: a goat, cream fur, horns swept back under a pointed hat, long
+      purple hair, robe, staff with an orb.
+    - Cleric: a red squirrel, nasal helm with her ear tufts through it,
+      mail and a white surcoat with a gold cross over her robe, staff with
+      a sun disc, a big curled tail.
+    - Assassin: a grey wolf, red eyes, a scar over his left eye, ears up
+      through the hood, a dagger in each hand, a bushy tail.
+    - Monk: a snapping turtle, hooked beak, a ridged shell over his gi,
+      sash, wrapped fists, headband, prayer beads, a spiky tail.
+- Heights (`Figure.HEIGHTS`), shortest to tallest: Cleric, Knight, Mage,
+  Assassin, Archer, Monk. The whole figure scales with its feet on the
+  floor and the name label moves up with it; reach and body size in the
+  fight are unchanged.
+- Animations (`scripts/battle/figure_anim.gd`), smooth, all in code: the
+  figures have joints (Head, ArmL, ArmR, LegL, LegR, Tail; `Figure._rig`
+  sorts the parts onto them, tails are wrapped by hand). Always on:
+  breathing, a head that looks around, tail and ear sway, and a walk cycle
+  that follows how fast the fighter really moves (steered, AI or pushed).
+  On top, one action at a time:
+    - attack, on every hit (`play_lunge(move)`): the Knight slashes, the
+      Archer draws and looses, the Mage thrusts her staff, the Cleric
+      swings hers, the Assassin stabs with one hand then the other, the
+      Monk punches left and right, kicks on Kick and Knee moves and
+      headbutts on Headbutt;
+    - a hit flinch, or a stagger back on a heavy one (20% of max HP, or a
+      strong blow), from `_hurt`;
+    - Defend (the Knight's shield up, the others' arms crossed) and Parry;
+    - casting an Ability, using an item, and a victory pose (held) when
+      the end screen shows after a win.
+  Combatant.animate(action) starts one; enemies (no figure) ignore it and
+  keep the old body jab.
+
+- Enemy figures (`scripts/battle/enemy_figure.gd`), picked by scene file.
+  Animal folk: the Goblin Fighter is a rat (ragged tunic, rusty sword,
+  round shield, pink tail), the Kobold Archer a lizard (harness, short
+  bow, quiver, long tail), the Ogre Warrior a huge boar (tusks, bristly
+  mane, hide armour, spiked club), the Orc Shaman a spotted hyena (teal
+  robe, bone necklace, skull staff), the Bandit Arcanist a raccoon (mask,
+  purple cloak, glowing tome and wand, ringed tail). Monsters: the
+  Training Golem a banded wooden barrel with a target and a bucket head,
+  the Stone Golem a rock giant (glowing eyes, huge fists, moss, crystals),
+  the Living Armor an empty suit of dark plate (purple eyes, spiked
+  pauldrons, tattered cape, greatsword), the Dragon Hatchling a four-legged
+  baby dragon (horns, wings, spiked tail), the Gale Maw a colossal
+  wind-spirit ram (a long muzzle where Deep Breath's black mouth opens,
+  curling horns, glowing eyes, a cloud mane) with two great clawed paws
+  hovering either side: they drift while idle, rise in its wind-up and
+  come down when a skill lands, the Gust Sprite a cloud puff with a face, the
+  Shadow Sprite a dark flame with glowing eyes. The Nose is hidden (meta
+  "figure"; the open-mouth code leaves it alone).
+- Enemy animations: the same animator with a style per figure (biped,
+  quad, float, wall). Enemies ease into a wind-up while they prepare a
+  skill (a guard for Defense and Counter stances), strike when it lands
+  (`_resolve_strike`), and flinch when hit (any damage taken, party too).
+  The dragon walks on four legs and flaps its wings; sprites bob and dart.
+- The Gale Maw's paws fling its Gust Sprites: the paw on that side winds
+  up and throws, and the sprite tumbles in an arc from the paw to where
+  it already stands (`FigureAnim.fly_in`, looks only: it's in place for
+  the fight at once). The message says it "flings" them.
+- The Goblin Fighter is now the **Ratkin Fighter** (it's a rat); the
+  tutorial and the Round 6 tip say Ratkin, and "the side away from its
+  nose" is now "its face" (enemies' noses are hidden by their figures).
+  The scene file keeps its name (`goblin_fighter.tscn`).
+- The Orc Shaman is now the **Desert Shaman** (a hyena); scene file
+  `orc_shaman.tscn` as before.
+- End screen: a long round title (two enemies with long names) shrinks to
+  fit beside the rank box, and is cut with "…" past 13 pt.
+
+- `shaders/ps1.gdshader` (the figures' material): vertices snap to a
+  320-line screen grid (the wobble; the PS1 drew at 240), lighting per vertex, affine texture
+  mapping without filtering (ready for textures).
+- `shaders/ps1_screen.gdshader`: the 3D view at 360 lines, 48 levels per
+  colour channel, a 4x4 ordered dither at 60% (first tried at 270 lines,
+  the PS1's 15-bit colour and a full dither: too coarse), on a layer under the HUD. Floating text
+  (names, damage numbers, skill names) stays sharp: every Label3D goes on
+  render layer 20, which the view's cameras skip and a second camera
+  (same world, same view) draws over the low-res picture.
+- Screenshots: `tests/_shotlook.gd`, `tests/_shotfigures.gd`,
+  `tests/_shotportraits.gd` (each figure close up, front and back),
+  `tests/_shotanim.gd` (frames of every animation, all six classes),
+  `tests/_shotenemies.gd` (every enemy close up, front and back).
+
 ## Version 0.9.0
 
 - Project Settings, the Windows preset and the README links say 0.9.0;

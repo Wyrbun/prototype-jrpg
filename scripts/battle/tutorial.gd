@@ -90,7 +90,7 @@ func wants_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("confirm") or event.is_action_pressed("end_turn"):
 		_next()
 		return true
-	return event is InputEventKey or event is InputEventAction
+	return event is InputEventKey or event is InputEventAction or event is InputEventJoypadButton
 
 
 func _next() -> void:
@@ -486,11 +486,11 @@ func _build_steps() -> void:
 	_note(10, "Special skills",
 		"Some other things to watch for:\n- Some skills leave fire or spikes on the ground for a few turns\n- Growing circles get bigger over the cast: hit the sprites circling their edge (one hit each) to stop them, or run to the side it can't reach\n- A healing enemy can be interrupted with three hits from up close\n- An orange sphere means a follow-up will hit you for sure\n\nThe Boss Rush introduces them one at a time.")
 	_note(10, "Drops",
-		"Some arenas have drops: holes and edges marked by a glowing red line lined with skulls. Regular enemies knocked or pulled over one fall out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nGo over a drop yourself (walking, pushed or pulled) and you teeter: {parry} as the ring turns gold to catch yourself. After a save you're Off-Balance for 3 turns: going over again in that time is a fall.\n\nPushed or pulled by an enemy? {defend} as it strikes to brace: the move is half as long (for classes that can Block).")
+		"Some arenas have drops: black holes glowing deep red far down, and cliff edges with a thin red glow along a broken stone lip. Regular enemies knocked or pulled over one fall out of the fight. Red arrows on an enemy's area show which way it will throw or drag you, so mind what's behind you.\n\nIt works on enemies too: knock a regular enemy into a hole to end the fight sooner (bosses hold on).\n\nGo over a drop yourself (walking, pushed or pulled) and you teeter: {parry} as the ring turns gold to catch yourself. After a save you're Off-Balance for 3 turns: going over again in that time is a fall.\n\nPushed or pulled by an enemy? {defend} as it strikes to brace: the move is half as long (for classes that can Block).")
 
 	# 11. The Assassin: positioning and Marks
 	_note(11, "The Assassin",
-		"One more class: the Assassin. He can't Block or Parry, and most of his damage depends on WHERE he stands: behind an enemy means within 60 degrees of its back (the side away from its nose).\n\nSmall enemies like Goblins and Kobolds have no back to find: their ring is a full violet circle, and every hit counts as from behind.\n\nEnemies turn to face whoever they're after. The Golem is Taunted by the Knight now, so it keeps facing the Knight and leaves its back open. In real fights, the Knight's Taunt does exactly this for the Assassin.",
+		"One more class: the Assassin. He can't Block or Parry, and most of his damage depends on WHERE he stands: behind an enemy means within 60 degrees of its back (the side away from its face).\n\nSmall enemies like Ratkin and Kobolds have no back to find: their ring is a full violet circle, and every hit counts as from behind.\n\nEnemies turn to face whoever they're after. The Golem is Taunted by the Knight now, so it keeps facing the Knight and leaves its back open. In real fights, the Knight's Taunt does exactly this for the Assassin.",
 		func():
 			_golem_rest()
 			_set_party(["knight", "assassin"])  # the Knight's Taunt keeps the Golem's back turned

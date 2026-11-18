@@ -34,6 +34,15 @@ enum Shape { RECTANGLE, CIRCLE }
 	set(value):
 		lethal_rim = value
 		_rebuild_floor()
+## Where the fight is: the floor's texture, what stands round it, the sky
+## and light (see ArenaScenery.SETTINGS: plaza, forest, pass, cave, ruins,
+## colosseum, cliff, canyon, yard). "none": a plain floor over the void.
+@export_enum("none", "plaza", "forest", "pass", "cave", "ruins", "colosseum", "cliff", "canyon", "yard") var setting: String = "none":
+	set(value):
+		setting = value
+		_rebuild_floor()
+
+var scenery: ArenaScenery = null
 
 ## Rocks only block sight where they're this solid (1 = their full size).
 ## A bit under 1 means an attack that just grazes a rock still gets through.
@@ -51,6 +60,14 @@ const SIDE_WEST := 8
 var _floor: MeshInstance3D = null
 ## Death-wall skulls drift slowly along their edges: [{node, from, dir, length, offset}].
 var _edge_skulls: Array[Dictionary] = []
+## The drop edges' stone lips (the scenery recolours them).
+var _lip_materials: Array[StandardMaterial3D] = []
+
+
+## Recolours the stone lips along the drops (see ArenaScenery).
+func tint_edges(color: Color) -> void:
+	for m in _lip_materials:
+		m.albedo_color = color
 const SKULL_DRIFT_SPEED := 0.35  # meters per second
 
 
@@ -308,10 +325,21 @@ func _rebuild_floor() -> void:
 	_floor.mesh = mesh
 	add_child(_floor)
 	_add_death_walls()
+	if scenery:
+		scenery.queue_free()
+		scenery = null
+	if setting != "none" and setting != "":
+		scenery = ArenaScenery.build(self, setting)
 
 
-## Lethal edges: a thin glowing red line just inside the drop, lined with
-## skulls, so it reads at a glance as "don't go past here".
+## The floor's mesh (the scenery textures it).
+func get_floor_mesh() -> MeshInstance3D:
+	return _floor
+
+
+## Lethal edges: a broken stone lip along the drop and, just inside it, a
+## thin line glowing deep red (as if from far below), so it reads at a
+## glance as "don't go past here" without looking painted on.
 func _add_death_walls() -> void:
 	var paths: Array = []  # each: [from, to] along a lethal edge
 	if shape == Shape.CIRCLE:
@@ -331,6 +359,7 @@ func _add_death_walls() -> void:
 		return
 	var strip := PackedVector3Array()
 	_edge_skulls.clear()
+	_lip_materials.clear()
 	for path in paths:
 		var a: Vector3 = path[0]
 		var b: Vector3 = path[1]
@@ -345,14 +374,24 @@ func _add_death_walls() -> void:
 		var b_in := b + inward_dir * 0.15
 		strip.append_array([a_in + lift, b_in + lift, b_in + inward_dir * w + lift,
 				a_in + lift, b_in + inward_dir * w + lift, a_in + inward_dir * w + lift])
-		var spacing := 1.2
-		var count := maxi(int(length / spacing), 1)
-		for k in count:
-			var skull := ArenaObstacle.make_skull(Vector3.ZERO)
-			_floor.add_child(skull)
-			_edge_skulls.append({"node": skull, "from": a + inward_dir * 0.6, "dir": along.normalized(),
-					"length": length, "offset": (k + 0.5) * length / count})
-			skull.position = a + inward_dir * 0.6 + along.normalized() * ((k + 0.5) * length / count) + Vector3(0, 0.05, 0)
+		# the lip: stones along the very edge, some missing
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(Vector2i(roundi(a.x * 10.0), roundi(a.z * 10.0)))
+		var lip_mat := StandardMaterial3D.new()
+		lip_mat.vertex_color_use_as_albedo = true
+		lip_mat.albedo_color = floor_color.darkened(0.15)
+		_lip_materials.append(lip_mat)
+		var stones := maxi(int(length / 0.45), 1)
+		for k in stones:
+			if rng.randf() < 0.25:
+				continue
+			var r := rng.randf_range(0.1, 0.24)
+			var stone := MeshInstance3D.new()
+			stone.mesh = ArenaObstacle.boulder_mesh(r, r * rng.randf_range(0.7, 1.2), rng)
+			stone.material_override = lip_mat
+			stone.position = a + along.normalized() * ((k + rng.randf()) * length / stones) + inward_dir * rng.randf_range(0.0, 0.25)
+			stone.rotation.y = rng.randf() * TAU
+			_floor.add_child(stone)
 	var wall := MeshInstance3D.new()
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -361,7 +400,7 @@ func _add_death_walls() -> void:
 	wall_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.albedo_color = DEATH_RED
+	glow.albedo_color = DEATH_RED.darkened(0.35)
 	glow.cull_mode = BaseMaterial3D.CULL_DISABLED
 	wall_mesh.surface_set_material(0, glow)
 	wall.mesh = wall_mesh

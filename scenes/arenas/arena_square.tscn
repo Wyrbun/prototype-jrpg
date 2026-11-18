@@ -5,6 +5,7 @@
 
 [node name="ArenaSquare" type="Node3D"]
 script = ExtResource("1_arena")
+setting = "plaza"
 shape = 0
 size = Vector2(16, 16)
 

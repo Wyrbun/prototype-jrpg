@@ -1,20 +1,35 @@
 extends Control
 ## The title screen: Continue (when a Boss Rush save exists), Boss Rush,
-## Tutorial, Round Select, Controls, Change Keys, Forget Arts (once any Art
-## has been discovered), Quit.
+## Tutorial, Round Select, Options (the screen filter and play settings: the
+## same page as the pause menu's), Controls, Change Keys, Forget Arts (once
+## any Art has been discovered), Quit.
 ##
 ## Keyboard: W / S (or arrows) to choose, J (or Enter) to select, K (or Esc)
 ## to go back (or whatever keys the player has set). The mouse works too.
 
-enum Page { MAIN, ROUNDS, CONTROLS, KEYS, STYLE }
+enum Page { MAIN, ROUNDS, CONTROLS, KEYS, STYLE, OPTIONS }
+
+var backdrop: TitleBackdrop
+
+## The notice shown once per launch before the menu: the game also plays
+## with a gamepad. It goes by itself after NOTICE_SECONDS, or at any key,
+## button or click.
+const NOTICE_SECONDS := 4.0
+const NOTICE_FADE := 0.5
+static var _notice_shown := false
+var _notice_left := 0.0
 
 const GOLD := Color(0.95, 0.78, 0.35)
+## How much the dark veil hides the slowly turning arena behind the menu.
+const BACKDROP_VEIL := 0.5
 const ROW_HEIGHT := 44.0
 const MAIN_NOTES := {"Boss Rush": "All 13 rounds and a Special Match", "Tutorial": "Learn every mechanic in a guided fight",
-		"Round Select": "Jump straight to any round", "Controls": "Every key at a glance",
+		"Round Select": "Jump straight to any round", "Options": "Screen filter and play settings",
+		"Controls": "Every key at a glance",
 		"Change Keys": "Set your own keys", "Quit": ""}
 const FORGET_ROW := "Forget Arts"
 const RESET_ROW := "Reset all keys to default"
+const BACK_ROW := "Back"
 ## Key names in {braces} are filled in with the player's current keys.
 const CONTROLS := [
 	["Between turns", "{move} / arrows", "Move the party member you're steering"],
@@ -54,6 +69,12 @@ var _forget_armed := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	Keybinds.apply_saved()
+	_sync_music()
+	if not _notice_shown:
+		_notice_shown = true
+		_notice_left = NOTICE_SECONDS
+	backdrop = TitleBackdrop.new()
+	add_child(backdrop)
 	var rush: BossRush = load("res://data/boss_rush.tres")
 	for i in rush.rounds.size():
 		var encounter: Encounter = rush.rounds[i]
@@ -67,8 +88,30 @@ func _ready() -> void:
 	_style.set_corner_radius_all(6)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _notice_left > 0.0:
+		_notice_left = maxf(_notice_left - delta, 0.0)
 	queue_redraw()
+
+
+## Any key, pad button or click skips the notice (and does nothing else).
+func _skip_notice(event: InputEvent) -> bool:
+	if _notice_left <= 0.0:
+		return false
+	var press: bool = (event is InputEventKey and event.pressed and not event.echo) \
+			or (event is InputEventJoypadButton and event.pressed) \
+			or (event is InputEventMouseButton and event.pressed) \
+			or (event is InputEventAction and event.pressed)
+	if press:
+		_notice_left = minf(_notice_left, NOTICE_FADE)  # fades out
+	get_viewport().set_input_as_handled()
+	return true
+
+
+## The main menu's theme; Round Select has its own.
+func _sync_music() -> void:
+	Sfx.duck(false)
+	Sfx.music("round_select" if page == Page.ROUNDS else "title")
 
 
 func _items() -> Array:
@@ -77,6 +120,10 @@ func _items() -> Array:
 			return _rounds
 		Page.CONTROLS:
 			return []
+		Page.OPTIONS:
+			var rows: Array = Settings.option_rows()
+			rows.append(BACK_ROW)
+			return rows
 		Page.KEYS:
 			var rows := []
 			for entry in Keybinds.ACTIONS:
@@ -88,7 +135,7 @@ func _items() -> Array:
 
 ## Continue only shows up when there's a Boss Rush save.
 func _main_items() -> Array:
-	var list := ["Boss Rush", "Tutorial", "Round Select", "Controls", "Change Keys"]
+	var list := ["Boss Rush", "Tutorial", "Round Select", "Options", "Controls", "Change Keys"]
 	if ArtsBook.count() > 0:
 		list.append(FORGET_ROW)
 	list.append("Quit")
@@ -113,9 +160,13 @@ func _main_note(item: String) -> String:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _skip_notice(event):
+		return
 	if _capturing >= 0:
 		_capture_key(event)
 		return
+	Sfx.menu_keys(event)
+	_sync_music.call_deferred()
 	if page == Page.STYLE:
 		_style_input(event)
 		return
@@ -161,7 +212,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_select()
 		return
 	elif back and page != Page.MAIN:
-		var opener: String = {Page.ROUNDS: "Round Select", Page.CONTROLS: "Controls", Page.KEYS: "Change Keys"}[page]
+		var opener: String = {Page.ROUNDS: "Round Select", Page.CONTROLS: "Controls", Page.KEYS: "Change Keys", Page.OPTIONS: "Options"}[page]
 		index = _main_items().find(opener)  # back onto the item that opened this page
 		_key_message = ""
 		page = Page.MAIN
@@ -191,6 +242,10 @@ func _select() -> void:
 					page = Page.ROUNDS
 					index = 0
 					_scroll = 0
+				"Options":
+					page = Page.OPTIONS
+					index = 0
+					_scroll = 0
 				"Controls":
 					page = Page.CONTROLS
 				"Change Keys":
@@ -213,6 +268,15 @@ func _select() -> void:
 			page = Page.MAIN
 			index = _main_items().find("Controls")
 			_scroll = 0
+		Page.OPTIONS:
+			if _items()[index] == BACK_ROW:
+				page = Page.MAIN
+				index = _main_items().find("Options")
+				_scroll = 0
+			else:
+				Settings.change_option(index)
+				if backdrop:
+					backdrop.apply_screen_filter()
 		Page.KEYS:
 			if index >= Keybinds.ACTIONS.size():
 				Keybinds.reset_defaults()
@@ -351,27 +415,40 @@ func _wrap(font: Font, text: String, width: float, font_size: int) -> PackedStri
 	return lines
 
 
-## Change Keys: the next key pressed becomes the row's new key. Esc cancels.
+## Change Keys: the next key pressed becomes the row's new key (a pad
+## button: its new pad button). Esc (or the pad's Menu) cancels.
 func _capture_key(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		_capturing = -1  # a click cancels
 		get_viewport().set_input_as_handled()
 		return
+	var entry: Array = Keybinds.ACTIONS[_capturing]
+	if event is InputEventJoypadButton and event.pressed:
+		# A pad button: the action's new pad button. Menu keeps the old one.
+		get_viewport().set_input_as_handled()
+		if Keybinds.reserved_pad(event.button_index):
+			_key_message = "Kept %s" % Keybinds.pad_label(entry[0])
+		else:
+			var swapped_pad := Keybinds.rebind_pad(entry[0], event.button_index)
+			_key_message = "%s: %s on the pad" % [entry[1], Keybinds.pad_label(entry[0])]
+			if swapped_pad != "":
+				_key_message += "   (swapped: %s)" % swapped_pad
+		_capturing = -1
+		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	get_viewport().set_input_as_handled()
 	var code: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
-	var entry: Array = Keybinds.ACTIONS[_capturing]
 	if code == KEY_ESCAPE:
-		_key_message = "Kept %s" % Keybinds.label(entry[0])
+		_key_message = "Kept %s" % Keybinds.key_label(entry[0])
 	elif Keybinds.reserved(code):
 		_key_message = "%s is taken (it opens the play-test reports after a fight)" % OS.get_keycode_string(code)
 		return  # still waiting for a key
 	else:
 		var swapped := Keybinds.rebind(entry[0], code)
-		_key_message = "%s: %s" % [entry[1], Keybinds.label(entry[0])]
+		_key_message = "%s: %s" % [entry[1], Keybinds.key_label(entry[0])]
 		if swapped != "":
-			_key_message += "   (swapped: %s is now %s)" % [swapped, Keybinds.label(_action_of(swapped))]
+			_key_message += "   (swapped: %s is now %s)" % [swapped, Keybinds.key_label(_action_of(swapped))]
 	_capturing = -1
 
 
@@ -385,6 +462,8 @@ func _action_of(row_label: String) -> String:
 func _row_height() -> float:
 	if page == Page.KEYS:
 		return 34.0
+	if page == Page.OPTIONS:
+		return 56.0  # a second line: what the option does
 	return ROW_HEIGHT if page == Page.MAIN else 38.0
 
 
@@ -410,7 +489,7 @@ func _keep_visible() -> void:
 
 
 func _list_rect() -> Rect2:
-	var width := 760.0 if page == Page.ROUNDS or page == Page.KEYS else 600.0
+	var width := 760.0 if page == Page.ROUNDS or page == Page.KEYS or page == Page.OPTIONS else 600.0
 	return Rect2((size.x - width) / 2.0, _list_top(), width, 24.0 + _visible_rows() * _row_height())
 
 
@@ -427,7 +506,8 @@ func _row_at(point: Vector2) -> int:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.1, 0.15))
+	# A dim veil over the arena behind (TitleBackdrop), so the menu reads.
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.1, 0.15, BACKDROP_VEIL))
 	var font := ThemeDB.fallback_font
 	HudStyle.draw_header(self, Vector2((size.x - HudStyle.header_width("PROTOTYPE JRPG", 60)) / 2.0, 120.0), "PROTOTYPE JRPG", 60, GOLD)
 	_centered(font, "A battle system prototype", 165.0, 20, Color(0.7, 0.72, 0.8))
@@ -470,15 +550,23 @@ func _draw() -> void:
 			HudStyle.draw_selection(self, row, GOLD)
 			_text(font, row.position + Vector2(10, baseline), ">", 22, GOLD)
 		var font_size := 22 if page == Page.MAIN else 17
-		_text(font, row.position + Vector2(36, baseline), items[i], font_size, Color.WHITE if selected else Color(0.85, 0.85, 0.9))
+		if page == Page.OPTIONS:
+			_text(font, row.position + Vector2(36, 24), items[i], 20, Color.WHITE if selected else Color(0.85, 0.85, 0.9))
+			var note := "Back to the title menu" if items[i] == BACK_ROW else Settings.option_note(i)
+			_text(font, row.position + Vector2(36, 45), note, 14, Color(0.6, 0.62, 0.7))
+		else:
+			_text(font, row.position + Vector2(36, baseline), items[i], font_size, Color.WHITE if selected else Color(0.85, 0.85, 0.9))
 		if page == Page.KEYS and i < Keybinds.ACTIONS.size():
 			var action: String = Keybinds.ACTIONS[i][0]
-			var key_text := "press a key..." if i == _capturing else Keybinds.label(action)
+			var key_text := "press a key or button..." if i == _capturing else Keybinds.key_label(action)
 			var key_color := Color(0.5, 0.95, 0.55) if i == _capturing else GOLD
-			_text(font, row.position + Vector2(400, baseline), key_text, 17, key_color)
-			var extras := _extra_keys(action)
-			if extras != "" and i != _capturing:
-				_text(font, row.position + Vector2(540, baseline), extras, 14, Color(0.55, 0.57, 0.65))
+			_text(font, row.position + Vector2(340, baseline), key_text, 17, key_color)
+			if i != _capturing:
+				var pad := Keybinds.pad_label(action)
+				_text(font, row.position + Vector2(440, baseline), pad if pad != "" else "-", 17, Color(0.6, 0.85, 1.0))
+				var extras := _extra_keys(action)
+				if extras != "":
+					_text(font, row.position + Vector2(540, baseline), extras, 14, Color(0.55, 0.57, 0.65))
 		if page == Page.MAIN and _main_note(items[i]) != "":
 			var note_color := Color(1.0, 0.6, 0.45) if items[i] == FORGET_ROW and _forget_armed else Color(0.6, 0.62, 0.7)
 			_text(font, row.position + Vector2(220, 27), _main_note(items[i]), 15, note_color)
@@ -490,14 +578,66 @@ func _draw() -> void:
 	if _scroll + shown < items.size():
 		var y := list.end.y - 20.0
 		draw_colored_polygon(PackedVector2Array([Vector2(arrow_x, y), Vector2(arrow_x + 14, y), Vector2(arrow_x + 7, y + 10)]), GOLD)
-	var hint := Keybinds.fill("{up} / {down}: choose     {confirm} / Enter: select")
+	var hint := Keybinds.fill("{up} / {down}: choose     {confirm} / Enter: %s" % ("change" if page == Page.OPTIONS else "select"))
 	if page != Page.MAIN:
 		hint += Keybinds.fill("     {cancel} / Backspace / Esc: back")
 	if page == Page.KEYS and _capturing >= 0:
-		hint = "Press the new key     Esc: keep the old one"
+		hint = "Press the new key or pad button     Esc / Menu: keep the old one"
 	_centered(font, hint, list.end.y + 30.0, 16, Color(0.6, 0.6, 0.65))
 	if page == Page.KEYS and _key_message != "":
 		_centered(font, _key_message, list.end.y + 54.0, 16, Color(0.5, 0.95, 0.55))
+	_draw_notice(font)
+
+
+## A gamepad outline: a rounded body with a grip on each side, a D-pad
+## cross on the left and four round buttons in a diamond on the right.
+const GAMEPAD_OUTLINE := [
+	Vector2(-48, -50), Vector2(0, -43), Vector2(48, -50), Vector2(76, -40), Vector2(90, -5),
+	Vector2(98, 38), Vector2(88, 60), Vector2(66, 58), Vector2(46, 28), Vector2(0, 20),
+	Vector2(-46, 28), Vector2(-66, 58), Vector2(-88, 60), Vector2(-98, 38), Vector2(-90, -5),
+	Vector2(-76, -40),
+]
+
+
+func _draw_gamepad(center: Vector2, line: Color, fill: Color) -> void:
+	# A smooth closed curve through the outline's points.
+	var curve := Curve2D.new()
+	var n := GAMEPAD_OUTLINE.size()
+	for i in n + 1:
+		var p: Vector2 = GAMEPAD_OUTLINE[i % n]
+		var tangent: Vector2 = (GAMEPAD_OUTLINE[(i + 1) % n] - GAMEPAD_OUTLINE[(i - 1 + n) % n]) * 0.22
+		curve.add_point(center + p, -tangent, tangent)
+	var shape := curve.tessellate(5, 3.0)
+	draw_colored_polygon(shape, fill)
+	draw_polyline(shape, line, 5.0, true)
+	# The D-pad: a cross, drawn as its outline.
+	var arm := 7.0
+	var reach := 19.0
+	var dpad := center + Vector2(-47, -8)
+	var cross := PackedVector2Array()
+	for corner in [Vector2(-arm, -reach), Vector2(arm, -reach), Vector2(arm, -arm), Vector2(reach, -arm),
+			Vector2(reach, arm), Vector2(arm, arm), Vector2(arm, reach), Vector2(-arm, reach),
+			Vector2(-arm, arm), Vector2(-reach, arm), Vector2(-reach, -arm), Vector2(-arm, -arm), Vector2(-arm, -reach)]:
+		cross.append(dpad + corner)
+	draw_polyline(cross, line, 4.0, true)
+	# The face buttons: four rings in a diamond.
+	var buttons := center + Vector2(47, -8)
+	for offset in [Vector2(0, -17), Vector2(17, 0), Vector2(0, 17), Vector2(-17, 0)]:
+		draw_arc(buttons + offset, 6.5, 0.0, TAU, 20, line, 4.0, true)
+
+
+## The controller notice over everything, fading out at the end.
+func _draw_notice(font: Font) -> void:
+	if _notice_left <= 0.0:
+		return
+	var alpha := clampf(_notice_left / NOTICE_FADE, 0.0, 1.0)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.06, 0.07, 0.1, alpha))
+	var mid := size / 2.0
+	_draw_gamepad(Vector2(mid.x, mid.y - 138.0), Color(GOLD, alpha), Color(0.16, 0.18, 0.26, alpha))
+	var title := "CONTROLLER SUPPORT"
+	HudStyle.draw_header(self, Vector2(mid.x - HudStyle.header_width(title, 40) / 2.0, mid.y - 20.0), title, 40, Color(GOLD, alpha))
+	_centered(font, "This game also has controller support: plug in a gamepad (Xbox layout) and play.", mid.y + 30.0, 20, Color(0.9, 0.9, 0.95, alpha))
+	_centered(font, "Any key or button: continue", mid.y + 80.0, 16, Color(0.6, 0.62, 0.7, alpha))
 
 
 ## The other keys an action keeps (arrows, Enter...), shown faintly.

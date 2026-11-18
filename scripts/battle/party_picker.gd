@@ -84,6 +84,7 @@ func _count() -> int:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
+	Sfx.menu_keys(event)
 	var handled := true
 	if event is InputEventMouseMotion:
 		var hovered := _row_at(event.position)
