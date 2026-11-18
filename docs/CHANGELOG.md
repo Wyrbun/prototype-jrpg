@@ -4,6 +4,27 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## AI allies no longer run on the spot
+
+- Play-test (Round 4, the pit arena): the AI Cleric ran on the spot by the
+  pit, escaping an area. Three causes, all fixed in `battle_arena.gd`:
+  - Boxed in (the pit, the arena's rim or a fighter on every short way
+    out), the escape kept stepping "away" into the pit's edge. It now
+    takes the open direction that heads out the most, or stands still.
+  - With two ways out about as short (either side of a line), it picked
+    one, then the other from its new spot. The way it was already
+    escaping now counts for 0.9 m (ESCAPE_KEEP_GOING).
+  - Walking in for a Windup turn: once in reach, the range-keeping backed
+    it out of reach and the Windup walked it back in. In reach, it now
+    holds (out of danger first). Walking steps also keep 0.25 m further
+    from danger than the escape line (SAFE_STEP_SLACK), so a growing area
+    doesn't make it step out and back in.
+- In 3 full-AI Round 4 fights: 326 / 111 frames jogging on the spot
+  (Knight / Cleric) before, 16 / 9 after. New play-test count: "ai escape
+  boxed". Test: `_aijog.gd`.
+- README: new GIFs of the PS1 look (animated WebP, about half the size of
+  the old GIFs), and the Controls table has a controller column.
+
 ## Version 1.0.0
 
 - Project Settings, the Windows preset and the README say 1.0.0 (the

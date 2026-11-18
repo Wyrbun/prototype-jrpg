@@ -2491,6 +2491,15 @@ func _ally_step(ally: Combatant, delta: float) -> void:
 		if is_instance_valid(goal) and not goal.is_down and goal.lightweight \
 				and _line_up_push(ally, goal, delta, dangers):
 			return  # a Gust Sprite: get on its far side from the drop first
+		if is_instance_valid(goal) and not goal.is_down and _windup_reaches(ally, goal) \
+				and _stack_point(ally) == null:
+			# In reach: hold there (out of danger first) until the turn starts.
+			# Falling through to the range-keeping below backed it out of
+			# reach, then the Windup walked it back in: a jog on the spot.
+			if _escape_step(ally, dangers, delta):
+				return
+			ally.face_toward(goal.global_position - ally.global_position, delta)
+			return
 		if is_instance_valid(goal) and not goal.is_down and not _windup_reaches(ally, goal):
 			# Out of anything about to hit first (a falling rock landing on
 			# its path), then on towards the target.
@@ -2745,36 +2754,63 @@ func _nearest_drop(point: Vector3) -> Array:
 func _escape_step(ally: Combatant, dangers: Array[Dictionary], delta: float) -> bool:
 	var away := _danger_escape(ally, dangers)
 	if away == Vector3.ZERO:
+		ally.remove_meta("escape_dir")
 		return false
 	var best := away.normalized()
+	# The way it was already going counts for a bit: with two ways out about
+	# as short (either side of a line), it picked one, then the other from
+	# its new spot, and ran on the spot between them.
+	var going: Vector3 = ally.get_meta("escape_dir", Vector3.ZERO)
 	var best_score := INF
+	# No clear way out in reach (a pit, a wall or a fighter in the way): the
+	# open direction that heads out the most instead. Before, it kept
+	# stepping "away" into the pit's rim or a body and ran on the spot.
+	var fallback := Vector3.ZERO
+	var fallback_score := -INF
 	for i in 16:
 		var dir := Vector3.FORWARD.rotated(Vector3.UP, TAU * i / 16.0)
 		var reach := 0.0
+		var room := 0.0
 		var clear := false
 		var dist := 0.4
 		while dist <= ESCAPE_LOOK:
 			var at := ally.global_position + dir * dist
 			if not arena.walkable(at, ally.body_radius) or _body_in_way(ally, at):
 				break
+			room = dist
 			if not _in_danger(at, dangers):
 				clear = true
 				reach = dist
 				break
 			dist += 0.4
 		if not clear:
+			if room > 0.0 and dir.dot(best) > -0.2:
+				var open_score := dir.dot(best) + ESCAPE_ROOM_WEIGHT * room
+				if open_score > fallback_score:
+					fallback_score = open_score
+					fallback = dir
 			continue
 		# Shortest way out wins; ties lean towards the plain "away" direction.
-		var score := reach - 0.3 * dir.dot(best)
+		var score := reach - 0.3 * dir.dot(best) - ESCAPE_KEEP_GOING * maxf(dir.dot(going), 0.0)
 		if score < best_score:
 			best_score = score
 			away = dir
+	if best_score == INF:
+		_count("ai_escape_boxed")
+		if fallback == Vector3.ZERO:
+			return true  # boxed in on every side: brace where it stands
+		away = fallback
+	ally.set_meta("escape_dir", away.normalized())
 	ally.step(away.normalized(), delta)
 	_keep_in_arena(ally)
 	return true
 
 
 const ESCAPE_LOOK := 5.0
+## Boxed in: how much an open run of floor counts against heading straight out.
+const ESCAPE_ROOM_WEIGHT := 0.15
+## How much keeping the way it was already escaping is worth (meters).
+const ESCAPE_KEEP_GOING := 0.9
 
 
 ## Another fighter standing where this one would be (they'd just push each
@@ -2986,6 +3022,12 @@ func _retarget_to_sprite(ally: Combatant) -> void:
 
 ## Takes one step toward a direction, or the closest detour (up to 90° off)
 ## that doesn't enter a dangerous area. Returns false if every option is unsafe.
+## Walking steps keep this much further from danger than the escape line:
+## right on the line, a growing area crept over the ally, it stepped out,
+## stepped back in, and ran on the spot.
+const SAFE_STEP_SLACK := 0.25
+
+
 func _safe_step(fighter: Combatant, direction: Vector3, delta: float, dangers: Array[Dictionary]) -> bool:
 	direction.y = 0.0
 	if direction.length_squared() < 0.0001:
@@ -2996,7 +3038,7 @@ func _safe_step(fighter: Combatant, direction: Vector3, delta: float, dangers: A
 		var next := fighter.global_position + dir * fighter.current_move_speed() * delta
 		var safe := true
 		for danger in dangers:
-			if (danger["area"] as AttackRange).contains(next, danger["margin"]):
+			if (danger["area"] as AttackRange).contains(next, danger["margin"] + SAFE_STEP_SLACK):
 				safe = false
 				break
 		if safe:
