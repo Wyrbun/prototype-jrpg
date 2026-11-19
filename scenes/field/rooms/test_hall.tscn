@@ -1,0 +1,144 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/field/field_room.gd" id="1_room"]
+[ext_resource type="Script" path="res://scripts/field/field_door.gd" id="2_door"]
+[ext_resource type="Script" path="res://scripts/field/field_enemy.gd" id="3_enemy"]
+[ext_resource type="PackedScene" path="res://scenes/characters/goblin_fighter.tscn" id="f0"]
+[ext_resource type="PackedScene" path="res://scenes/characters/kobold_archer.tscn" id="f1"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.36, 0.34, 0.31, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.46, 0.44, 0.41, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_pillar"]
+albedo_color = Color(0.4, 0.39, 0.44, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_dark"]
+albedo_color = Color(0.04, 0.04, 0.05, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Door_n"]
+size = Vector3(2.4, 2.4, 0.5)
+
+[node name="TestHall" type="Node3D"]
+script = ExtResource("1_room")
+room_name = "Test Hall"
+battle_area = Rect2(-8, -6, 16, 12)
+camera_yaw = 0
+camera_pitch = 45
+camera_distance = 10
+background = Color(0.07, 0.07, 0.09, 1)
+
+[node name="Geometry" type="Node3D" parent="."]
+
+[node name="Entries" type="Node3D" parent="."]
+
+[node name="Doors" type="Node3D" parent="."]
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Floor" type="CSGBox3D" parent="Geometry"]
+position = Vector3(0, -0.25, 0)
+use_collision = true
+size = Vector3(16, 0.5, 12)
+material = SubResource("Mat_floor")
+
+[node name="Wall_N0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(-4.85, 1.5, -6.25)
+use_collision = true
+size = Vector3(7.3, 3, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_N1" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(4.85, 1.5, -6.25)
+use_collision = true
+size = Vector3(7.3, 3, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_S0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(0, 1.5, 6.25)
+use_collision = true
+size = Vector3(17, 3, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_E0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(8.25, 1.5, 0)
+use_collision = true
+size = Vector3(0.5, 3, 13)
+material = SubResource("Mat_wall")
+
+[node name="Wall_W0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(-8.25, 1.5, 0)
+use_collision = true
+size = Vector3(0.5, 3, 13)
+material = SubResource("Mat_wall")
+
+[node name="Passage_n" type="CSGBox3D" parent="Geometry"]
+position = Vector3(0, -0.25, -7)
+use_collision = true
+size = Vector3(2.4, 0.5, 2)
+material = SubResource("Mat_floor")
+
+[node name="Dark_n" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(0, 1.5, -8.2)
+use_collision = true
+size = Vector3(3.4, 3, 0.4)
+material = SubResource("Mat_dark")
+
+[node name="Door_n" type="Area3D" parent="Doors"]
+position = Vector3(0, 1.2, -6.75)
+script = ExtResource("2_door")
+to_room = "res://scenes/field/rooms/test_steps.tscn"
+to_entry = "from_hall"
+label = "through the north door"
+
+[node name="Shape" type="CollisionShape3D" parent="Doors/Door_n"]
+shape = SubResource("Shape_Door_n")
+
+[node name="Pillar1" type="CSGBox3D" parent="Geometry" groups=["obstacle"]]
+position = Vector3(-4.5, 1.5, -1.5)
+use_collision = true
+size = Vector3(1.2, 3, 1.2)
+material = SubResource("Mat_pillar")
+
+[node name="Pillar2" type="CSGBox3D" parent="Geometry" groups=["obstacle"]]
+position = Vector3(4.5, 1.5, -1.5)
+use_collision = true
+size = Vector3(1.2, 3, 1.2)
+material = SubResource("Mat_pillar")
+
+[node name="Crate" type="CSGBox3D" parent="Geometry" groups=["obstacle"]]
+position = Vector3(3, 0.45, 3)
+use_collision = true
+size = Vector3(0.9, 0.9, 0.9)
+material = SubResource("Mat_pillar")
+
+[node name="start" type="Marker3D" parent="Entries"]
+position = Vector3(0, 0, 2.2)
+rotation = Vector3(0, 0, 0)
+
+[node name="from_steps" type="Marker3D" parent="Entries"]
+position = Vector3(0, 0, -4.2)
+rotation = Vector3(0, 3.14159, 0)
+
+[node name="Ratkin" type="CharacterBody3D" parent="Enemies"]
+position = Vector3(-6, 0, -3.8)
+rotation = Vector3(0, -1.5708, 0)
+script = ExtResource("3_enemy")
+fighter_scene = ExtResource("f0")
+patrol_loop = false
+
+[node name="Patrol" type="Node3D" parent="Enemies/Ratkin"]
+
+[node name="P0" type="Marker3D" parent="Enemies/Ratkin/Patrol"]
+position = Vector3(0, 0, 0)
+
+[node name="P1" type="Marker3D" parent="Enemies/Ratkin/Patrol"]
+position = Vector3(0, 0, -12)
+
+[node name="KoboldArcher" type="CharacterBody3D" parent="Enemies"]
+position = Vector3(6.5, 0, -4.8)
+rotation = Vector3(0, 3.14159, 0)
+script = ExtResource("3_enemy")
+fighter_scene = ExtResource("f1")

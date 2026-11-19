@@ -296,6 +296,8 @@ func _draw_move_list(font: Font) -> void:
 		var color := Color.WHITE if fits else Color(0.5, 0.5, 0.55)
 		draw_rect(Rect2(row.position + Vector2(24, 10), Vector2(14, 14)), move["color"] if fits else Color(0.35, 0.35, 0.4))
 		_text(font, row.position + Vector2(46, 25), move["name"], 20, color)
+		if mode == Mode.COMBO:
+			target_icon(row.position + Vector2(204, row.size.y / 2.0), Moves.hits_many(move), not fits)
 		_text(font, row.position + Vector2(232, 25), String(move.get("cost_text", "%d AP" % shown_cost)), 20, GOLD if fits else color)
 		var desc: String = move["desc"]
 		if not usable and i < move_notes.size() and move_notes[i] != "":
@@ -390,13 +392,17 @@ func _draw_arts(font: Font, beside: Rect2) -> void:
 		if arts_focus and i == arts_index:
 			HudStyle.draw_selection(self, row, GOLD)
 		var name_color: Color = art["color"] if art["known"] else Color(0.55, 0.55, 0.6)
-		_text(font, row.position + Vector2(8, 17), art["name"], 18, name_color)
+		var name_x := 8.0
+		if art["known"] and art.has("many"):
+			target_icon(row.position + Vector2(15, 11), bool(art["many"]), false, 0.85)
+			name_x = 26.0
+		_text(font, row.position + Vector2(name_x, 17), art["name"], 18, name_color)
 		var art_tag: Array = art.get("tag", [])
 		if not art_tag.is_empty() and not heading:
 			_answer_tag(font, art_tag, Vector2(row.end.x - 4, row.position.y + 12), row)
 		if art["finisher"]:
 			var name_w := font.get_string_size(art["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
-			_text(font, row.position + Vector2(14 + name_w, 17), "FINISHER", 12, GOLD)
+			_text(font, row.position + Vector2(name_x + 6 + name_w, 17), "FINISHER", 12, GOLD)
 		var recipe_size := 15
 		while recipe_size > 10 and font.get_string_size(art["recipe"], HORIZONTAL_ALIGNMENT_LEFT, -1, recipe_size).x > row.size.x - 14:
 			recipe_size -= 1
@@ -756,11 +762,34 @@ func _draw_combo_bar(font: Font) -> void:
 					_code_arrow(centre, String(code[k]), arrow_r, Color(1.0, 0.85, 0.2) if k < typed else Color(0.55, 0.85, 1.0))
 				var surge := float((move.get("move", move) as Dictionary).get("surge", 0.0)) > 0.0
 				var tag := "CODE"
-				if playing and surge and typed >= code.size():
-					tag = "TAP %d/%d" % [exec_taps, int(move.get("taps", 0))]
-				elif surge:
-					tag = "CODE + TAP"
-				_small_tag(font, stretch, tag, CODE_COLOR)
+				var tag_color := CODE_COLOR
+				if surge:
+					# Energy: the taps that follow the code, as a row of pink
+					# diamonds over the arrows. Faint until the code is in, then
+					# the stretch turns pink and pulses: tap now.
+					var taps: int = maxi(int(move.get("taps", 1)), 1)
+					var tapping := playing and typed >= code.size()
+					if tapping:
+						var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 90.0)
+						draw_rect(stretch, Color(TAP_COLOR, 0.18 + 0.17 * pulse))
+						_dashed_rect(stretch, TAP_COLOR)
+					var pip_gap := stretch.size.x / (taps + 1)
+					var pip_r := clampf(pip_gap * 0.4, 2.0, 4.0)
+					for pip in taps:
+						var centre := Vector2(stretch.position.x + pip_gap * (pip + 1), stretch.position.y + pip_r + 3.0)
+						var lit := tapping and pip < exec_taps
+						_diamond(centre, pip_r, TAP_COLOR if lit else Color(TAP_COLOR, 0.25 if not tapping else 0.45),
+								Color.WHITE if tapping else Color(1, 1, 1, 0.3))
+					if tapping:
+						tag = Keybinds.fill("TAP {confirm}!  %d/%d") % [exec_taps, taps]
+						tag_color = TAP_COLOR
+						# And big, beside the bar (the AP bar sits above it): tap now.
+						var call := Keybinds.fill("< TAP {confirm}!")
+						var size_now := 22 + int(4.0 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 90.0)))
+						_text(font, Vector2(maxf(bar.end.x, segment.end.x) + 14.0, box.get_center().y + 8.0), call, size_now, TAP_COLOR.lightened(0.2))
+					else:
+						tag = "CODE, THEN TAP"
+				_small_tag(font, stretch, tag, tag_color)
 				continue
 			elif special and timing == 2:
 				# TAP (pink, diamonds): a dashed stretch where every tap counts,
@@ -968,6 +997,31 @@ func _small_tag(font: Font, box: Rect2, text: String, color: Color) -> void:
 		return  # would print over the previous caption
 	_last_tag_end = x + width
 	_text(font, Vector2(x, box.end.y + 13), text, 12, color.lightened(0.25))
+
+
+## Single Target / Area of Effect icons, next to attacks and Arts.
+const SINGLE_ICON_COLOR := Color(0.78, 0.85, 0.95)
+const AREA_ICON_COLOR := Color(1.0, 0.66, 0.32)
+
+
+## One enemy: a ring with a dot in it (a crosshair). Several: a wider ring
+## with three dots. `dim` greys it out like the rest of the row.
+func target_icon(centre: Vector2, many: bool, dim: bool, scale_by := 1.0) -> void:
+	var color := AREA_ICON_COLOR if many else SINGLE_ICON_COLOR
+	if dim:
+		color = Color(0.4, 0.4, 0.45)
+	var r := 7.0 * scale_by
+	draw_circle(centre, r + 1.5, Color(0.05, 0.05, 0.08, 0.8))
+	draw_arc(centre, r, 0.0, TAU, 20, color, 1.6 * scale_by, true)
+	if many:
+		for k in 3:
+			var angle := -PI / 2.0 + TAU * k / 3.0
+			draw_circle(centre + Vector2(cos(angle), sin(angle)) * r * 0.48, 1.9 * scale_by, color)
+	else:
+		draw_circle(centre, 2.3 * scale_by, color)
+		for k in 4:
+			var d := Vector2.from_angle(TAU * k / 4.0)
+			draw_line(centre + d * (r - 2.5 * scale_by), centre + d * (r + 2.5 * scale_by), color, 1.4 * scale_by)
 
 
 ## A rounded box (Hold timings).

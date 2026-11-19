@@ -1,6 +1,10 @@
 class_name Keybinds
 extends RefCounted
-## Rebindable keys and pad buttons. Every action keeps its extra keys
+## Rebindable keys and pad buttons. A main "key" can also be a mouse button:
+## the middle button or the two side buttons (the left one clicks menus and
+## the right one drags the camera, so they stay as they are). Mouse buttons
+## are stored as codes from MOUSE_BASE up, next to the key codes.
+## Every action keeps its extra keys
 ## (arrows, Enter, Backspace, keypad Enter); only its main key changes. Esc
 ## (and the pad's Menu button) is fixed so the pause menu can always be
 ## reached. The pad (Xbox layout) gets PAD_DEFAULTS; its main button can be
@@ -31,6 +35,7 @@ const ACTIONS := [
 	["restart", "Retry (after a fight)", "restart"],
 	["next_round", "Next round", "next"],
 	["previous_round", "Previous round", "prev"],
+	["sneak", "Sneak (exploring)", "sneak"],
 ]
 
 ## The pad's defaults, Xbox layout: per action, buttons ["b", button] and
@@ -52,12 +57,54 @@ const PAD_DEFAULTS := {
 	"camera_reset": [["b", JOY_BUTTON_RIGHT_STICK]],
 	"menu": [["b", JOY_BUTTON_START]],
 	"restart": [["b", JOY_BUTTON_BACK]],
+	"sneak": [["a", JOY_AXIS_TRIGGER_LEFT, 1.0]],
 	# Pad only (made at start-up): the right stick tilts the camera.
 	"camera_tilt_up": [["a", JOY_AXIS_RIGHT_Y, -1.0]],
 	"camera_tilt_down": [["a", JOY_AXIS_RIGHT_Y, 1.0]],
 }
 
 static var _applied := false
+
+## Mouse buttons as "key" codes: MOUSE_BASE + the button index (key codes
+## stay far below it).
+const MOUSE_BASE := 1 << 30
+## The mouse buttons that can be bound.
+const MOUSE_BINDABLE := [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]
+const MOUSE_NAMES := {MOUSE_BUTTON_MIDDLE: "Middle click", MOUSE_BUTTON_XBUTTON1: "Mouse 4",
+		MOUSE_BUTTON_XBUTTON2: "Mouse 5"}
+
+
+## The code of a key press or a bindable mouse button (0 for anything else).
+static func event_code(event: InputEvent) -> int:
+	if event is InputEventKey:
+		return event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	if event is InputEventMouseButton and event.button_index in MOUSE_BINDABLE:
+		return MOUSE_BASE + event.button_index
+	return 0
+
+
+## Whether the event is one of the keyboard / mouse bindings Change Keys
+## manages (not the pad's).
+static func _is_bound(event: InputEvent) -> bool:
+	return event_code(event) != 0
+
+
+## A key or mouse-button event for a code.
+static func make_event(code: int) -> InputEvent:
+	if code >= MOUSE_BASE:
+		var click := InputEventMouseButton.new()
+		click.button_index = code - MOUSE_BASE as MouseButton
+		return click
+	var key := InputEventKey.new()
+	key.physical_keycode = code
+	return key
+
+
+## A code's name: "J", "Space", "Mouse 4".
+static func code_name(code: int) -> String:
+	if code >= MOUSE_BASE:
+		return MOUSE_NAMES.get(code - MOUSE_BASE, "Mouse %d" % (code - MOUSE_BASE))
+	return OS.get_keycode_string(code)
 
 
 ## Loads saved keys once per run (the title screen and battles both call it).
@@ -79,24 +126,23 @@ static func apply_saved() -> void:
 		if typeof(codes) != TYPE_ARRAY or codes.is_empty() or not InputMap.has_action(entry[0]):
 			continue
 		for event in InputMap.action_get_events(entry[0]):
-			if event is InputEventKey:
+			if _is_bound(event):
 				InputMap.action_erase_event(entry[0], event)
 		var others: Array[InputEvent] = InputMap.action_get_events(entry[0])
 		for event in others:
 			InputMap.action_erase_event(entry[0], event)
 		for code in codes:
-			var key := InputEventKey.new()
-			key.physical_keycode = int(code)
-			InputMap.action_add_event(entry[0], key)
+			InputMap.action_add_event(entry[0], make_event(int(code)))
 		for event in others:
 			InputMap.action_add_event(entry[0], event)
 
 
-## The action's main key (the first keyboard key bound to it), or 0.
+## The action's main key (the first keyboard key or mouse button bound to
+## it), or 0.
 static func main_key(action: String) -> int:
 	for event in InputMap.action_get_events(action):
-		if event is InputEventKey:
-			return event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if _is_bound(event):
+			return event_code(event)
 	return 0
 
 
@@ -115,7 +161,7 @@ static func key_label(action: String) -> String:
 	var code := main_key(action)
 	if code == 0:
 		return "?"
-	return OS.get_keycode_string(code)
+	return code_name(code)
 
 
 ## The action's main pad button (-1 if it has none).
@@ -221,7 +267,7 @@ static func rebind(action: String, code: int) -> String:
 		else:
 			# An extra key of another action (an arrow, Enter...) moves over.
 			for event in InputMap.action_get_events(entry[0]):
-				if event is InputEventKey and event.physical_keycode == code:
+				if _is_bound(event) and event_code(event) == code:
 					InputMap.action_erase_event(entry[0], event)
 	_set_main(action, code)
 	save()
@@ -241,8 +287,8 @@ static func save() -> void:
 	for entry in ACTIONS:
 		var codes: Array = []
 		for event in InputMap.action_get_events(entry[0]):
-			if event is InputEventKey:
-				codes.append(event.physical_keycode if event.physical_keycode != 0 else event.keycode)
+			if _is_bound(event):
+				codes.append(event_code(event))
 		file.set_value("keys", entry[0], codes)
 		file.set_value("pad", entry[0], main_pad(entry[0]))
 	file.save(PATH)
@@ -286,21 +332,17 @@ static func _set_main(action: String, code: int) -> void:
 	var events := InputMap.action_get_events(action)
 	var replaced := false
 	for event in events:
-		if event is InputEventKey:
-			var key := InputEventKey.new()
-			key.physical_keycode = code
+		if _is_bound(event):
 			InputMap.action_erase_event(action, event)
-			InputMap.action_add_event(action, key)
+			InputMap.action_add_event(action, make_event(code))
 			replaced = true
 			break
 	if not replaced:
-		var key := InputEventKey.new()
-		key.physical_keycode = code
-		InputMap.action_add_event(action, key)
+		InputMap.action_add_event(action, make_event(code))
 	# Keep the main key first so label() finds it: re-add the extras after it.
 	var rest: Array[InputEvent] = []
 	for event in InputMap.action_get_events(action):
-		if not (event is InputEventKey and (event.physical_keycode == code)):
+		if not (_is_bound(event) and event_code(event) == code):
 			rest.append(event)
 	for event in rest:
 		InputMap.action_erase_event(action, event)

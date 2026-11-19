@@ -481,6 +481,10 @@ var _exec_reveal_left := 0.0
 ## Tests / balance runs can force it on without touching the saved setting.
 static var windup_override := -1  # -1 = use the setting, 0 = off, 1 = on
 static var party_ai_override := -1  # same, for Party AI (tests)
+## A fight that started on the field (the Prologue), or null: then the
+## arena is the room, see FieldFightDirector.
+static var field_fight: FieldFight = null
+var field_director: FieldFightDirector = null
 ## Party AI: how much of its own combo bar an AI ally aims to spend (good
 ## damage), how much of the steered fighter's bar it keeps for them, and the
 ## max AP its timed hits add (a Perfect adds perfect_max_ap_gain).
@@ -810,6 +814,7 @@ func _ready() -> void:
 		get_tree().reload_current_scene())
 	pause_menu.options_changed.connect(apply_screen_filter)
 	pause_menu.progress_saved = boss_rush_mode
+	pause_menu.field_fight = field_fight != null
 	if boss_rush_mode:
 		SaveGame.save_round(_round_index)  # auto-save: Continue starts this fight over
 	pause_menu.quit_requested.connect(func():
@@ -855,11 +860,17 @@ func _ready() -> void:
 			playtest.mode = "Boss Rush (continued from a save)" if continued else "Boss Rush"
 		else:
 			playtest.mode = "Round Select"
+	if field_director:
+		field_director.after_ready()
 
 
 ## Builds the current round: its arena, then the party and the enemies
 ## at their starting spots.
 func _load_round() -> void:
+	if field_fight != null:
+		field_director = FieldFightDirector.new()
+		field_director.build(self, field_fight)
+		return
 	var count := boss_rush.rounds.size()
 	if _round_index < 0:
 		_round_index = clampi(start_round - 1, 0, count - 1)
@@ -951,13 +962,14 @@ func _spawn(scenes: Array[PackedScene], holder: Node3D, enemy_side: bool) -> Arr
 
 ## True for rounds where the player chooses the party (boss rounds).
 func _picks_party() -> bool:
-	return not tutorial_mode and _round_index >= PICK_PARTY_FROM
+	return field_fight == null and not tutorial_mode and _round_index >= PICK_PARTY_FROM
 
 
 ## Starts a round (0-based) or the tutorial. Used by the title screen.
 static func start(tree: SceneTree, round_index: int, tutorial: bool, boss_rush: bool = false,
 		from_save: bool = false) -> void:
 	_round_index = round_index
+	field_fight = null
 	tutorial_mode = tutorial
 	boss_rush_mode = boss_rush and not tutorial
 	continued = from_save and boss_rush_mode
@@ -1046,7 +1058,8 @@ func _process(delta: float) -> void:
 		elif active == null:
 			_check_steer_hold()
 			var world_delta := delta * battle_speed
-			ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * _focus_ap_mult() * world_delta, current_max_ap)
+			if field_director == null or field_director.ap_regen_allowed():
+				ap = minf(ap + ap_regen_per_second * _ap_gain_multiplier() * _focus_ap_mult() * world_delta, current_max_ap)
 			for member in party:
 				member.riposte_left = maxf(member.riposte_left - world_delta, 0.0)
 			_free_roam(delta, world_delta)
@@ -1099,7 +1112,10 @@ func _tick_end_screen(delta: float) -> void:
 			_end_wait = end_screen_delay
 		_end_wait -= delta
 		if _end_wait <= 0.0:
-			_show_end_screen()
+			if field_director:
+				field_director.show_result()  # Victory / defeat, then back to the field
+			else:
+				_show_end_screen()
 		return
 	_cam_yaw += delta * 6.0
 
@@ -1353,6 +1369,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("menu"):
 		get_viewport().set_input_as_handled()
+		if _game_over and field_director != null:
+			return  # the Victory / defeat panel takes Confirm
 		if _game_over:
 			get_tree().change_scene_to_file("res://scenes/ui/title_menu.tscn")  # the fight is over anyway
 		else:
@@ -1364,7 +1382,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if tutorial_mode and (event.is_action_pressed("next_round") or event.is_action_pressed("previous_round")):
 		return
-	if event.is_action_pressed("next_round") or event.is_action_pressed("previous_round"):
+	if field_director == null and (event.is_action_pressed("next_round") or event.is_action_pressed("previous_round")):
 		get_viewport().set_input_as_handled()
 		_change_round(1 if event.is_action_pressed("next_round") else -1)
 		return
@@ -1381,7 +1399,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			DirAccess.make_dir_recursive_absolute(PlaytestLog.FOLDER)
 			OS.shell_open(ProjectSettings.globalize_path(PlaytestLog.FOLDER))
 			return
-		if event.is_action_pressed("restart"):
+		if event.is_action_pressed("restart") and field_director == null:
 			get_viewport().set_input_as_handled()
 			get_tree().reload_current_scene()  # start the battle over
 		return
@@ -1401,11 +1419,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _party_turn():
 		_tab_down_ms = -1
 		_menu_input(event)
-	elif active == null and event.is_action_pressed("swap_character"):
+	elif active == null and event.is_action_pressed("swap_character") and not _steer_locked():
 		# Wait for the release: a tap steers the next one, a hold opens the picker.
 		get_viewport().set_input_as_handled()
 		_tab_down_ms = Time.get_ticks_msec()
-	elif active == null and event.is_action_released("swap_character") and _tab_down_ms >= 0:
+	elif active == null and event.is_action_released("swap_character") and _tab_down_ms >= 0 and not _steer_locked():
 		get_viewport().set_input_as_handled()
 		_tab_down_ms = -1
 		_cycle_control()
@@ -1680,9 +1698,16 @@ func _push_back(fighter: Combatant, amount: float) -> void:
 # reset max AP, and raise it a little (ai_max_ap_per_hit per timed hit).
 # Tab (or hold Tab) takes any of them over, as usual.
 
+## Field fights: the soldiers can't be steered until the game says so.
+func _steer_locked() -> bool:
+	return field_director != null and field_director.steering_locked()
+
+
 func _party_ai_on() -> bool:
 	if tutorial_mode:
 		return false
+	if field_director != null:
+		return true  # the soldiers fight on their own (Tab takes over once unlocked)
 	return (party_ai_override == 1) if party_ai_override >= 0 else Settings.party_ai()
 
 
@@ -2162,6 +2187,8 @@ func _free_roam(delta: float, world_delta: float) -> void:
 	if controlled != null and not controlled.is_down and input != Vector2.ZERO:
 		controlled.step(_camera_relative(input), delta)
 		_walk_inside(controlled)
+	if field_director:
+		field_director.tick_escape(input, delta)
 	_tick_blasts(world_delta)
 	for enemy in enemies:
 		if enemy.skill_revealed and enemy.loaded_skill != Skills.NONE:
@@ -3970,7 +3997,13 @@ func _leave_hazards(enemy: Combatant) -> void:
 		_spawn_trail(enemy)
 
 
-## Shout: everyone inside is pushed out past the edge, then the follow-up
+## Shout's stun outlasts the follow-up's delay by this much, so the
+## follow-up lands while they're still stuck in its area.
+@export var push_out_stun_extra: float = 0.25
+
+
+## Shout: everyone inside is pushed out past the edge (and stunned until
+## the follow-up lands), then the follow-up
 ## (Sword Spin) comes at once and hits everyone who was pushed, wherever
 ## they landed, plus anyone else standing in its own area.
 func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
@@ -3985,7 +4018,20 @@ func _push_out(enemy: Combatant, reset_timeline: bool) -> void:
 		var needed := def.radius + member.body_radius + 0.4 - offset.length()
 		if needed > 0.0:
 			_knock_away(member, enemy.global_position, needed)
-		_popup(member, "PUSHED", Color(1.0, 0.6, 0.3))
+		if def.follow_up != null and not member.is_down:
+			# Stunned until the follow-up lands (play-test: Shout pushed
+			# them into Sword Spin's ring, but they could walk straight back
+			# out). Same as a knockdown without falling: no walking, and a
+			# turn that comes up waits.
+			var stun := def.follow_up_delay + push_out_stun_extra
+			member.set_meta("knocked", maxf(float(member.get_meta("knocked", 0.0)), stun))
+			# Held until the follow-up has really struck (a party turn can stop
+			# the clock in between): see _tick_knockdowns.
+			member.set_meta("stunned_by", [enemy, def.follow_up])
+			_popup(member, "PUSHED - STUNNED", Color(1.0, 0.6, 0.3))
+			_count("shout_stuns")
+		else:
+			_popup(member, "PUSHED", Color(1.0, 0.6, 0.3))
 	if caught.is_empty():
 		_flash("%s's %s: nobody was close" % [enemy.display_name, def.skill_name])
 	else:
@@ -5591,6 +5637,13 @@ func _tick_knockdowns(delta: float) -> void:
 			member.remove_meta("knocked")
 			continue
 		var left := float(member.get_meta("knocked")) - delta
+		if member.has_meta("stunned_by"):
+			var by: Array = member.get_meta("stunned_by")
+			var enemy: Combatant = by[0] if is_instance_valid(by[0]) else null
+			if enemy != null and not enemy.is_down and enemy.loaded_def == by[1]:
+				left = maxf(left, push_out_stun_extra)  # its follow-up hasn't struck yet
+			else:
+				member.remove_meta("stunned_by")
 		if left > 0.0:
 			member.set_meta("knocked", left)
 			continue
@@ -7343,7 +7396,7 @@ func _update_arts_list() -> void:
 				int(art.get("timing", Moves.TimingType.PRESS)), "Press")
 		rows.append({"name": art["name"], "recipe": _recipe_text(art), "known": true, "index": index,
 				"desc": art["desc"], "cost": art_cost, "timing": timing_name,
-				"next": next, "color": art["color"], "finisher": art.get("finisher", false),
+				"next": next, "color": art["color"], "finisher": art.get("finisher", false), "many": Moves.hits_many(art),
 				"effects": MoveInfo.lines(art)})
 	battle_menu.arts = rows
 	battle_menu.arts_hidden = hidden
@@ -8072,7 +8125,11 @@ func _timing_prompt() -> String:
 			if int(entry["timing"]) == Moves.TimingType.CODE:
 				var code_line := "TYPE %s with WASD before the hit: Perfect!  (a wrong arrow starts it over)" % code_text(entry["code"])
 				if float(entry["move"].get("surge", 0.0)) > 0.0:
-					code_line = "TYPE %s with WASD, then TAP {confirm} freely: every tap adds damage" % code_text(entry["code"])
+					if _exec_code >= (entry["code"] as Array).size():
+						code_line = "CODE IN!  Now TAP {confirm} again and again before the hit: every tap adds damage (%d / %d)" \
+								% [_exec_taps, int(entry["taps"])]
+					else:
+						code_line = "1) TYPE %s with WASD   2) then TAP {confirm} again and again: every tap adds damage" % code_text(entry["code"])
 				return Keybinds.fill(code_line)
 			if int(entry["timing"]) == Moves.TimingType.HOLD:
 				return Keybinds.fill("HOLD {confirm} in the first box, LET GO in the last one: Perfect!  (a bad let-go only loses the Perfect)")
@@ -8420,6 +8477,10 @@ func _judge_code(dir: String) -> void:
 		_exec_code += 1
 		if _exec_code >= code.size():
 			_mark_timing(hit, Timing.PERFECT)
+			if float(entry["move"].get("surge", 0.0)) > 0.0:
+				# Energy: the code is in, the taps start now. Said loudly
+				# (play-test: it wasn't clear you can tap after the arrows).
+				_popup(_exec_attacker, Keybinds.fill("CODE IN!  TAP {confirm}!"), BattleMenu.TAP_COLOR)
 	else:
 		_exec_code = 0
 		_count("code_restarts")
@@ -9710,6 +9771,7 @@ func _choose_skill(index: int) -> void:
 			_begin_targeting(skill, Keybinds.fill(hint))
 			_target_marker.global_position = controlled.global_position + controlled.flat_forward() * 3.0
 			_keep_marker_in_range()
+			_show_range_ring(float(skill["range"]))
 		_:
 			_target_choices = _skill_choices(skill)
 			_target_index = 0
@@ -9794,11 +9856,68 @@ func _confirm_target() -> void:
 	_use_skill(_pending_skill, chosen, point)
 
 
+## Shield Bash: a short wind-up, then the Knight really runs the gap
+## (speeding up) and the shield slams in on arrival. It used to teleport
+## them beside the enemy while the animation lunged the body a further few
+## meters through it and back.
+const SHIELD_BASH_WINDUP := 0.12
+const SHIELD_BASH_CHARGE := 0.22
+
+
+func _shield_bash_charge(user: Combatant, target: Combatant) -> void:
+	var from := user.global_position
+	var dir := target.global_position - from
+	dir.y = 0.0
+	if dir.length() < 0.01:
+		return
+	# Where they end up: beside the enemy, kept inside the arena.
+	user.global_position = target.global_position - dir.normalized() * (target.body_radius + user.body_radius + 0.15)
+	_keep_in_arena(user)
+	var dest := user.global_position
+	user.global_position = from
+	user.face_toward(dir, 1.0, 100000.0)
+	var run := dest - from
+	run.y = 0.0
+	var tween := user.create_tween()
+	tween.tween_interval(SHIELD_BASH_WINDUP)
+	tween.tween_callback(func():
+		Sfx.play("swing")
+		if run.length() > 0.5:
+			SpellFx.dust(self, user, -run.normalized(), minf(run.length(), 3.0)))
+	tween.tween_property(user, "global_position", dest, SHIELD_BASH_CHARGE) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(func():
+		if is_instance_valid(target) and not target.is_down:
+			Sfx.play("hit_blunt"))
+
+
 func _clear_target_marker() -> void:
 	if _target_marker != null:
 		_target_marker.queue_free()
 		_target_marker = null
+	if _range_ring != null:
+		_range_ring.queue_free()
+		_range_ring = null
 
+
+## Jump / Teleport: a ring around the fighter at the move's reach, so the
+## marker's limit can be seen before it stops (play-test: Jump had no clear
+## maximum range).
+var _range_ring: Node3D = null
+const RANGE_RING_COLOR := Color(0.45, 1.0, 0.9, 0.95)
+
+
+func _show_range_ring(reach: float) -> void:
+	if _range_ring != null:
+		_range_ring.queue_free()
+	_range_ring = Node3D.new()
+	_range_ring.name = "RangeRing"
+	# A thin ring, and a fainter wide band just inside it.
+	_range_ring.add_child(_make_ring(reach, 0.12, RANGE_RING_COLOR))
+	var band := _make_ring(reach - 0.12, 0.6, Color(RANGE_RING_COLOR, 0.22))
+	_range_ring.add_child(band)
+	add_child(_range_ring)
+	_range_ring.global_position = Vector3(controlled.global_position.x, 0.0, controlled.global_position.z)
 
 ## Carries out a skill. One per turn: afterwards the command menu comes
 ## back with Abilities greyed out, so you can still Attack or Wait.
@@ -9860,11 +9979,7 @@ func _use_skill(skill: Dictionary, target: Combatant, point: Vector3) -> void:
 			user.add_status(String(skill["name"]).to_lower(), turns, user)
 			_popup(user, String(skill["name"]).to_upper(), skill["color"])
 		"Shield Bash":
-			var dir := target.global_position - user.global_position
-			dir.y = 0.0
-			user.global_position = target.global_position - dir.normalized() * (target.body_radius + user.body_radius + 0.15)
-			_keep_in_arena(user)
-			user.face_toward(dir, 1.0, 100000.0)
+			_shield_bash_charge(user, target)
 			head_start = wait_head_start
 			message += " on %s: next turn comes sooner" % target.display_name
 		"Taunt":
@@ -10271,6 +10386,8 @@ func _update_ui(delta: float) -> void:
 		var won := _result_text == "Victory!"
 		if tutorial_mode:
 			controls_label.text = Keybinds.fill("Esc: back to the menu     {restart}: play the tutorial again")
+		elif field_director != null:
+			controls_label.text = ""  # the Victory / defeat panel has its own hint
 		else:
 			controls_label.text = Keybinds.fill("{next}: next round     {restart}: play again     Esc: menu" if won else "{restart}: retry     {next} / {prev}: next / previous round     Esc: menu")
 			if playtest != null and playtest.saved:
@@ -10371,7 +10488,7 @@ func _controls_hint() -> String:
 	var next_name := ""
 	if standing.size() > 1 and controlled != null:
 		next_name = standing[(standing.find(controlled) + 1) % standing.size()].display_name
-	var tab_part := (Keybinds.fill("     {swap}: switch to ") + next_name + " (hold: choose)") if next_name != "" else ""
+	var tab_part := (Keybinds.fill("     {swap}: switch to ") + next_name + " (hold: choose)") if next_name != "" and not _steer_locked() else ""
 	return Keybinds.fill("{move}: move %s (free)%s     {cam_l} / {cam_r} or right-drag: camera     Esc: pause") % [controlled.display_name if controlled else "", tab_part]
 
 

@@ -37,7 +37,7 @@ animation, a retro screen filter (Normal, Light or Off), and a place for every a
 - **Ragdolls**: strong blows knock fighters down and throw them across the arena, and the last enemy of a fight falls in slow motion
 - **Sound and music**: hits, spells, Parries and menus all have sounds, with music for every fight, the bosses and the menus (all CC0)
 - **Controller support** (Xbox layout): play the whole game on a gamepad, with on-screen prompts that switch to its buttons and rebindable buttons
-- **Options**: screen filter, master, music and sound volume, camera speed, mouse sensitivity and invert, Party AI and more
+- **Options**: screen filter, master, music and sound volume, camera speed, mouse sensitivity and invert, Party AI, the renderer on Windows (Vulkan or Direct3D 12) and more
 - **A guided tutorial** that teaches every mechanic, step by step, and a **Command List** in the pause menu (Esc) to preview and practise every move
 - **Play-test reports** written after every fight (*Open play-test report* on the end screen, or O)
 
@@ -89,18 +89,18 @@ leaving AP for yours. Tab still takes any of them over.
 
 ## How to play
 
-**Current build: [1.0.0](../../releases/tag/v1.0.0)** (all builds are on the [Releases](../../releases) page)
+**Current build: [1.0.1](../../releases/tag/v1.0.1)** (all builds are on the [Releases](../../releases) page)
 
 **Download (Windows):** get
-[`PrototypeJRPG-1.0.0-windows.zip`](../../releases/download/v1.0.0/PrototypeJRPG-1.0.0-windows.zip),
+[`PrototypeJRPG-1.0.1-windows.zip`](../../releases/download/v1.0.1/PrototypeJRPG-1.0.1-windows.zip),
 unzip it and run `Prototype JRPG.exe`. No install needed. Windows may warn
 about an unknown app the first time: choose *More info > Run anyway*.
 
 **Download (Linux, x86_64):** get
-[`PrototypeJRPG-1.0.0-linux.tar.gz`](../../releases/download/v1.0.0/PrototypeJRPG-1.0.0-linux.tar.gz), then:
+[`PrototypeJRPG-1.0.1-linux.tar.gz`](../../releases/download/v1.0.1/PrototypeJRPG-1.0.1-linux.tar.gz), then:
 
 ```
-tar -xzf PrototypeJRPG-1.0.0-linux.tar.gz
+tar -xzf PrototypeJRPG-1.0.1-linux.tar.gz
 ./"Prototype JRPG.x86_64"
 ```
 
@@ -141,7 +141,7 @@ get new releases as they come out, and ask the game's bot anything with
 | Esc | Menu | Pause: Command List, Options, Change Keys, Restart, Quit |
 | W / S, J (end screen) | Up / Down, A | Choose and pick: Next round, Retry, Change party, and more (O opens the play-test reports) |
 
-Keys and buttons can be rebound in **Change Keys** (title screen or Esc). On-screen
+Keys and buttons can be rebound in **Change Keys** (title screen or Esc), including the middle and side mouse buttons. On-screen
 hints switch to controller buttons as soon as you use the pad. Camera speed, mouse
 sensitivity and Invert camera (X, Y or both) are in **Options**.
 

@@ -4,6 +4,195 @@ How the battle system evolved, including ideas that were tried and changed.
 Newest first. Detailed current rules live in `battle-design.md`.
 Player-facing notes per public build are in `RELEASES.md`.
 
+## 1.0.1 additions: play-test requests and a crash option
+
+From Thiago's and Coryn's play-tests (19 Nov). All in the 1.0.1 builds.
+
+- **Mouse buttons as keys** (`keybinds.gd`, both Change Keys pages): the
+  middle button and the two side buttons (Mouse 4 / Mouse 5) can be a
+  key's main binding, saved like keys (codes from `Keybinds.MOUSE_BASE`
+  up). Left click (menus) and right click (camera drag) can't be taken; a
+  left / right click while waiting for a key still cancels.
+- **Jump's reach** (`battle_arena.gd`, `_show_range_ring`): aiming Jump
+  (and Teleport) draws a teal ring at the move's reach (8 m) around the
+  fighter, gone when the aiming ends.
+- **Energy spells: tap after the code** (`battle_menu.gd`,
+  `battle_arena.gd`): before the code, the prompt reads "1) TYPE ...
+  2) then TAP ..." and the code stretch shows the tap pips faintly
+  ("CODE, THEN TAP"). Once the code is in: a "CODE IN! TAP J!" popup over
+  the Mage, the stretch turns pink and pulses, the pips fill per tap, a
+  big "< TAP J!" sits beside the bar, and the prompt counts the taps.
+- **Single Target / Area icons** (`battle_menu.gd`, `Moves.hits_many`):
+  attacks in the combo menu and known Arts in the Arts panel show a
+  crosshair (one enemy) or an orange ring with three dots (an area of any
+  shape, or Chain Lightning's chain).
+- **Shout stuns into Sword Spin** (`_push_out`): everyone Shout pushes is
+  stunned (can't walk; a turn that comes up waits) until the follow-up has
+  really struck: the stun is held while the Ogre's Sword Spin is still
+  pending (`stunned_by`), so a party turn stopping the clock can't let them
+  walk out. `push_out_stun_extra` 0.25 s after it.
+- **Golem Smash arms** (`figure_anim.gd`, `_smash_side`): the Right / Left
+  Golem Smash wind-up raises the arm on that side (by
+  `aim_offset_degrees`), and the blow comes down with that arm. It used to
+  always raise the right arm.
+- **Renderer option (Windows)** (`settings.gd`): Options > Renderer:
+  Vulkan (default) or Direct3D 12, applied at the next start. Coryn's game
+  closed without an error mid-fight (the log stops mid-line at 32 KB, in
+  Round 11), the kind of crash a graphics driver causes; the project
+  forced Direct3D 12 on Windows (`rendering_device/driver.windows`), which
+  is removed: the base driver (Vulkan, falling back to D3D12 by itself)
+  is used, and choosing Direct3D 12 writes `user://renderer.cfg`, which
+  `application/config/project_settings_override` loads at start-up.
+- Tests: `_mousekeys.gd`, `_v101fight.gd`.
+
+## Version 1.0.1
+
+- A patch release from the 1.0.0 code: the play-test requests above,
+  Shield Bash's charge and AI allies running on the spot (below). The 1.0.1
+  builds don't include the Prologue work above (New Game and the field):
+  they were exported from 1.0.0 plus these two fixes. `RELEASES.md` has
+  the player-facing notes; README points at 1.0.1.
+
+## Shield Bash is a real charge
+
+- Shield Bash used to teleport the Knight beside the enemy in one frame,
+  while its animation lunged their body about 4 m further, through the
+  enemy, and slid it back. Now (`battle_arena.gd`, `_shield_bash_charge`):
+  a 0.12 s wind-up on the spot (crouched behind the shield), then they run
+  the gap in 0.22 s, speeding up, with a swing sound and a dust trail, and
+  the shield slams in on arrival (a blunt hit sound). Where they end up is
+  unchanged (beside the enemy, kept inside the arena), and so is the
+  sooner next turn.
+- `move_anims.gd`: a new Shield Bash animation keyed to that charge (no
+  "dash" key: the Knight really moves now). `figure_anim.gd`: a move
+  marked `"charge"` doesn't play the walk cycle on top of its own legs.
+- Test: `_shieldbash.gd` (no teleport, the wind-up on the spot, a run over
+  many frames, the body stays with the Knight, ends beside the enemy).
+
+## Prologue, Stage 3: fights in the room
+
+- **Engaging an enemy on the field starts the fight right there**: a short
+  battle transition (a flash, then black bands slide across: an original
+  take on the old-school kind, time for the music to change), then the
+  battle in field mode (`BattleArena.field_fight`, run by
+  `FieldFightDirector`). The arena is the room's `battle_area` (flat
+  floor only for now), the room itself shows round the fight (walls cut
+  away as on the field), and pillars and crates (the "obstacle" group)
+  are round obstacles. **Every enemy in the room joins**, and everyone
+  starts where they stood. The camera starts from the field's angle.
+- How it started:
+  - **Ambush** (a swing from behind, unseen): the party starts with 50 AP.
+  - **Normal**: 0 AP (field fights always start from 0).
+  - **Caught**: 0 AP, the whole party knocked down, the enemies ahead on
+    the timeline (55-70), and no AP recharge until everyone is up.
+- **Escaping**: steer towards a door (within 35 degrees) for 2 s; a bar
+  shows it filling. The room resets (enemies back where they started,
+  calm for 2 s) with the party just inside that door. Set fights will be
+  able to forbid it (`FieldFight.can_escape`).
+- **After a win**: the Victory panel (experience earned, items found;
+  enemies don't drop Credits), Confirm to go back to exploring. HP and
+  the item pouch carry over (downed members come round with 1 HP); the
+  found items go into the pouch. Experience adds up (no levels yet).
+  Placeholder numbers: `scripts/field/field_rewards.gd`.
+- **Beaten enemies stay gone** (leaving and coming back too) until a save
+  point (`FieldState.rest`, used by save points in Stage 4).
+- **Losing**: the defeat panel, then the party wakes up healed at the last
+  save point, or the dungeon's entrance before one. Everything beaten
+  stays beaten. (Boss retries come with the boss.)
+- `FieldState`: the Prologue's party, HP, pouch, experience, beaten
+  enemies and respawn point, shared by the field and the battle.
+- In field fights the soldiers fight on their own and can't be switched to
+  yet (`FieldState.steer_unlocked`), the Tab hint is hidden, the pause menu
+  has no Restart, and the Boss Rush's end hints and round keys are off.
+- Music: field fights play `audio/music/field_battle` once it exists (its
+  own theme, to be picked); the battle theme until then.
+- Test rooms: fight areas set, the hall's pillars and crate are obstacles,
+  the Living Armor guards the steps room's floor (not the platform), the
+  doors name themselves for escaping ("through the north door").
+- Tests: `_fieldfight.gd` (`_field.gd` and `_fieldenemy.gd` now keep fights
+  off: `FieldScene.fights_on`). Screenshots: `_shotfieldfight.gd`.
+
+## Prologue design: the first rooms
+
+- `prologue-design.md`: the dungeon room by room, from the Outskirts
+  through the mine (Entrance, Lobby, Mines West, the Secret Path) to the
+  Ruins Lobby (first draft).
+
+## Prologue, Stage 2: field enemies
+
+- **Enemies on the field** (`FieldEnemy`, `scripts/field/field_enemy.gd`):
+  placed in a room under "Enemies", each with its fight figure (no names
+  or attack areas shown out here). Each is set up on its own:
+  - Patrolling: a "Patrol" child with Marker3D points, walked round and
+    round or there and back, pausing at each. Or standing guard, turning
+    between look angles.
+  - Sight, drawn on the floor: a cone (7 m, 70 degrees; walls cut it
+    short and block it), plus a 2.5 m all-round radius that only hears
+    running. Or a full circle (the Living Armor in the test steps) that
+    only notices running inside it, never walking or sneaking.
+  - **They move at your pace while unaware:** standing still freezes them;
+    sneaking (or a half-pushed stick) slows them to match.
+  - Seen: a "!" and a short start, the sight turns red, then a chase in
+    real time (4 m/s: faster than a patrol, a little slower than you).
+    Out of its sight (or 1.4x its range) for 2.5 s, it gives up and walks
+    back to where it started, at your pace, still watching.
+- **Sneak** (new action: Shift, the left trigger; in Change Keys and the
+  Controls page): half speed, and quiet.
+- **The field swing** (Confirm): Wyr swings the sword. Hitting an enemy
+  from behind before it has noticed the party is an **ambush** (the party
+  will start with 50 AP); any other hit starts a **normal** fight; being
+  touched is getting **caught** (knocked down, enemies ahead). Until
+  fights in the room exist (Stage 3) a message says which start it would
+  be and the enemy leaves the room; entering the room again brings it
+  back. `FieldScene.engage()` / `engaged` is where Stage 3 hooks in;
+  `FieldRoom.reset_enemies()` puts everyone back (for escaping).
+- Test rooms: a Ratkin patrols past the hall's north door and a Kobold
+  Archer stands guard in its corner; a Bandit Arcanist walks a loop in
+  the test steps and a Living Armor guards the platform (full circle).
+- Tests: `_fieldenemy.gd`. Screenshots: `_shotfieldenemy.gd`.
+
+## Prologue, Stage 1: exploring (the field)
+
+- **New Game** on the title screen (above Boss Rush) starts the Prologue.
+  It opens a page first: the Prologue is a short story set piece, and Boss
+  Rush and Round Select are the places to test the combat system (Start
+  the Prologue / Back). Boss Rush, Tutorial and Round Select are unchanged.
+- **The field** (`scenes/field/field.tscn`, `scripts/field/`): the party
+  walks through rooms (loading areas), one loaded at a time.
+  - `FieldWalker`: Wyr (the Knight) leads, steered with the move keys or
+    the left stick, relative to the camera (4.5 m/s, smooth starts and
+    stops, turns to face the way it walks). The two soldiers follow along
+    the leader's trail, 1.4 m apart, catching up when they fall behind
+    (placeholders: the party's Mage and Cleric figures). Same figures and
+    walk cycle as in a fight, without the floating names and reach rings.
+    Walls and ledges stop the party; the party doesn't bump into itself.
+    Anyone who falls out of a room is put back by the leader.
+  - `FieldCamera`: free, with the fight's controls and Options (camera
+    keys, right stick, right-drag, wheel, Camera speed, Mouse sensitivity,
+    Invert), but every room has its own set angle (camera_yaw / pitch /
+    distance): entering a room snaps back to it, and the reset key returns
+    to it.
+  - `FieldRoom`: rooms are built in the editor from CSG shapes with
+    collision; plain coloured materials become the PS1 material at
+    start-up. Walls in the "wall" group are cut away while they're on the
+    camera's side (they still block the way). Stairs: steps without
+    collision under an invisible ramp ("ramp" group). Entries are
+    Marker3Ds under "Entries". The room's name shows at the top left on
+    entering.
+  - `FieldDoor`: walking the leader into one fades out, loads the target
+    room, puts the party at the named entry (followers lined up behind) and
+    fades in. Doors only work once the leader has stepped clear of them,
+    so arriving never bounces you straight back.
+  - Two grey-box test rooms: Test Hall (pillars, a crate) and Test Steps (a
+    raised platform up a flight of stairs), joined by a door.
+  - Esc: the pause menu in a field version (Resume, Options, Change Keys,
+    Quit to title) until the field menu is built. The PS1 screen filter
+    and the Options apply as in a fight. No field music yet.
+- `docs/prologue-design.md`: the Prologue's design (the world, the story,
+  exploring, field enemies and how fights start, fights in the room,
+  saving, cutscenes, the build order), with Thiago's answers.
+- Tests: `_field.gd`, `_newgame.gd`. Screenshots: `_shotfield.gd`.
+
 ## AI allies no longer run on the spot
 
 - Play-test (Round 4, the pit arena): the AI Cleric ran on the spot by the

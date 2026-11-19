@@ -20,6 +20,17 @@ static var _invert_camera := "off"
 const INVERT_MODES := ["off", "x", "y", "both"]
 const INVERT_NAMES := {"off": "Off", "x": "X (left / right)", "y": "Y (up / down)", "both": "X and Y"}
 
+## The graphics API on Windows: "vulkan" (default) or "d3d12". It's read
+## when the game starts, from user://renderer.cfg (project.godot's
+## application/config/project_settings_override), so a change applies after
+## a restart. Linux always uses Vulkan, so the row only shows on Windows.
+const RENDERERS := ["vulkan", "d3d12"]
+const RENDERER_NAMES := {"vulkan": "Vulkan", "d3d12": "Direct3D 12"}
+const RENDERER_OVERRIDE := "user://renderer.cfg"
+static var _renderer := "vulkan"
+## Whether Options lists the renderer (Windows; tests switch it on).
+static var renderer_row := OS.get_name() == "Windows"
+
 ## Camera speed steps (percent) the Options rows cycle through.
 const CAMERA_STEPS := [100, 125, 150, 200, 50, 75]
 
@@ -56,7 +67,7 @@ static func set_screen_filter(which: String) -> void:
 
 ## Its rows, each showing its current value.
 static func option_rows() -> Array[String]:
-	return [
+	var rows: Array[String] = [
 		"Screen filter: %s" % SCREEN_FILTER_NAMES[screen_filter()],
 		"Move details: %s" % ("On" if move_details() else "Off"),
 		"Command timing: %s" % ("Windup" if command_windup() else "Classic"),
@@ -68,6 +79,16 @@ static func option_rows() -> Array[String]:
 		"Mouse sensitivity: %d%%" % mouse_sensitivity(),
 		"Invert camera: %s" % INVERT_NAMES[invert_mode()],
 	]
+	if renderer_row:
+		rows.append(_renderer_row())
+	return rows
+
+
+static func _renderer_row() -> String:
+	var row := "Renderer: %s" % RENDERER_NAMES[renderer()]
+	if renderer() != running_renderer():
+		row += "  (after a restart)"
+	return row
 
 
 static func _volume_name(percent: int) -> String:
@@ -102,6 +123,8 @@ static func option_note(row: int) -> String:
 			return "How far the camera turns when you drag with the right mouse button"
 		9:
 			return "Mirror the camera: left / right (X), up / down (Y), or both"
+		10:
+			return "Vulkan or Direct3D 12. If the game crashes, try the other one (restart the game to apply)"
 	return ""
 
 
@@ -129,6 +152,38 @@ static func change_option(row: int) -> void:
 			set_mouse_sensitivity(_next_camera_step(mouse_sensitivity()))
 		9:
 			set_invert_mode(INVERT_MODES[(INVERT_MODES.find(invert_mode()) + 1) % INVERT_MODES.size()])
+		10:
+			set_renderer(RENDERERS[(RENDERERS.find(renderer()) + 1) % RENDERERS.size()])
+
+
+## The renderer chosen in Options ("vulkan" / "d3d12"; it takes effect at the
+## next start).
+static func renderer() -> String:
+	_load()
+	return _renderer
+
+
+## The renderer the game is running on now ("vulkan" / "d3d12"; anything
+## else, such as OpenGL on a PC without either, counts as Vulkan's place).
+static func running_renderer() -> String:
+	var name := RenderingServer.get_current_rendering_driver_name()
+	return "d3d12" if name == "d3d12" else "vulkan"
+
+
+## Saves the choice, and the override file the engine reads at start-up:
+## Direct3D 12 writes it, Vulkan (the project's default) removes it.
+static func set_renderer(which: String) -> void:
+	_load()
+	_renderer = which if which in RENDERERS else "vulkan"
+	_save()
+	var path := ProjectSettings.globalize_path(RENDERER_OVERRIDE)
+	if _renderer == "vulkan":
+		if FileAccess.file_exists(RENDERER_OVERRIDE):
+			DirAccess.remove_absolute(path)
+		return
+	var file := FileAccess.open(RENDERER_OVERRIDE, FileAccess.WRITE)
+	if file != null:
+		file.store_string("; Written by the game's Options (Renderer). Delete this file to go back to Vulkan.\n\n[rendering]\n\nrendering_device/driver=\"%s\"\n" % _renderer)
 
 
 static func _next_camera_step(percent: int) -> int:
@@ -320,6 +375,9 @@ static func _load() -> void:
 		if invert is bool:
 			invert = "x" if invert else "off"  # saved before X / Y: it mirrored turning
 		_invert_camera = String(invert) if String(invert) in INVERT_MODES else "off"
+		_renderer = String(file.get_value("video", "renderer", "vulkan"))
+		if not _renderer in RENDERERS:
+			_renderer = "vulkan"
 
 
 static func _save() -> void:
@@ -336,4 +394,5 @@ static func _save() -> void:
 	file.set_value("camera", "speed", _camera_speed)
 	file.set_value("camera", "mouse", _mouse_sensitivity)
 	file.set_value("camera", "invert", _invert_camera)
+	file.set_value("video", "renderer", _renderer)
 	file.save(PATH)

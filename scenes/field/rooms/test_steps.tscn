@@ -1,0 +1,191 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/field/field_room.gd" id="1_room"]
+[ext_resource type="Script" path="res://scripts/field/field_door.gd" id="2_door"]
+[ext_resource type="Script" path="res://scripts/field/field_enemy.gd" id="3_enemy"]
+[ext_resource type="PackedScene" path="res://scenes/characters/bandit_arcanist.tscn" id="f0"]
+[ext_resource type="PackedScene" path="res://scenes/characters/living_armor.tscn" id="f1"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.36, 0.34, 0.31, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.46, 0.44, 0.41, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_pillar"]
+albedo_color = Color(0.4, 0.39, 0.44, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_dark"]
+albedo_color = Color(0.04, 0.04, 0.05, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_step"]
+albedo_color = Color(0.42, 0.37, 0.31, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_ramp"]
+albedo_color = Color(1, 0, 1, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Door_s"]
+size = Vector3(2.4, 2.4, 0.5)
+
+[node name="TestSteps" type="Node3D"]
+script = ExtResource("1_room")
+room_name = "Test Steps"
+battle_area = Rect2(-7, 0.3, 14, 8.7)
+camera_yaw = 25
+camera_pitch = 38
+camera_distance = 11
+background = Color(0.06, 0.07, 0.08, 1)
+
+[node name="Geometry" type="Node3D" parent="."]
+
+[node name="Entries" type="Node3D" parent="."]
+
+[node name="Doors" type="Node3D" parent="."]
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Floor" type="CSGBox3D" parent="Geometry"]
+position = Vector3(0, -0.25, 0)
+use_collision = true
+size = Vector3(14, 0.5, 18)
+material = SubResource("Mat_floor")
+
+[node name="Wall_N0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(0, 2, -9.25)
+use_collision = true
+size = Vector3(15, 4, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_S0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(-4.35, 2, 9.25)
+use_collision = true
+size = Vector3(6.3, 4, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_S1" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(4.35, 2, 9.25)
+use_collision = true
+size = Vector3(6.3, 4, 0.5)
+material = SubResource("Mat_wall")
+
+[node name="Wall_E0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(7.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 4, 19)
+material = SubResource("Mat_wall")
+
+[node name="Wall_W0" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(-7.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 4, 19)
+material = SubResource("Mat_wall")
+
+[node name="Passage_s" type="CSGBox3D" parent="Geometry"]
+position = Vector3(0, -0.25, 10)
+use_collision = true
+size = Vector3(2.4, 0.5, 2)
+material = SubResource("Mat_floor")
+
+[node name="Dark_s" type="CSGBox3D" parent="Geometry" groups=["wall"]]
+position = Vector3(0, 1.5, 11.2)
+use_collision = true
+size = Vector3(3.4, 3, 0.4)
+material = SubResource("Mat_dark")
+
+[node name="Door_s" type="Area3D" parent="Doors"]
+position = Vector3(0, 1.2, 9.75)
+script = ExtResource("2_door")
+to_room = "res://scenes/field/rooms/test_hall.tscn"
+to_entry = "from_steps"
+label = "through the south door"
+
+[node name="Shape" type="CollisionShape3D" parent="Doors/Door_s"]
+shape = SubResource("Shape_Door_s")
+
+[node name="Platform" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-2.5, 0.75, -6)
+use_collision = true
+size = Vector3(9, 1.5, 6)
+material = SubResource("Mat_step")
+
+[node name="Step1" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.125, -0.25)
+use_collision = false
+size = Vector3(2.5, 0.25, 0.5)
+material = SubResource("Mat_step")
+
+[node name="Step2" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.25, -0.75)
+use_collision = false
+size = Vector3(2.5, 0.5, 0.5)
+material = SubResource("Mat_step")
+
+[node name="Step3" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.375, -1.25)
+use_collision = false
+size = Vector3(2.5, 0.75, 0.5)
+material = SubResource("Mat_step")
+
+[node name="Step4" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.5, -1.75)
+use_collision = false
+size = Vector3(2.5, 1, 0.5)
+material = SubResource("Mat_step")
+
+[node name="Step5" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.625, -2.25)
+use_collision = false
+size = Vector3(2.5, 1.25, 0.5)
+material = SubResource("Mat_step")
+
+[node name="Step6" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-1.75, 0.75, -2.75)
+use_collision = false
+size = Vector3(2.5, 1.5, 0.5)
+material = SubResource("Mat_step")
+
+[node name="StairRamp" type="CSGBox3D" parent="Geometry" groups=["ramp"]]
+position = Vector3(-1.75, 0.660557, -1.54472)
+rotation = Vector3(0.463648, 0, 0)
+use_collision = true
+size = Vector3(2.5, 0.2, 3.3541)
+material = SubResource("Mat_ramp")
+
+[node name="PillarTop" type="CSGBox3D" parent="Geometry"]
+position = Vector3(-5, 2.5, -7.5)
+use_collision = true
+size = Vector3(1, 2, 1)
+material = SubResource("Mat_pillar")
+
+[node name="from_hall" type="Marker3D" parent="Entries"]
+position = Vector3(0, 0, 6.8)
+rotation = Vector3(0, 0, 0)
+
+[node name="BanditArcanist" type="CharacterBody3D" parent="Enemies"]
+position = Vector3(1, 0, 4)
+rotation = Vector3(0, -1.5708, 0)
+script = ExtResource("3_enemy")
+fighter_scene = ExtResource("f0")
+
+[node name="Patrol" type="Node3D" parent="Enemies/BanditArcanist"]
+
+[node name="P0" type="Marker3D" parent="Enemies/BanditArcanist/Patrol"]
+position = Vector3(0, 0, 0)
+
+[node name="P1" type="Marker3D" parent="Enemies/BanditArcanist/Patrol"]
+position = Vector3(0, 0, -4)
+
+[node name="P2" type="Marker3D" parent="Enemies/BanditArcanist/Patrol"]
+position = Vector3(-2.8, 0, -4)
+
+[node name="P3" type="Marker3D" parent="Enemies/BanditArcanist/Patrol"]
+position = Vector3(-2.8, 0, -0)
+
+[node name="LivingArmor" type="CharacterBody3D" parent="Enemies"]
+position = Vector3(-4.5, 0, 4.5)
+rotation = Vector3(0, 1.5708, 0)
+script = ExtResource("3_enemy")
+fighter_scene = ExtResource("f1")
+sense = 1
+sight_range = 3.5
+look_angles = PackedFloat32Array(0)

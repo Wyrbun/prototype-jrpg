@@ -95,6 +95,12 @@ enum TimingType { PRESS, HOLD, TAP, CODE }
 ## elements in bar order; done before the hit = Perfect.
 const ELEMENT_DIRS := {"Fire": "up", "Ice": "down", "Lightning": "left", "Energy Blast": "right"}
 enum Area { SINGLE, TARGET_CIRCLE, LINE, SELF_CIRCLE, ALL }
+
+
+## Whether an attack or Art can hit more than one enemy: an area of any
+## shape, or a chain (Chain Lightning). The menus show it as an icon.
+static func hits_many(move: Dictionary) -> bool:
+	return int(move.get("area", Area.SINGLE)) != Area.SINGLE or int(move.get("chain", 0)) > 0
 enum Target { SELF, ALLY, OTHER_ALLY, ENEMY, POINT, NONE, DOWNED_ALLY }
 
 const UNLIMITED := 1000.0

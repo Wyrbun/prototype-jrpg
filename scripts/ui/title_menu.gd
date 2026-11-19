@@ -1,5 +1,6 @@
 extends Control
-## The title screen: Continue (when a Boss Rush save exists), Boss Rush,
+## The title screen: Continue (when a Boss Rush save exists), New Game (the
+## Prologue: a page first says it's a story set piece), Boss Rush,
 ## Tutorial, Round Select, Options (the screen filter and play settings: the
 ## same page as the pause menu's), Controls, Change Keys, Forget Arts (once
 ## any Art has been discovered), Quit.
@@ -7,7 +8,7 @@ extends Control
 ## Keyboard: W / S (or arrows) to choose, J (or Enter) to select, K (or Esc)
 ## to go back (or whatever keys the player has set). The mouse works too.
 
-enum Page { MAIN, ROUNDS, CONTROLS, KEYS, STYLE, OPTIONS }
+enum Page { MAIN, ROUNDS, CONTROLS, KEYS, STYLE, OPTIONS, NEW_GAME }
 
 var backdrop: TitleBackdrop
 
@@ -23,13 +24,19 @@ const GOLD := Color(0.95, 0.78, 0.35)
 ## How much the dark veil hides the slowly turning arena behind the menu.
 const BACKDROP_VEIL := 0.5
 const ROW_HEIGHT := 44.0
-const MAIN_NOTES := {"Boss Rush": "All 13 rounds and a Special Match", "Tutorial": "Learn every mechanic in a guided fight",
+const MAIN_NOTES := {"New Game": "The Prologue: a short story", "Boss Rush": "All 13 rounds and a Special Match", "Tutorial": "Learn every mechanic in a guided fight",
 		"Round Select": "Jump straight to any round", "Options": "Screen filter and play settings",
 		"Controls": "Every key at a glance",
 		"Change Keys": "Set your own keys", "Quit": ""}
 const FORGET_ROW := "Forget Arts"
 const RESET_ROW := "Reset all keys to default"
 const BACK_ROW := "Back"
+## New Game's page: what the Prologue is, and where to go to test fights.
+const START_PROLOGUE := "Start the Prologue"
+const NEW_GAME_LINES := [
+	"New Game starts the Prologue: a short story set piece.",
+	"To test the combat system, Boss Rush and Round Select are the places to go.",
+]
 ## Key names in {braces} are filled in with the player's current keys.
 const CONTROLS := [
 	["Between turns", "{move} / arrows", "Move the party member you're steering"],
@@ -44,6 +51,8 @@ const CONTROLS := [
 	["Enemy strike", "{defend}", "Defend (costs 10 AP)"],
 	["After a fight", "{restart} / {next} / O", "Retry / next round / open play-test reports"],
 	["In a fight", "Esc", "Pause: resume, restart or quit"],
+	["Exploring", "{move}, hold {sneak}", "Walk; sneak (half speed, quiet)"],
+	["Exploring", "{confirm}", "Swing the sword (from behind, unseen: an ambush)"],
 ]
 
 var page: int = Page.MAIN
@@ -120,6 +129,8 @@ func _items() -> Array:
 			return _rounds
 		Page.CONTROLS:
 			return []
+		Page.NEW_GAME:
+			return [START_PROLOGUE, BACK_ROW]
 		Page.OPTIONS:
 			var rows: Array = Settings.option_rows()
 			rows.append(BACK_ROW)
@@ -135,7 +146,7 @@ func _items() -> Array:
 
 ## Continue only shows up when there's a Boss Rush save.
 func _main_items() -> Array:
-	var list := ["Boss Rush", "Tutorial", "Round Select", "Options", "Controls", "Change Keys"]
+	var list := ["New Game", "Boss Rush", "Tutorial", "Round Select", "Options", "Controls", "Change Keys"]
 	if ArtsBook.count() > 0:
 		list.append(FORGET_ROW)
 	list.append("Quit")
@@ -212,7 +223,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_select()
 		return
 	elif back and page != Page.MAIN:
-		var opener: String = {Page.ROUNDS: "Round Select", Page.CONTROLS: "Controls", Page.KEYS: "Change Keys", Page.OPTIONS: "Options"}[page]
+		var opener: String = {Page.ROUNDS: "Round Select", Page.CONTROLS: "Controls", Page.KEYS: "Change Keys", Page.OPTIONS: "Options", Page.NEW_GAME: "New Game"}[page]
 		index = _main_items().find(opener)  # back onto the item that opened this page
 		_key_message = ""
 		page = Page.MAIN
@@ -230,6 +241,10 @@ func _select() -> void:
 					if _ask_style("Continue"):
 						return
 					BattleArena.start(get_tree(), clampi(SaveGame.saved_round(), 0, _rounds.size() - 1), false, true, true)
+				"New Game":
+					page = Page.NEW_GAME
+					index = 0
+					_scroll = 0
 				"Boss Rush":
 					if _ask_style("Boss Rush"):
 						return
@@ -264,6 +279,13 @@ func _select() -> void:
 					get_tree().quit()
 		Page.ROUNDS:
 			BattleArena.start(get_tree(), index, false)
+		Page.NEW_GAME:
+			if _items()[index] == START_PROLOGUE:
+				FieldScene.start(get_tree())
+			else:
+				page = Page.MAIN
+				index = _main_items().find("New Game")
+				_scroll = 0
 		Page.CONTROLS:
 			page = Page.MAIN
 			index = _main_items().find("Controls")
@@ -418,8 +440,9 @@ func _wrap(font: Font, text: String, width: float, font_size: int) -> PackedStri
 ## Change Keys: the next key pressed becomes the row's new key (a pad
 ## button: its new pad button). Esc (or the pad's Menu) cancels.
 func _capture_key(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		_capturing = -1  # a click cancels
+	if event is InputEventMouseButton and event.pressed \
+			and not (event.button_index in Keybinds.MOUSE_BINDABLE):
+		_capturing = -1  # a left / right click (or the wheel) cancels
 		get_viewport().set_input_as_handled()
 		return
 	var entry: Array = Keybinds.ACTIONS[_capturing]
@@ -435,14 +458,17 @@ func _capture_key(event: InputEvent) -> void:
 				_key_message += "   (swapped: %s)" % swapped_pad
 		_capturing = -1
 		return
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	# A key, or the middle / side mouse buttons.
+	var pressed: bool = (event is InputEventKey and event.pressed and not event.echo) \
+			or (event is InputEventMouseButton and event.pressed)
+	if not pressed:
 		return
 	get_viewport().set_input_as_handled()
-	var code: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	var code: int = Keybinds.event_code(event)
 	if code == KEY_ESCAPE:
 		_key_message = "Kept %s" % Keybinds.key_label(entry[0])
 	elif Keybinds.reserved(code):
-		_key_message = "%s is taken (it opens the play-test reports after a fight)" % OS.get_keycode_string(code)
+		_key_message = "%s is taken (it opens the play-test reports after a fight)" % Keybinds.code_name(code)
 		return  # still waiting for a key
 	else:
 		var swapped := Keybinds.rebind(entry[0], code)
@@ -468,6 +494,8 @@ func _row_height() -> float:
 
 
 func _list_top() -> float:
+	if page == Page.NEW_GAME:
+		return 320.0  # under the page's two lines
 	return 250.0 if page == Page.MAIN else 215.0
 
 
@@ -536,6 +564,9 @@ func _draw() -> void:
 				panel.end.y + 36.0, 16, Color(0.6, 0.6, 0.65))
 		return
 
+	if page == Page.NEW_GAME:
+		for i in NEW_GAME_LINES.size():
+			_centered(font, NEW_GAME_LINES[i], 250.0 + i * 32.0, 20 if i == 0 else 18, Color.WHITE if i == 0 else Color(0.55, 0.85, 1.0))
 	var list := _list_rect()
 	HudStyle.draw_panel(self, list, 0.94)
 	var items := _items()

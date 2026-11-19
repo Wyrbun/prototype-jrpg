@@ -6,6 +6,9 @@ extends Control
 ## the title screen), Restart fight, or Quit to title. Pressing Esc
 ## by accident can't throw a fight away any more: quitting has to be chosen.
 ## (Boss Rush progress saves itself at the start of every fight.)
+##
+## On the field (field_mode, until the field menu is built): Resume,
+## Options, Change Keys, Quit to title.
 
 signal restart_requested
 signal quit_requested
@@ -25,6 +28,10 @@ var index := 0
 var progress_saved := false
 ## A line under the title.
 var message := ""
+## Exploring instead of fighting: no Command List, no Restart.
+var field_mode := false
+## A fight on the field (the Prologue): no Restart.
+var field_fight := false
 var _style: StyleBoxFlat
 ## The Command List (set up by the fight) and who's in the party.
 var command_list: CommandList = null
@@ -60,6 +67,10 @@ func items() -> Array:
 		var rows: Array = Settings.option_rows()
 		rows.append(OPTIONS_BACK)
 		return rows
+	if field_mode:
+		return ["Resume", "Options", "Change Keys", "Quit to title"]
+	if field_fight:
+		return ["Resume", "Command List", "Options", "Change Keys", "Quit to title"]
 	return ["Resume", "Command List", "Options", "Change Keys", "Restart fight", "Quit to title"]
 
 
@@ -68,7 +79,7 @@ func _note(row: int, item: String) -> String:
 		return "Back to the pause menu" if item == OPTIONS_BACK else Settings.option_note(row)
 	match item:
 		"Resume":
-			return "Back to the fight"
+			return "Back to exploring" if field_mode else "Back to the fight"
 		"Command List":
 			return "Attacks, Abilities and found Arts, with a preview"
 		"Options":
@@ -78,6 +89,8 @@ func _note(row: int, item: String) -> String:
 		"Restart fight":
 			return "Start this fight over"
 		"Quit to title":
+			if field_mode or field_fight:
+				return "Leave the Prologue (nothing is saved yet)"
 			return "Progress is saved: Continue starts this fight over" if progress_saved else "Leave the fight (it's lost)"
 	return ""
 
@@ -193,8 +206,9 @@ func _leave_options() -> void:
 ## Change Keys: the next key pressed becomes the row's new key (a pad
 ## button: its new pad button). Esc (or the pad's Menu) keeps the old one.
 func _capture_key(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		_capturing = -1  # a click cancels
+	if event is InputEventMouseButton and event.pressed \
+			and not (event.button_index in Keybinds.MOUSE_BINDABLE):
+		_capturing = -1  # a left / right click (or the wheel) cancels
 		get_viewport().set_input_as_handled()
 		return
 	var entry: Array = Keybinds.ACTIONS[_capturing]
@@ -210,14 +224,17 @@ func _capture_key(event: InputEvent) -> void:
 				_key_message += "   (swapped: %s)" % swapped_pad
 		_capturing = -1
 		return
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	# A key, or the middle / side mouse buttons.
+	var pressed: bool = (event is InputEventKey and event.pressed and not event.echo) \
+			or (event is InputEventMouseButton and event.pressed)
+	if not pressed:
 		return
 	get_viewport().set_input_as_handled()
-	var code: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	var code: int = Keybinds.event_code(event)
 	if code == KEY_ESCAPE:
 		_key_message = "Kept %s" % Keybinds.key_label(entry[0])
 	elif Keybinds.reserved(code):
-		_key_message = "%s is taken (it opens the play-test reports after a fight)" % OS.get_keycode_string(code)
+		_key_message = "%s is taken (it opens the play-test reports after a fight)" % Keybinds.code_name(code)
 		return  # still waiting for a key
 	else:
 		var swapped := Keybinds.rebind(entry[0], code)

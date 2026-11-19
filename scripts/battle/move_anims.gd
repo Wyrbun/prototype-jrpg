@@ -910,11 +910,14 @@ const ABILITIES := {
 			[0.2, {"LegL": Vector3(-30, 0, -10), "LegR": Vector3(30, 0, 10), "step": Vector3(0, -0.15, 0), "ArmL": Vector3(-80, 35, 10), "ArmR": Vector3(-35, 0, 25), "lean": Vector3(10, 0, 0), "Head": Vector3(8, 0, 0)}],
 			[0.85, {"LegL": Vector3(-30, 0, -10), "LegR": Vector3(30, 0, 10), "step": Vector3(0, -0.15, 0), "ArmL": Vector3(-82, 35, 10), "ArmR": Vector3(-35, 0, 25), "lean": Vector3(10, 0, 0), "Head": Vector3(8, 0, 0)}],
 		]},
-		"Shield Bash": {"len": 0.75, "impact": 0.3, "keys": [
-			# shield pulled in, a charge, the bash
-			[0.15, {"ArmL": Vector3(-40, 20, -10), "lean": Vector3(12, -25, 0), "step": Vector3(0, -0.06, 0.1)}],
-			[0.3, {"ArmL": Vector3(-95, 30, 15), "lean": Vector3(16, 25, 0), "dash": 1.0, "LegL": Vector3(-40, 0, 0), "LegR": Vector3(30, 0, 0)}],
-			[0.45, {"ArmL": Vector3(-95, 30, 15), "lean": Vector3(16, 25, 0), "dash": 1.0, "LegL": Vector3(-40, 0, 0), "LegR": Vector3(30, 0, 0)}],
+		"Shield Bash": {"len": 0.85, "impact": 0.34, "charge": true, "keys": [
+			# Timed to the charge (battle_arena: 0.12 s wind-up, 0.22 s run):
+			# crouch behind the shield, lean into the run, the shield
+			# shoved out on arrival, then settle.
+			[0.12, {"ArmL": Vector3(-45, 20, -10), "ArmR": Vector3(-20, 0, 20), "lean": Vector3(4, -20, 0), "step": Vector3(0, -0.1, 0.06), "LegL": Vector3(-25, 0, 0), "LegR": Vector3(20, 0, 0), "Head": Vector3(10, 0, 0)}],
+			[0.24, {"ArmL": Vector3(-80, 30, 5), "ArmR": Vector3(-25, 0, 25), "lean": Vector3(20, 5, 0), "step": Vector3(0, -0.05, 0), "LegL": Vector3(-50, 0, 0), "LegR": Vector3(35, 0, 0), "Head": Vector3(5, 0, 0)}],
+			[0.34, {"ArmL": Vector3(-100, 25, 25), "ArmR": Vector3(-25, 0, 25), "lean": Vector3(22, 25, 0), "step": Vector3(0, -0.04, -0.15), "LegL": Vector3(-45, 0, 0), "LegR": Vector3(40, 0, 0), "Head": Vector3(0, 0, 0)}],
+			[0.5, {"ArmL": Vector3(-95, 25, 20), "ArmR": Vector3(-20, 0, 20), "lean": Vector3(14, 20, 0), "step": Vector3(0, -0.04, -0.1), "LegL": Vector3(-30, 0, 0), "LegR": Vector3(25, 0, 0)}],
 		]},
 		"Taunt": {"len": 1.3, "impact": 0.3, "keys": [
 			# sword banged on the shield twice, then pointed at the enemy

@@ -25,6 +25,18 @@ of every play-test report.
 
 ---
 
+## 1.0.1: Shield Bash charge, clearer menus, a renderer option
+
+- **Shield Bash is a real charge:** the Knight crouches behind their shield, runs the gap with a dust trail and slams into the enemy. Before, they teleported beside the enemy while their body lunged through it and slid back
+- **Mouse buttons can be keys:** the middle button and the side buttons (Mouse 4 / 5) can be bound in Change Keys
+- **Single Target / Area icons** next to attacks and Arts: a crosshair hits one enemy, an orange ring with three dots hits an area
+- **Jump shows its reach:** a ring at 8 m around you while you aim it (Teleport too)
+- **Energy spells say when to tap:** once the code is in, the bar turns pink and tells you to tap, counting each one
+- **Renderer option (Windows):** Options > Renderer: Vulkan (now the default) or Direct3D 12, applied after a restart. If the game crashes on your PC, try the other one
+- **Ogre Warrior:** Shout now stuns whoever it pushes until its Sword Spin lands
+- **Stone Golem:** its Right / Left Smash wind-up raises the arm on the side it will hit
+- **Fixes:** AI allies no longer run on the spot. Mostly seen by the pit in Round 4: escaping an attack area with the pit or a fighter in the way, picking between two equally short ways out, or walking in for a Windup turn and backing straight out again
+
 ## 1.0.0: The PS1 look, sound and music, controller support
 
 - **A new look:** every hero and enemy is a low-poly furry figure in a PS1 style. The Knight is a rabbit, the Archer a bear, the Mage a goat, the Cleric a squirrel, the Assassin a wolf and the Monk a snapping turtle; enemies are rats, lizards, boars, hyenas and raccoons, and the bosses got proper bodies (the Gale Maw is a great wind-spirit ram in the cliff)

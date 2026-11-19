@@ -477,9 +477,18 @@ func _enemy_attack() -> void:
 			_wind = {"ArmL": Vector3(-25, 0, 0), "ArmR": Vector3(-25, 0, 0)}
 			_strike = {"ArmL": Vector3(18, 10, 0), "ArmR": Vector3(18, -10, 0), "lean": Vector3(4, 0, 0), "step": Vector3(0, -0.1, -0.3), "Tail": Vector3(0, 15, 0)}
 		_:
-			# an overhead blow with the weapon arm, the other arm in
-			_wind = {"ArmR": Vector3(-150, 0, 10), "ArmL": Vector3(-50, 0, 0), "lean": Vector3(-8, 0, 0)}
-			_strike = {"ArmR": Vector3(-40, 0, -10), "ArmL": Vector3(-30, 0, 0), "Head": Vector3(10, 0, 0), "lean": Vector3(14, 0, 0), "step": Vector3(0, 0, -0.3)}
+			match _smash_side():
+				1:
+					# the right fist comes down on the right half
+					_wind = {"ArmR": Vector3(-175, 0, 25), "ArmL": Vector3(-20, 0, -15), "lean": Vector3(-8, -12, -10)}
+					_strike = {"ArmR": Vector3(-35, 0, 45), "ArmL": Vector3(-20, 0, -10), "Head": Vector3(10, 0, 0), "lean": Vector3(18, -20, 12), "step": Vector3(0, -0.08, -0.2)}
+				-1:
+					_wind = {"ArmL": Vector3(-175, 0, -25), "ArmR": Vector3(-20, 0, 15), "lean": Vector3(-8, 12, 10)}
+					_strike = {"ArmL": Vector3(-35, 0, -45), "ArmR": Vector3(-20, 0, 10), "Head": Vector3(10, 0, 0), "lean": Vector3(18, 20, -12), "step": Vector3(0, -0.08, -0.2)}
+				_:
+					# an overhead blow with the weapon arm, the other arm in
+					_wind = {"ArmR": Vector3(-150, 0, 10), "ArmL": Vector3(-50, 0, 0), "lean": Vector3(-8, 0, 0)}
+					_strike = {"ArmR": Vector3(-40, 0, -10), "ArmL": Vector3(-30, 0, 0), "Head": Vector3(10, 0, 0), "lean": Vector3(14, 0, 0), "step": Vector3(0, 0, -0.3)}
 	_action_len = 0.5
 
 
@@ -496,7 +505,25 @@ func _ready_pose() -> Dictionary:
 			return {"ArmL": Vector3(-30, 15, 0), "ArmR": Vector3(-30, -15, 0), "step": Vector3(0, 0.15, 0.1), "lean": Vector3(-3, 0, 0)}
 	if guard:
 		return {"ArmL": Vector3(-95, 0, 35), "ArmR": Vector3(-95, 0, -35), "Head": Vector3(10, 0, 0), "lean": Vector3(6, 0, 0)}
+	match _smash_side():
+		1:
+			# Right Golem Smash: the right fist high, leaning that way.
+			return {"ArmR": Vector3(-170, 0, 25), "ArmL": Vector3(-20, 0, -15), "lean": Vector3(-8, -12, -10)}
+		-1:
+			# Left Golem Smash: the left fist (the mirror image).
+			return {"ArmL": Vector3(-170, 0, -25), "ArmR": Vector3(-20, 0, 15), "lean": Vector3(-8, 12, 10)}
 	return {"ArmR": Vector3(-130, 0, 15), "ArmL": Vector3(-35, 0, -10), "lean": Vector3(-6, 0, 0)}
+
+
+## A skill aimed at one side (the Golem's Right / Left Smash, by its
+## aim_offset_degrees: 90 is its right): 1 right, -1 left, 0 straight ahead.
+## The arm on that side winds up and comes down (play-test: it always
+## raised the right arm).
+func _smash_side() -> int:
+	var def := fighter.loaded_def
+	if def == null or absf(def.aim_offset_degrees) < 45.0:
+		return 0
+	return 1 if def.aim_offset_degrees > 0.0 else -1
 
 
 func _process(delta: float) -> void:
@@ -520,8 +547,14 @@ func _process(delta: float) -> void:
 	_last_pos = fighter.global_position
 	var speed := moved.length() / maxf(delta, 0.0001)
 	var target := clampf(speed / 4.0, 0.0, 1.0) if speed > 0.3 and speed < 30.0 else 0.0
-	_walk = move_toward(_walk, target, delta * 6.0)
-	_walk_phase += moved.length() * 4.5
+	# A charge (Shield Bash) keys its own legs while the root runs: the walk
+	# cycle on top flickered.
+	var charging: bool = not _seq.is_empty() and _seq.get("charge", false)
+	if charging:
+		target = 0.0
+	_walk = move_toward(_walk, target, delta * (12.0 if charging else 6.0))
+	if not charging:
+		_walk_phase += moved.length() * 4.5
 	var pose := _base_pose()
 	# A move's sequence.
 	_tick_seq(delta)
